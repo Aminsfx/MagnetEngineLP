@@ -1,182 +1,511 @@
-import React, { useState, useEffect } from 'react';
-import { Key, Save, Shield } from 'lucide-react';
+import React, { useState } from 'react';
+import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown } from 'lucide-react';
+import { AppConfig } from '../../lib/types';
 import { storage } from '../../lib/storage';
-import { AppConfig, APIKeys } from '../../lib/types';
+import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
+import { usePlan } from '../../contexts/PlanContext';
+import { UpgradePrompt } from '../common/UpgradePrompt';
 
 interface SettingsPanelProps {
     config: AppConfig;
     onUpdateConfig: (config: AppConfig) => void;
 }
 
+// ─── Onboarding Wizard ──────────────────────────────────────────────────────
+
+type WizardStep = 1 | 2 | 3 | 4;
+
+interface WizardData {
+    businessName: string;
+    businessNiche: string;
+    targetAudience: string;
+    valueProposition: string;
+    exampleDM: string;
+    dmTone: 'casual' | 'professional' | 'friendly' | 'bold';
+}
+
+const TONE_OPTIONS: { value: WizardData['dmTone']; label: string; description: string }[] = [
+    { value: 'casual', label: '😎 Casual', description: 'Relaxed, conversational — feels like a friend reaching out' },
+    { value: 'friendly', label: '🤝 Friendly', description: 'Warm and personable — professional yet approachable' },
+    { value: 'professional', label: '💼 Professional', description: 'Polished and direct — best for B2B or high-ticket offers' },
+    { value: 'bold', label: '⚡ Bold', description: 'Confident and punchy — grabs attention immediately' },
+];
+
+function generateSystemPrompt(data: WizardData): string {
+    const toneMap = {
+        casual: 'casual and conversational, like a friend texting',
+        friendly: 'friendly and warm, personable yet professional',
+        professional: 'polished and professional, concise and to the point',
+        bold: 'confident and bold, direct and attention-grabbing',
+    };
+
+    return [
+        `You are writing cold DMs for ${data.businessName || 'our business'} targeting ${data.targetAudience || 'potential clients'} in the ${data.businessNiche || 'online'} space.`,
+        '',
+        `VALUE PROPOSITION: ${data.valueProposition || 'We help businesses grow through intelligent automation.'}`,
+        '',
+        `TONE: Write in a ${toneMap[data.dmTone]} tone.`,
+        '',
+        data.exampleDM
+            ? `EXAMPLE OF A GREAT DM (match this style):\n"${data.exampleDM}"`
+            : '',
+        '',
+        'RULES:',
+        '- 2-3 sentences max. Short and punchy.',
+        '- Reference something specific from their profile (bio, niche, following).',
+        '- End with a soft question or curiosity-hook, NOT a hard pitch.',
+        '- Sound like a real human typed it. No corporate jargon.',
+        '- Output ONLY the raw DM text. No quotes, no labels, no markdown.',
+    ].filter(Boolean).join('\n');
+}
+
+const STEP_LABELS = ['Business', 'Value Prop', 'Tone & Style', 'Review'];
+
+// ─── Preset Picker ──────────────────────────────────────────────────────────
+
+interface PresetPickerProps {
+    onApply: (preset: NichePreset) => void;
+}
+
+const PresetPicker: React.FC<PresetPickerProps> = ({ onApply }) => {
+    const [open, setOpen] = useState(false);
+    const [applied, setApplied] = useState<string | null>(null);
+
+    const handleApply = (preset: NichePreset) => {
+        onApply(preset);
+        setApplied(preset.id);
+        setOpen(false);
+        setTimeout(() => setApplied(null), 3000);
+    };
+
+    return (
+        <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/[0.02] transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                        <Zap className="w-4 h-4 text-violet-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Quick-Start Niche Preset</h3>
+                        <p className="text-[11px] text-zinc-600">Pick your niche to pre-fill all settings instantly</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {applied && (
+                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full font-medium">
+                            Applied ✓
+                        </span>
+                    )}
+                    <ChevronDown className={`w-4 h-4 text-zinc-600 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+                </div>
+            </button>
+
+            {open && (
+                <div className="px-6 pb-6 border-t border-white/5 pt-4">
+                    <p className="text-[11px] text-zinc-600 mb-4">
+                        Selecting a preset fills your AI prompt, bio keywords, follower range, and suggested search terms. You can edit anything after.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {NICHE_PRESETS.map(preset => (
+                            <button
+                                key={preset.id}
+                                onClick={() => handleApply(preset)}
+                                className="flex flex-col items-start gap-1.5 p-3.5 rounded-xl border border-white/6 bg-white/[0.02] hover:border-violet-500/30 hover:bg-violet-500/5 transition-all duration-200 text-left group"
+                            >
+                                <span className="text-xl leading-none">{preset.emoji}</span>
+                                <span className="text-xs font-semibold text-white leading-snug group-hover:text-violet-300 transition-colors">
+                                    {preset.name}
+                                </span>
+                                <span className="text-[10px] text-zinc-600 leading-snug">{preset.description}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig }) => {
-    const [apiKeys, setApiKeys] = useState<APIKeys>({});
-    const [showKeys, setShowKeys] = useState({
-        openai: false,
-        claude: false,
-        gemini: false,
+    const { limits } = usePlan();
+    const [wizardStep, setWizardStep] = useState<WizardStep>(
+        config.onboardingComplete ? 4 : 1
+    );
+    const [wizard, setWizard] = useState<WizardData>({
+        businessName: config.businessName ?? '',
+        businessNiche: config.businessNiche ?? '',
+        targetAudience: config.targetAudience ?? '',
+        valueProposition: config.valueProposition ?? '',
+        exampleDM: config.exampleDM ?? '',
+        dmTone: config.dmTone ?? 'casual',
     });
 
-    useEffect(() => {
-        setApiKeys(storage.getAPIKeys());
-    }, []);
+    const updateWizard = (patch: Partial<WizardData>) => setWizard(prev => ({ ...prev, ...patch }));
 
-    const handleSaveAPIKey = (provider: keyof APIKeys, value: string) => {
-        if (value.trim()) {
-            storage.setAPIKey(provider, value);
-            setApiKeys({ ...apiKeys, [provider]: value });
-            alert(`${provider.toUpperCase()} API key saved securely!`);
-        }
-    };
+    const handleApplyPreset = (preset: NichePreset) => {
+        const p = preset.config;
+        const newWizard: WizardData = {
+            businessName: wizard.businessName, // keep user's own business name
+            businessNiche: p.businessNiche ?? wizard.businessNiche,
+            targetAudience: p.targetAudience ?? wizard.targetAudience,
+            valueProposition: p.valueProposition ?? wizard.valueProposition,
+            exampleDM: wizard.exampleDM, // keep their example if they had one
+            dmTone: p.dmTone ?? wizard.dmTone,
+        };
+        setWizard(newWizard);
 
-    const maskKey = (key?: string) => {
-        if (!key) return '';
-        return key.substring(0, 6) + '****' + key.substring(key.length - 4);
-    };
-
-    const handleUpdateKeywords = (type: 'include' | 'exclude', value: string) => {
-        const keywords = value.split(',').map(k => k.trim()).filter(k => k);
-        onUpdateConfig({
+        // Also apply filter + system prompt immediately to config
+        const updatedConfig: AppConfig = {
             ...config,
-            [type === 'include' ? 'includeKeywords' : 'excludeKeywords']: keywords,
-        });
+            systemPrompt: p.systemPrompt ?? config.systemPrompt,
+            businessNiche: newWizard.businessNiche,
+            targetAudience: newWizard.targetAudience,
+            valueProposition: newWizard.valueProposition,
+            dmTone: newWizard.dmTone,
+            includeKeywords: p.includeKeywords ?? config.includeKeywords,
+            excludeKeywords: p.excludeKeywords ?? config.excludeKeywords,
+            minFollowers: p.minFollowers ?? config.minFollowers,
+            maxFollowers: p.maxFollowers ?? config.maxFollowers,
+            onboardingComplete: true,
+        };
+        onUpdateConfig(updatedConfig);
+        storage.setConfig(updatedConfig);
+        setWizardStep(4); // jump to review so user sees what was generated
+    };
+
+    const handleGeneratePrompt = () => {
+        const prompt = generateSystemPrompt(wizard);
+        const updated: AppConfig = {
+            ...config,
+            systemPrompt: prompt,
+            businessName: wizard.businessName,
+            businessNiche: wizard.businessNiche,
+            targetAudience: wizard.targetAudience,
+            valueProposition: wizard.valueProposition,
+            exampleDM: wizard.exampleDM,
+            dmTone: wizard.dmTone,
+            onboardingComplete: true,
+        };
+        onUpdateConfig(updated);
+        storage.setConfig(updated);
+        setWizardStep(4);
+    };
+
+    const handleUpdateKeywords = (type: 'includeKeywords' | 'excludeKeywords', value: string) => {
+        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
+        onUpdateConfig({ ...config, [type]: keywords });
+    };
+
+    const handleSaveAll = () => {
+        storage.setConfig(config);
+        alert('Settings saved!');
     };
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            {/* API Keys Section */}
-            <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-6">
-                    <Shield className="w-6 h-6 text-blue-500" />
-                    <h3 className="text-xl font-semibold text-white">API Keys</h3>
-                </div>
 
-                <div className="space-y-4">
-                    {(['openai', 'claude', 'gemini'] as const).map((provider) => (
-                        <div key={provider}>
-                            <label className="block text-sm font-medium text-zinc-400 mb-2 capitalize">
-                                {provider} API Key
-                            </label>
-                            <div className="flex gap-3">
-                                <input
-                                    type={showKeys[provider] ? 'text' : 'password'}
-                                    placeholder={apiKeys[provider] ? maskKey(apiKeys[provider]) : 'Enter API key'}
-                                    className="flex-1 bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    onBlur={(e) => {
-                                        if (e.target.value && e.target.value !== maskKey(apiKeys[provider])) {
-                                            handleSaveAPIKey(provider, e.target.value);
-                                            e.target.value = '';
-                                        }
-                                    }}
-                                />
-                                <button
-                                    onClick={() => setShowKeys({ ...showKeys, [provider]: !showKeys[provider] })}
-                                    className="px-4 py-3 bg-[#0B0F19] border border-[#1E293B] rounded-xl text-zinc-400 hover:text-white transition-colors"
-                                >
-                                    {showKeys[provider] ? 'Hide' : 'Show'}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+            {/* ── Niche Preset Picker ───────────────────────────────────── */}
+            <div className="relative">
+                <div className={limits.canUsePresets ? '' : 'opacity-40 pointer-events-none select-none'}>
+                    <PresetPicker onApply={handleApplyPreset} />
                 </div>
-
-                <div className="mt-6">
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">AI Provider</label>
-                    <select
-                        value={config.selectedAIProvider}
-                        onChange={(e) => onUpdateConfig({ ...config, selectedAIProvider: e.target.value as any })}
-                        className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="openai">OpenAI (GPT-4)</option>
-                        <option value="claude">Claude (Anthropic)</option>
-                        <option value="gemini">Gemini (Google)</option>
-                    </select>
-                </div>
+                {!limits.canUsePresets && (
+                    <UpgradePrompt message="3 pre-built niche DM scripts (presets)" variant="overlay" />
+                )}
             </div>
 
-            {/* Filtering Configuration */}
-            <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-6">
-                <h3 className="text-xl font-semibold text-white mb-6">Lead Filtering</h3>
+            {/* ── AI Onboarding Wizard ──────────────────────────────────── */}
+            <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
+                {/* Wizard header */}
+                <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-cyan-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">AI Prompt Wizard</h3>
+                        <p className="text-[11px] text-zinc-600">Tell us about your business and we'll craft the perfect outreach prompt</p>
+                    </div>
+                    {config.onboardingComplete && (
+                        <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                            <CheckCircle className="w-3 h-3" /> Configured
+                        </span>
+                    )}
+                </div>
+
+                {/* Step indicator */}
+                <div className="flex px-6 pt-5 gap-2">
+                    {STEP_LABELS.map((label, i) => {
+                        const step = (i + 1) as WizardStep;
+                        const done = step < wizardStep;
+                        const active = step === wizardStep;
+                        return (
+                            <React.Fragment key={label}>
+                                <button
+                                    onClick={() => setWizardStep(step)}
+                                    className={`flex flex-col items-center gap-1 flex-1 transition-all ${active ? 'opacity-100' : 'opacity-50 hover:opacity-75'}`}
+                                >
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                                        done ? 'bg-emerald-500 text-emerald-950' :
+                                        active ? 'bg-cyan-500 text-cyan-950' :
+                                        'bg-white/8 text-zinc-500'
+                                    }`}>
+                                        {done ? <CheckCircle className="w-3.5 h-3.5" /> : i + 1}
+                                    </div>
+                                    <span className={`text-[10px] font-medium ${active ? 'text-white' : 'text-zinc-600'}`}>{label}</span>
+                                </button>
+                                {i < STEP_LABELS.length - 1 && (
+                                    <div className={`flex-1 h-[1px] mt-3.5 transition-colors ${done ? 'bg-emerald-500/40' : 'bg-white/8'}`} />
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+
+                {/* Step content */}
+                <div className="px-6 py-5">
+                    {wizardStep === 1 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-medium text-white mb-4">Tell us about your business</h4>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1.5">Business / Agency Name</label>
+                                <input
+                                    type="text"
+                                    value={wizard.businessName}
+                                    onChange={e => updateWizard({ businessName: e.target.value })}
+                                    placeholder="e.g. Apex Growth Agency"
+                                    className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1.5">Your Niche / Industry</label>
+                                <input
+                                    type="text"
+                                    value={wizard.businessNiche}
+                                    onChange={e => updateWizard({ businessNiche: e.target.value })}
+                                    placeholder="e.g. Social media marketing for e-commerce brands"
+                                    className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1.5">Ideal Target Audience (ICP)</label>
+                                <input
+                                    type="text"
+                                    value={wizard.targetAudience}
+                                    onChange={e => updateWizard({ targetAudience: e.target.value })}
+                                    placeholder="e.g. Founders of 7-figure DTC brands with 10k-500k followers"
+                                    className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {wizardStep === 2 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-medium text-white mb-4">What value do you deliver?</h4>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1.5">Core Value Proposition</label>
+                                <textarea
+                                    value={wizard.valueProposition}
+                                    onChange={e => updateWizard({ valueProposition: e.target.value })}
+                                    rows={3}
+                                    placeholder="e.g. We run paid social ads that generate $3-5 for every $1 spent, guaranteed in 90 days or you don't pay."
+                                    className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 resize-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1.5">Example of a great DM you've sent (optional)</label>
+                                <textarea
+                                    value={wizard.exampleDM}
+                                    onChange={e => updateWizard({ exampleDM: e.target.value })}
+                                    rows={3}
+                                    placeholder="Paste a real DM that got a positive reply — the AI will match its style"
+                                    className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 resize-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {wizardStep === 3 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-medium text-white mb-4">Choose your outreach tone</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                {TONE_OPTIONS.map(tone => (
+                                    <button
+                                        key={tone.value}
+                                        onClick={() => updateWizard({ dmTone: tone.value })}
+                                        className={`text-left p-4 rounded-xl border transition-all ${
+                                            wizard.dmTone === tone.value
+                                                ? 'bg-cyan-500/10 border-cyan-500/30 text-white'
+                                                : 'bg-white/3 border-white/5 text-zinc-400 hover:border-white/15 hover:text-zinc-200'
+                                        }`}
+                                    >
+                                        <div className="font-medium text-sm mb-1">{tone.label}</div>
+                                        <div className="text-[11px] text-zinc-500 leading-relaxed">{tone.description}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {wizardStep === 4 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-medium text-white mb-2">Your AI system prompt</h4>
+                            <p className="text-[11px] text-zinc-600 mb-3">
+                                Generated from your wizard answers. You can edit it directly — changes save immediately.
+                            </p>
+                            <textarea
+                                value={config.systemPrompt}
+                                onChange={e => onUpdateConfig({ ...config, systemPrompt: e.target.value })}
+                                rows={10}
+                                className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-3 text-xs text-zinc-300 font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500/50 resize-none leading-relaxed"
+                            />
+                            <button
+                                onClick={() => setWizardStep(1)}
+                                className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            >
+                                <RefreshCw className="w-3.5 h-3.5" /> Redo wizard
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Wizard navigation */}
+                {wizardStep < 4 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-white/5">
+                        <button
+                            onClick={() => setWizardStep(prev => Math.max(1, prev - 1) as WizardStep)}
+                            disabled={wizardStep === 1}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            <ChevronLeft className="w-4 h-4" /> Back
+                        </button>
+
+                        {wizardStep < 3 ? (
+                            <button
+                                onClick={() => setWizardStep(prev => (prev + 1) as WizardStep)}
+                                className="flex items-center gap-2 px-5 py-2 bg-white/8 hover:bg-white/12 border border-white/10 rounded-xl text-sm text-white font-medium transition-all"
+                            >
+                                Next <ChevronRight className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleGeneratePrompt}
+                                className="flex items-center gap-2 px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-cyan-950 font-semibold rounded-xl text-sm transition-all"
+                            >
+                                <Sparkles className="w-4 h-4" /> Generate Prompt
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* ── Lead Filtering Rules ─────────────────────────────────────── */}
+            <div className="bg-[#050A08] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                        <SettingsIcon className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Lead Filtering Rules</h3>
+                        <p className="text-[11px] text-zinc-600">Applied after scraping to qualify leads</p>
+                    </div>
+                </div>
 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Include Keywords (comma-separated)</label>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Must Include Keywords (in bio/name)</label>
                         <input
                             type="text"
                             defaultValue={config.includeKeywords.join(', ')}
-                            onBlur={(e) => handleUpdateKeywords('include', e.target.value)}
-                            placeholder="founder, CEO, marketing"
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onBlur={e => handleUpdateKeywords('includeKeywords', e.target.value)}
+                            placeholder="founder, CEO, agency, entrepreneur"
+                            className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Exclude Keywords (comma-separated)</label>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Exclude Keywords</label>
                         <input
                             type="text"
                             defaultValue={config.excludeKeywords.join(', ')}
-                            onBlur={(e) => handleUpdateKeywords('exclude', e.target.value)}
-                            placeholder="bot, spam, fake"
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onBlur={e => handleUpdateKeywords('excludeKeywords', e.target.value)}
+                            placeholder="bot, spam, fake, giveaway"
+                            className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-zinc-400 mb-2">Min Followers</label>
+                            <label className="block text-xs text-zinc-500 mb-1.5">Min Followers</label>
                             <input
                                 type="number"
                                 value={config.minFollowers}
-                                onChange={(e) => onUpdateConfig({ ...config, minFollowers: Number(e.target.value) })}
-                                className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={e => onUpdateConfig({ ...config, minFollowers: Number(e.target.value) })}
+                                className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-zinc-400 mb-2">Max Followers</label>
+                            <label className="block text-xs text-zinc-500 mb-1.5">Max Followers</label>
                             <input
                                 type="number"
                                 value={config.maxFollowers}
-                                onChange={(e) => onUpdateConfig({ ...config, maxFollowers: Number(e.target.value) })}
-                                className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={e => onUpdateConfig({ ...config, maxFollowers: Number(e.target.value) })}
+                                className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Account Type</label>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Account Type Filter</label>
                         <select
                             value={config.accountType}
-                            onChange={(e) => onUpdateConfig({ ...config, accountType: e.target.value as any })}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={e => onUpdateConfig({ ...config, accountType: e.target.value as any })}
+                            className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                         >
-                            <option value="all">All Accounts</option>
-                            <option value="public">Public Only</option>
-                            <option value="private">Private Only</option>
+                            <option value="all">All accounts</option>
+                            <option value="public">Public only</option>
+                            <option value="private">Private only</option>
                         </select>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/5">
+                        <label className="block text-xs text-zinc-500 mb-1.5">
+                            Daily Send Limit
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="number"
+                                min={1}
+                                max={limits.maxDailyCap}
+                                value={limits.canAdjustDailyCap ? (config.dailySendCap ?? 40) : limits.maxDailyCap}
+                                onChange={e => {
+                                    if (!limits.canAdjustDailyCap) return;
+                                    onUpdateConfig({ ...config, dailySendCap: Math.min(limits.maxDailyCap, Math.max(1, Number(e.target.value))) });
+                                }}
+                                disabled={!limits.canAdjustDailyCap}
+                                className={`w-28 bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-opacity ${!limits.canAdjustDailyCap ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            />
+                            <span className="text-xs text-zinc-600">DMs per day</span>
+                            {!limits.canAdjustDailyCap && (
+                                <UpgradePrompt message="Adjustable daily DM cap" variant="tooltip" />
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* System Prompt */}
-            <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-6">
-                <h3 className="text-xl font-semibold text-white mb-6">AI System Prompt</h3>
-                <textarea
-                    value={config.systemPrompt}
-                    onChange={(e) => onUpdateConfig({ ...config, systemPrompt: e.target.value })}
-                    rows={6}
-                    className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                    placeholder="Enter your system prompt for AI DM generation..."
-                />
-            </div>
-
+            {/* ── Save button ─────────────────────────────────────────────── */}
             <button
-                onClick={() => {
-                    storage.setConfig(config);
-                    alert('Settings saved!');
-                }}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all font-semibold"
+                onClick={handleSaveAll}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 rounded-xl transition-all font-semibold text-sm"
             >
-                <Save className="w-5 h-5" />
-                Save All Settings
+                <Save className="w-4 h-4" />
+                Save Settings
             </button>
         </div>
     );

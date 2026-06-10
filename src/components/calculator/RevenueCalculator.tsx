@@ -26,7 +26,7 @@ export const RevenueCalculator: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto">
-            <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-8">
+            <div className="bg-[#030604] border border-white/5 rounded-2xl p-8">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-900 flex items-center justify-center">
                         <Calculator className="w-6 h-6 text-white" />
@@ -44,7 +44,7 @@ export const RevenueCalculator: React.FC = () => {
                             type="number"
                             value={revenueGoal}
                             onChange={(e) => setRevenueGoal(Number(e.target.value))}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
 
@@ -54,7 +54,7 @@ export const RevenueCalculator: React.FC = () => {
                             type="number"
                             value={dealSize}
                             onChange={(e) => setDealSize(Number(e.target.value))}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
 
@@ -64,7 +64,7 @@ export const RevenueCalculator: React.FC = () => {
                             type="number"
                             value={dmToReply}
                             onChange={(e) => setDmToReply(Number(e.target.value))}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
 
@@ -74,7 +74,7 @@ export const RevenueCalculator: React.FC = () => {
                             type="number"
                             value={replyToCall}
                             onChange={(e) => setReplyToCall(Number(e.target.value))}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
 
@@ -84,12 +84,12 @@ export const RevenueCalculator: React.FC = () => {
                             type="number"
                             value={callToClose}
                             onChange={(e) => setCallToClose(Number(e.target.value))}
-                            className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-600/10 to-emerald-600/10 border border-blue-600/20 rounded-2xl p-8 text-center">
+                <div className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-2xl p-8 text-center">
                     <TrendingUp className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
                     <p className="text-sm text-zinc-400 mb-2">You need to send</p>
                     <p className="text-6xl font-bold text-white mb-2">{results.dailyDMs}</p>

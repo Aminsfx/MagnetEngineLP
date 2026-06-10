@@ -1,38 +1,87 @@
-import React from 'react';
-import { TrendingUp, Users, MessageSquare, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+    Users, MessageSquare, TrendingUp, ThumbsUp,
+    Calendar, RefreshCw, Mail, Layers, ArrowUpRight,
+} from 'lucide-react';
 import { DashboardStats } from '../../lib/types';
 
 interface MetricCardProps {
     title: string;
     value: string | number;
+    subtext?: string;
     change?: string;
     icon: React.ReactNode;
-    accent?: string;
+    glowColor?: string;
+    iconBg?: string;
+    delay?: number;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value, change, icon, accent = 'blue' }) => {
-    const accentColors = {
-        blue: 'from-blue-600 to-blue-900',
-        emerald: 'from-emerald-600 to-emerald-900',
-        purple: 'from-purple-600 to-purple-900',
-        orange: 'from-orange-600 to-orange-900',
-    };
+const MetricCard: React.FC<MetricCardProps> = ({
+    title,
+    value,
+    subtext,
+    change,
+    icon,
+    glowColor = 'rgba(16,185,129,0.15)',
+    iconBg = 'bg-emerald-500/10 border-emerald-500/15',
+    delay = 0,
+}) => {
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setVisible(true), delay);
+        return () => clearTimeout(timer);
+    }, [delay]);
 
     return (
-        <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-6 hover:border-blue-600/30 transition-all">
-            <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${accentColors[accent as keyof typeof accentColors]} flex items-center justify-center`}>
-                    {icon}
+        <div
+            className="rounded-[1.5rem] p-[1px]"
+            style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+                opacity: visible ? 1 : 0,
+                transform: visible ? 'translateY(0)' : 'translateY(16px)',
+                transition: `opacity 0.55s ease ${delay}ms, transform 0.55s cubic-bezier(0.32,0.72,0,1) ${delay}ms`,
+            }}
+        >
+            <div
+                className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-5 h-full relative overflow-hidden group cursor-default"
+                style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}
+            >
+                {/* Hover glow orb */}
+                <div
+                    className="absolute -bottom-8 -right-8 w-28 h-28 rounded-full blur-3xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-500"
+                    style={{ background: glowColor }}
+                />
+
+                {/* Top row */}
+                <div className="flex items-start justify-between mb-4">
+                    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center ${iconBg}`}>
+                        {icon}
+                    </div>
+                    {change && (
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/15 px-2 py-1 rounded-full">
+                            <ArrowUpRight className="w-3 h-3" />
+                            {change}
+                        </span>
+                    )}
                 </div>
-                {change && (
-                    <span className="text-xs font-medium text-emerald-500 flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
-                        {change}
-                    </span>
+
+                {/* Value */}
+                <p className="text-2xl font-semibold text-white tracking-tight leading-none mb-1">
+                    {value}
+                </p>
+
+                {/* Label */}
+                <p className="text-[10px] text-zinc-600 font-medium tracking-widest uppercase">{title}</p>
+
+                {/* Subtext */}
+                {subtext && (
+                    <p className="text-[10px] text-zinc-700 mt-1 leading-tight">{subtext}</p>
                 )}
+
+                {/* Bottom accent */}
+                <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </div>
-            <p className="text-sm text-zinc-500 mb-1">{title}</p>
-            <p className="text-3xl font-bold text-white">{value}</p>
         </div>
     );
 };
@@ -43,34 +92,81 @@ interface MetricsGridProps {
 
 export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Row 1 */}
             <MetricCard
-                title="Total Leads"
-                value={stats.totalLeads.toLocaleString()}
-                change="+12%"
-                icon={<Users className="w-6 h-6 text-white" />}
-                accent="blue"
+                title="Approved Leads"
+                value={stats.approvedLeads.toLocaleString()}
+                subtext={`of ${stats.totalLeads} scraped`}
+                icon={<Users className="w-4.5 h-4.5 text-emerald-400" />}
+                glowColor="rgba(16,185,129,0.2)"
+                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                delay={0}
             />
             <MetricCard
                 title="DMs Sent"
                 value={stats.dmsSent.toLocaleString()}
-                change="+28%"
-                icon={<MessageSquare className="w-6 h-6 text-white" />}
-                accent="purple"
+                subtext={`of ${stats.totalLeads} leads contacted`}
+                icon={<MessageSquare className="w-4.5 h-4.5 text-cyan-400" />}
+                glowColor="rgba(6,182,212,0.2)"
+                iconBg="bg-cyan-500/10 border-cyan-500/15"
+                delay={60}
             />
             <MetricCard
-                title="Response Rate"
-                value={`${stats.responseRate}%`}
-                change="+5.4%"
-                icon={<TrendingUp className="w-6 h-6 text-white" />}
-                accent="orange"
+                title="Reply Rate"
+                value={`${stats.replyRate}%`}
+                subtext="any reply to DM sent"
+                icon={<TrendingUp className="w-4.5 h-4.5 text-emerald-400" />}
+                glowColor="rgba(16,185,129,0.15)"
+                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                delay={120}
             />
             <MetricCard
-                title="Revenue"
-                value={`$${stats.revenue.toLocaleString()}`}
-                change="+18%"
-                icon={<DollarSign className="w-6 h-6 text-white" />}
-                accent="emerald"
+                title="Positive Reply Rate"
+                value={`${stats.positiveReplyRate}%`}
+                subtext="of replies showing interest"
+                icon={<ThumbsUp className="w-4.5 h-4.5 text-violet-400" />}
+                glowColor="rgba(139,92,246,0.2)"
+                iconBg="bg-violet-500/10 border-violet-500/15"
+                delay={180}
+            />
+
+            {/* Row 2 */}
+            <MetricCard
+                title="Booking Rate"
+                value={`${stats.bookingRate}%`}
+                subtext="positive replies → booked call"
+                icon={<Calendar className="w-4.5 h-4.5 text-amber-400" />}
+                glowColor="rgba(245,158,11,0.15)"
+                iconBg="bg-amber-500/10 border-amber-500/15"
+                delay={240}
+            />
+            <MetricCard
+                title="Follow-up Rate"
+                value={`${stats.followUpRate}%`}
+                subtext="leads that received a follow-up"
+                icon={<RefreshCw className="w-4.5 h-4.5 text-zinc-400" />}
+                glowColor="rgba(161,161,170,0.12)"
+                iconBg="bg-zinc-500/10 border-zinc-500/15"
+                delay={300}
+            />
+            <MetricCard
+                title="Leads Contacted"
+                value={stats.leadsContacted.toLocaleString()}
+                subtext="unique outreach touches"
+                icon={<Mail className="w-4.5 h-4.5 text-blue-400" />}
+                glowColor="rgba(96,165,250,0.15)"
+                iconBg="bg-blue-500/10 border-blue-500/15"
+                delay={360}
+            />
+            <MetricCard
+                title="Active Campaigns"
+                value={stats.activeCampaigns}
+                subtext="distinct campaign runs"
+                icon={<Layers className="w-4.5 h-4.5 text-emerald-400" />}
+                glowColor="rgba(16,185,129,0.18)"
+                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                delay={420}
             />
         </div>
     );

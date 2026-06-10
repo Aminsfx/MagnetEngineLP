@@ -10,7 +10,7 @@ interface LeadTableProps {
 export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => {
     const getStatusColor = (status: Lead['status']) => {
         switch (status) {
-            case 'cold': return 'text-blue-400 bg-blue-600/10';
+            case 'cold': return 'text-cyan-400 bg-cyan-500/10';
             case 'warm': return 'text-orange-400 bg-orange-600/10';
             case 'won': return 'text-emerald-400 bg-emerald-600/10';
         }
@@ -29,10 +29,10 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
     };
 
     return (
-        <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl overflow-hidden">
+        <div className="bg-[#030604] border border-white/5 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full">
-                    <thead className="bg-[#0B0F19] border-b border-[#1E293B]">
+                    <thead className="bg-[#050A08] border-b border-white/5">
                         <tr>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Name</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Instagram</th>
@@ -46,7 +46,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                             <th className="px-6 py-4 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Follow-up 3</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1E293B]">
+                    <tbody className="divide-y divide-white/5">
                         {leads.length === 0 ? (
                             <tr>
                                 <td colSpan={10} className="px-6 py-12 text-center text-zinc-500">
@@ -77,7 +77,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                                                 value={lead.dealValue || ''}
                                                 onChange={(e) => onUpdateLead(lead.id, { dealValue: parseFloat(e.target.value) || 0 })}
                                                 placeholder="$0"
-                                                className="w-20 px-2 py-1 bg-[#0B0F19] border border-[#1E293B] rounded text-sm text-emerald-400 focus:border-emerald-600/50 focus:outline-none"
+                                                className="w-20 px-2 py-1 bg-[#050A08] border border-white/5 rounded text-sm text-emerald-400 focus:border-emerald-500/50 focus:outline-none"
                                             />
                                         ) : (
                                             <span className="text-xs text-zinc-600">-</span>
@@ -87,13 +87,13 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                                         <div className="flex gap-1">
                                             <button
                                                 onClick={() => onUpdateLead(lead.id, { replied: true })}
-                                                className={`px-2 py-1 text-xs font-medium rounded transition-all ${lead.replied ? 'bg-emerald-600 text-white' : 'bg-[#0B0F19] border border-[#1E293B] text-zinc-500 hover:border-emerald-600/50 hover:text-emerald-400'}`}
+                                                className={`px-2 py-1 text-xs font-medium rounded transition-all ${lead.replied ? 'bg-emerald-600 text-white' : 'bg-[#050A08] border border-white/5 text-zinc-500 hover:border-emerald-500/50 hover:text-emerald-400'}`}
                                             >
                                                 Yes
                                             </button>
                                             <button
                                                 onClick={() => onUpdateLead(lead.id, { replied: false })}
-                                                className={`px-2 py-1 text-xs font-medium rounded transition-all ${!lead.replied ? 'bg-red-600/20 text-red-400 border border-red-600/30' : 'bg-[#0B0F19] border border-[#1E293B] text-zinc-500 hover:border-red-600/50 hover:text-red-400'}`}
+                                                className={`px-2 py-1 text-xs font-medium rounded transition-all ${!lead.replied ? 'bg-red-600/20 text-red-400 border border-red-600/30' : 'bg-[#050A08] border border-white/5 text-zinc-500 hover:border-red-500/50 hover:text-red-400'}`}
                                             >
                                                 No
                                             </button>
@@ -109,7 +109,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                                             <button
                                                 onClick={() => handleFollowUpClick(lead.id, 1)}
                                                 disabled={!lead.dmSent}
-                                                className="text-xs px-2 py-1 border border-[#1E293B] rounded text-zinc-500 hover:text-white hover:border-blue-600/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                className="text-xs px-2 py-1 border border-white/5 rounded text-zinc-500 hover:text-white hover:border-emerald-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 Mark
                                             </button>
@@ -122,7 +122,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                                             <button
                                                 onClick={() => handleFollowUpClick(lead.id, 2)}
                                                 disabled={!lead.followUp1Date}
-                                                className="text-xs px-2 py-1 border border-[#1E293B] rounded text-zinc-500 hover:text-white hover:border-blue-600/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                className="text-xs px-2 py-1 border border-white/5 rounded text-zinc-500 hover:text-white hover:border-emerald-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 Mark
                                             </button>
@@ -135,7 +135,7 @@ export const LeadTable: React.FC<LeadTableProps> = ({ leads, onUpdateLead }) => 
                                             <button
                                                 onClick={() => handleFollowUpClick(lead.id, 3)}
                                                 disabled={!lead.followUp2Date}
-                                                className="text-xs px-2 py-1 border border-[#1E293B] rounded text-zinc-500 hover:text-white hover:border-blue-600/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                className="text-xs px-2 py-1 border border-white/5 rounded text-zinc-500 hover:text-white hover:border-emerald-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 Mark
                                             </button>

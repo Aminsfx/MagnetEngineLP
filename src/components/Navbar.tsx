@@ -7,8 +7,8 @@ const Navbar: React.FC = () => {
     <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-black/50 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Magnet size={18} strokeWidth={2} className="text-white rotate-90" />
+          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+            <Magnet size={18} strokeWidth={2} className="text-black rotate-90" />
           </div>
           <span className="text-white font-semibold tracking-tight">MagnetEngine</span>
         </div>

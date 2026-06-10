@@ -1,4 +1,4 @@
-import { Lead, AppConfig } from './types';
+import { Lead, AppConfig, DashboardStats } from './types';
 
 export const filterUtils = {
     // Filter leads based on config
@@ -40,22 +40,36 @@ export const filterUtils = {
         });
     },
 
-    // Calculate dashboard statistics
-    calculateStats(leads: Lead[]) {
+    // Calculate dashboard statistics from the full lead list
+    calculateStats(leads: Lead[]): DashboardStats {
         const totalLeads = leads.length;
+        const approvedLeads = leads.filter(l => l.approved).length;
         const dmsSent = leads.filter(l => l.dmSent).length;
-        const repliedCount = leads.filter(l => l.replied).length;
-        const responseRate = dmsSent > 0 ? (repliedCount / dmsSent) * 100 : 0;
-        const wonDeals = leads.filter(l => l.status === 'won');
-        const revenue = wonDeals.reduce((sum, l) => sum + (l.dealValue || 0), 0);
-        const funnelEfficiency = totalLeads > 0 ? (wonDeals.length / totalLeads) * 100 : 0;
+        const replied = leads.filter(l => l.replied).length;
+        const positiveReplies = leads.filter(l => l.positiveReply).length;
+        const booked = leads.filter(l => l.booked).length;
+        const followedUp = leads.filter(l => l.followedUp).length;
+
+        const replyRate = dmsSent > 0 ? (replied / dmsSent) * 100 : 0;
+        const positiveReplyRate = replied > 0 ? (positiveReplies / replied) * 100 : 0;
+        const bookingRate = positiveReplies > 0 ? (booked / positiveReplies) * 100 : 0;
+        const followUpRate = dmsSent > 0 ? (followedUp / dmsSent) * 100 : 0;
+
+        // Count distinct campaign IDs
+        const activeCampaigns = new Set(
+            leads.map(l => l.campaignId).filter(Boolean)
+        ).size;
 
         return {
             totalLeads,
+            approvedLeads,
             dmsSent,
-            responseRate: Math.round(responseRate * 10) / 10,
-            revenue,
-            funnelEfficiency: Math.round(funnelEfficiency * 10) / 10,
+            replyRate: Math.round(replyRate * 10) / 10,
+            positiveReplyRate: Math.round(positiveReplyRate * 10) / 10,
+            bookingRate: Math.round(bookingRate * 10) / 10,
+            followUpRate: Math.round(followUpRate * 10) / 10,
+            leadsContacted: dmsSent,
+            activeCampaigns,
         };
     },
 };

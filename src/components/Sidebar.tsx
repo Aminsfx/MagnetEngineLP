@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Kanban, Calculator, Settings, Zap, LogOut, Database } from 'lucide-react';
+import { LayoutDashboard, Users, Kanban, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock } from 'lucide-react';
+import { usePlan } from '../contexts/PlanContext';
+import Logo from './Logo';
 
 interface SidebarProps {
     onLogout?: () => void;
@@ -8,60 +10,101 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
     const location = useLocation();
+    const { limits } = usePlan();
+    const [time, setTime] = useState(new Date());
+
+    useEffect(() => {
+        const t = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(t);
+    }, []);
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: Database, label: 'Leads', path: '/leads' },
-        { icon: Users, label: 'CRM', path: '/crm' },
-        { icon: Kanban, label: 'Pipeline', path: '/pipeline' },
+        { icon: Users, label: 'Campaign Builder', path: '/campaign' },
+        { icon: Database, label: 'Approval Queue', path: '/queue' },
+        { icon: CalendarClock, label: 'Follow-ups', path: '/follow-ups' },
         { icon: Calculator, label: 'Calculator', path: '/calculator' },
         { icon: Settings, label: 'Settings', path: '/settings' },
+        { icon: UserCircle, label: 'Profile', path: '/profile' },
     ];
 
     return (
-        <aside className="w-64 h-screen bg-[#0B0F19] border-r border-[#1E293B] flex flex-col fixed left-0 top-0">
-            <div className="p-6">
-                <div className="flex items-center gap-3 mb-8">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center">
-                        <Zap className="w-6 h-6 text-white fill-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-bold text-white tracking-tight">Magnet Engine</h1>
-                        <p className="text-xs text-zinc-600">AI Lead Automation</p>
-                    </div>
+        <aside className="w-64 h-screen bg-[#030604] border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden">
+            {/* Ambient glow matching landing page */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[200%] h-[300px] rounded-[100%] bg-gradient-to-t from-emerald-500/10 via-transparent to-transparent blur-[60px] pointer-events-none" />
+
+            <div className="p-6 flex flex-col h-full relative z-10">
+                {/* Logo */}
+                <div className="mb-6">
+                    <Logo subtitle="AI Lead Automation" />
                 </div>
 
-                <nav className="space-y-1">
+                {/* Status pill — matches landing page badge style */}
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-zinc-400 text-[11px] font-medium backdrop-blur-md mb-6 self-start">
+                    <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                    </span>
+                    System Live
+                </div>
+
+                {/* Nav */}
+                <nav className="space-y-0.5 flex-1">
                     {navItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         return (
                             <Link
                                 key={item.path}
                                 to={item.path}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${isActive
-                                    ? 'bg-blue-600/10 text-blue-500 border border-blue-600/20'
-                                    : 'text-zinc-500 hover:text-white hover:bg-white/5'
-                                    }`}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden ${
+                                    isActive
+                                        ? 'text-emerald-400'
+                                        : 'text-zinc-500 hover:text-white'
+                                }`}
                             >
-                                <item.icon className="w-5 h-5" />
-                                {item.label}
+                                {/* Active background */}
+                                <span
+                                    className={`absolute inset-0 rounded-xl transition-all duration-300 ${
+                                        isActive
+                                            ? 'bg-emerald-500/10 border border-emerald-500/20'
+                                            : 'bg-transparent group-hover:bg-white/5'
+                                    }`}
+                                />
+                                {/* Active indicator line */}
+                                {isActive && (
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-emerald-500 rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                                )}
+                                <item.icon className={`w-4 h-4 relative z-10 transition-transform duration-300 ${isActive ? '' : 'group-hover:scale-110'}`} />
+                                <span className="relative z-10 flex-1">{item.label}</span>
+                                {item.path === '/follow-ups' && !limits.canAccessFollowUps && (
+                                    <Lock className="w-3 h-3 text-zinc-700 relative z-10 flex-shrink-0" />
+                                )}
                             </Link>
                         );
                     })}
                 </nav>
-            </div>
 
-            <div className="mt-auto p-4">
-                <button
-                    onClick={() => {
-                        if (onLogout) onLogout();
-                        window.location.href = '/';
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-red-400 hover:bg-red-400/10 transition-all"
-                >
-                    <LogOut className="w-5 h-5" />
-                    Logout
-                </button>
+                {/* Bottom section */}
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                    {/* Live clock */}
+                    <div className="px-4 py-2 flex items-center justify-between">
+                        <span className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">
+                            {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <Zap className="w-3 h-3 text-emerald-600" />
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            if (onLogout) onLogout();
+                            window.location.href = '/';
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-600 hover:text-red-400 hover:bg-red-400/8 transition-all duration-300 group"
+                    >
+                        <LogOut className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
+                        Logout
+                    </button>
+                </div>
             </div>
         </aside>
     );

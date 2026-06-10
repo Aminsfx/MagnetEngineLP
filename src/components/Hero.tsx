@@ -1,143 +1,177 @@
-
 import React from 'react';
-import { Calendar, CirclePlay, Users, Hash, ShieldCheck, User, Sparkles, CircleCheck, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const Hero: React.FC = () => {
   return (
-    <section className="pt-32 px-6 pb-20 relative">
-      <div className="text-center max-w-4xl mx-auto space-y-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 text-xs font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-          </span>
-          V2.0 Now Available
+    <section className="relative overflow-hidden min-h-[100dvh] flex flex-col items-center justify-between bg-[#030604] pt-32 pb-20 px-4 sm:px-6 z-0">
+
+      {/* ── Ambient glow — planet atmosphere ───────────────────────── */}
+      <div
+        className="planet-glow absolute inset-x-0 top-0 pointer-events-none -z-20"
+        style={{
+          bottom: '22%',
+          background: 'radial-gradient(ellipse 85% 100% at 50% 100%, rgba(16,185,129,0.5) 0%, rgba(16,185,129,0.25) 30%, rgba(34,211,238,0.1) 60%, transparent 85%)',
+          filter: 'blur(70px)',
+        }}
+      />
+
+      {/* Subtle top mesh — warmth behind badge */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[360px] pointer-events-none -z-10"
+        style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(16,185,129,0.06) 0%, transparent 70%)' }}
+      />
+
+      {/* Planet horizon — static base */}
+      <div
+        className="absolute top-[60%] sm:top-[65%] md:top-[70%] left-1/2 -translate-x-1/2
+                   w-[300vw] sm:w-[200vw] lg:w-[150vw] xl:w-[110vw]
+                   h-[1000px] md:h-[1400px] rounded-[100%]
+                   border-t-[2px] border-emerald-300/30
+                   bg-gradient-to-b from-[#0a1a14] via-[#030604] to-[#030604]
+                   -z-10 pointer-events-none
+                   before:absolute before:inset-0 before:rounded-[100%]
+                   before:bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))]
+                   before:from-cyan-100/10 before:via-transparent before:to-transparent
+                   before:top-[-1px]"
+      />
+
+      {/* Orbit rim blink overlay */}
+      <div
+        className="orbit-glow absolute top-[60%] sm:top-[65%] md:top-[70%] left-1/2 -translate-x-1/2
+                   w-[300vw] sm:w-[200vw] lg:w-[150vw] xl:w-[110vw]
+                   h-[1000px] md:h-[1400px] rounded-[100%] -z-10 pointer-events-none"
+        style={{
+          boxShadow: [
+            '0 -600px 700px 150px rgba(16,185,129,0.22)',
+            '0 -250px 450px  80px rgba(16,185,129,0.4)',
+            '0 -80px  220px   0px rgba(16,185,129,0.8)',
+            '0 -20px   80px -10px rgba(52,211,153,0.7)',
+            'inset 0 50px 160px -10px rgba(34,211,238,0.45)',
+          ].join(', '),
+        }}
+      />
+
+      {/* ── Hero Content ────────────────────────────────────────────── */}
+      <div className="relative z-10 w-full max-w-4xl mx-auto flex flex-col items-center text-center mt-6">
+
+        {/* Badge — double-bezel (outer gradient hairline + dark inner core) */}
+        <div className="hero-animate mb-10" style={{ animationDelay: '0ms' }}>
+          <div
+            className="p-px rounded-full"
+            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(16,185,129,0.22), rgba(255,255,255,0.04))' }}
+          >
+            <div
+              className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#030604]"
+              style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.06)' }}
+            >
+              <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">V2.0 Now Live</span>
+              <span className="w-px h-3 bg-white/[0.1]" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-400">Get Early Access</span>
+            </div>
+          </div>
         </div>
 
-        <h1 className="text-5xl md:text-7xl leading-[1.1] font-medium text-white tracking-tight">
-          Stop prospecting manually. <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-200 to-white">
-            Clone yourself with AI.
+        {/* H1 */}
+        <h1
+          className="hero-animate font-bold text-white mb-7 leading-[0.92] tracking-[-0.04em] max-w-3xl"
+          style={{
+            animationDelay: '140ms',
+            fontSize: 'clamp(3rem, 8.5vw, 7rem)',
+          }}
+        >
+          Stop prospecting<br />
+          <span
+            style={{
+              background: 'linear-gradient(135deg, #6ee7b7 0%, #34d399 40%, #22d3ee 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            manually.
           </span>
         </h1>
 
-        <p className="text-lg md:text-xl leading-relaxed font-light text-zinc-400 max-w-2xl mx-auto">
-          Automate your lead generation. MagnetEngine filters high-quality prospects and generates hyper-personalized DMs that get replies, not blocks.
+        {/* Subtitle */}
+        <p
+          className="hero-animate font-light text-zinc-400 max-w-[480px] mx-auto mb-12 leading-[1.65]"
+          style={{
+            animationDelay: '280ms',
+            fontSize: 'clamp(1rem, 1.8vw, 1.15rem)',
+          }}
+        >
+          MagnetEngine scrapes your ideal clients on Instagram, writes a personalised DM for each one, and sends it from your account while you sleep.
         </p>
 
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4 pt-4">
+        {/* CTAs */}
+        <div
+          className="hero-animate flex flex-col sm:flex-row items-center gap-3 mb-20"
+          style={{ animationDelay: '400ms' }}
+        >
+          {/* Primary — button-in-button pattern, scrolls to pricing */}
+          <a
+            href="#pricing"
+            className="group flex items-center gap-3 pl-6 pr-[7px] py-[7px] rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98]"
+            style={{
+              boxShadow: '0 0 28px rgba(16,185,129,0.3), 0 0 80px rgba(16,185,129,0.08)',
+              transition: 'all 700ms cubic-bezier(0.32,0.72,0,1)',
+            }}
+          >
+            <span className="text-[15px] font-semibold text-emerald-950 leading-none">
+              Start Automating
+            </span>
+            {/* Nested icon circle */}
+            <span
+              className="w-8 h-8 rounded-full bg-emerald-950/20 flex items-center justify-center group-hover:translate-x-0.5 group-hover:-translate-y-px"
+              style={{ transition: 'transform 700ms cubic-bezier(0.32,0.72,0,1)' }}
+            >
+              <ArrowRight size={14} className="text-emerald-950" strokeWidth={2.5} />
+            </span>
+          </a>
+
+          {/* Secondary — hairline glass pill */}
           <button
             data-cal-link="magnetengine/15min"
             data-cal-namespace="15min"
             data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-            className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-all shadow-[0_0_20px_-5px_rgba(37,99,235,0.5)] flex items-center justify-center gap-2 group"
+            className="flex items-center px-6 py-3.5 rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-300 hover:text-white hover:border-white/[0.15] hover:bg-white/[0.05] active:scale-[0.98] text-[15px] font-medium"
+            style={{ transition: 'all 700ms cubic-bezier(0.32,0.72,0,1)' }}
           >
-            Start Automating
-            <Calendar size={18} className="group-hover:translate-x-0.5 transition-transform" />
+            Book a Demo
           </button>
-          <a href="#features" className="w-full md:w-auto px-8 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-medium rounded-lg transition-all flex items-center justify-center gap-2">
-            <CirclePlay size={18} />
-            Watch Workflow
-          </a>
         </div>
 
-        {/* UI Mockup */}
-        <div className="mt-16 relative mx-auto max-w-4xl rounded-xl border border-white/10 bg-zinc-900/50 backdrop-blur-xl shadow-2xl overflow-hidden group">
-          {/* Mac Window Controls */}
-          <div className="h-8 border-b border-white/5 bg-zinc-900 flex items-center px-4 gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/50"></div>
-            <div className="ml-auto text-xs text-zinc-600 flex items-center gap-1">
-              <ShieldCheck size={12} />
-              License Verified
-            </div>
-          </div>
+      </div>
 
-          <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/5 h-auto md:h-[400px]">
-            {/* Column 1: Sources */}
-            <div className="p-6 space-y-4 bg-black/20 text-left">
-              <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Lead Source</div>
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-blue-900/10 border border-blue-500/20 flex items-center gap-3">
-                  <Users className="text-blue-400" size={20} />
-                  <div>
-                    <div className="text-sm text-white">Competitor Followers</div>
-                    <div className="text-xs text-zinc-500">2,403 leads found</div>
-                  </div>
-                </div>
-                <div className="p-3 rounded-lg border border-white/5 opacity-50 flex items-center gap-3 grayscale">
-                  <Hash className="text-zinc-400" size={20} />
-                  <div>
-                    <div className="text-sm text-zinc-300">Hashtag Search</div>
-                    <div className="text-xs text-zinc-600">Idle</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 2: AI Processing */}
-            <div className="p-6 space-y-4 relative overflow-hidden text-left">
-              <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent pointer-events-none"></div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">AI Engine</div>
-                <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded border border-green-500/20">Active</span>
-              </div>
-
-              <div className="space-y-4 mt-4">
-                <div className="flex gap-3 items-start animate-pulse">
-                  <div className="w-8 h-8 rounded-full bg-zinc-800 border border-white/5 flex items-center justify-center shrink-0">
-                    <User className="text-zinc-400" size={16} />
-                  </div>
-                  <div className="space-y-2 w-full">
-                    <div className="h-2 w-24 bg-zinc-800 rounded"></div>
-                    <div className="h-2 w-full bg-zinc-800 rounded"></div>
-                    <div className="h-2 w-3/4 bg-zinc-800 rounded"></div>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-zinc-900 rounded border border-white/10 mt-4">
-                  <div className="flex items-center gap-2 text-xs text-blue-300 mb-2">
-                    <Sparkles size={12} />
-                    Analyzing Bio & Context...
-                  </div>
-                  <div className="text-xs text-zinc-400 leading-relaxed font-mono">
-                    {">"} Detected: Course Creator<br />
-                    {">"} Pain Point: Scaling ads<br />
-                    {">"} Strategy: Soft approach
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 3: Output */}
-            <div className="p-6 space-y-4 bg-black/20 text-left">
-              <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Personalized DM</div>
-              <div className="p-4 rounded-xl bg-gradient-to-br from-zinc-900 to-black border border-white/10 shadow-lg relative">
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-ping"></div>
-                <div className="flex gap-3 mb-3">
-                  <div className="w-8 h-8 rounded-full bg-zinc-800"></div>
-                  <div>
-                    <div className="text-sm font-medium text-white">To: @alex_marketing</div>
-                    <div className="text-xs text-zinc-500">Just now</div>
-                  </div>
-                </div>
-                <p className="text-sm text-zinc-300 leading-relaxed italic">
-                  "Hey Alex, saw your recent reel about ad fatigue. Loved the point about creative testing..."
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <span className="text-[10px] px-2 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">High Relevance</span>
-                </div>
-              </div>
-              <div className="flex justify-center pt-2">
-                <button className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 transition-colors">
-                  View all 42 generated <ArrowRight size={12} />
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* ── Social proof strip ─────────────────────────────────────── */}
+      <div
+        className="hero-animate relative z-20 mt-auto w-full max-w-2xl mx-auto text-center"
+        style={{ animationDelay: '540ms' }}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-600 mb-5">
+          Trusted by scaling agencies &amp; global teams
+        </p>
+        <div className="flex items-center justify-center flex-wrap gap-y-4">
+          {['Vortex', 'Empire', 'AgencyFlow', 'ScaleUp'].map((name, i, arr) => (
+            <React.Fragment key={name}>
+              <span
+                className="px-6 text-xl font-bold text-zinc-500 hover:text-zinc-200 cursor-default select-none tracking-tight"
+                style={{ transition: 'color 500ms cubic-bezier(0.32,0.72,0,1)' }}
+              >
+                {name}
+              </span>
+              {i < arr.length - 1 && (
+                <span className="w-px h-5 bg-white/[0.08]" />
+              )}
+            </React.Fragment>
+          ))}
         </div>
       </div>
+
     </section>
   );
 };

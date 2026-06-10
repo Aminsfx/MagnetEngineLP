@@ -90,7 +90,7 @@ export const LeadManagementPanel: React.FC<LeadManagementPanelProps> = ({
 
     return (
         <>
-            <div className="bg-[#131B2C] border border-[#1E293B] rounded-2xl p-6 space-y-6">
+            <div className="bg-[#030604] border border-white/5 rounded-2xl p-6 space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
@@ -98,8 +98,8 @@ export const LeadManagementPanel: React.FC<LeadManagementPanelProps> = ({
                         <p className="text-zinc-500 text-sm mt-1">Import, filter, and generate AI DMs</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-xl">
-                            <span className="text-sm text-blue-400 font-medium">
+                        <div className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                            <span className="text-sm text-cyan-400 font-medium">
                                 {allLeads.length} Total Leads
                             </span>
                         </div>
@@ -125,18 +125,18 @@ export const LeadManagementPanel: React.FC<LeadManagementPanelProps> = ({
 
                         <button
                             onClick={handleImportClick}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all font-medium"
+                            className="flex items-center gap-2 px-4 py-2.5 bg-[#050A08] border border-white/5 hover:border-emerald-500/50 text-white rounded-xl transition-all font-medium"
                         >
                             <Upload className="w-4 h-4" />
                             Import CSV
                         </button>
 
                         <div className="relative group">
-                            <button className="flex items-center gap-2 px-4 py-2.5 bg-[#0B0F19] border border-[#1E293B] hover:border-blue-600/50 text-white rounded-xl transition-all font-medium">
+                            <button className="flex items-center gap-2 px-4 py-2.5 bg-[#050A08] border border-white/5 hover:border-emerald-500/50 text-white rounded-xl transition-all font-medium">
                                 <Download className="w-4 h-4" />
                                 Export
                             </button>
-                            <div className="hidden group-hover:block absolute top-full mt-2 bg-[#0B0F19] border border-[#1E293B] rounded-xl overflow-hidden shadow-xl z-10 min-w-[200px]">
+                            <div className="hidden group-hover:block absolute top-full mt-2 bg-[#030604] border border-white/5 rounded-xl overflow-hidden shadow-xl z-10 min-w-[200px]">
                                 <button
                                     onClick={handleExportAll}
                                     className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-white/5 transition-colors"
@@ -145,7 +145,7 @@ export const LeadManagementPanel: React.FC<LeadManagementPanelProps> = ({
                                 </button>
                                 <button
                                     onClick={handleExportFiltered}
-                                    className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-white/5 transition-colors border-t border-[#1E293B]"
+                                    className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-white/5 transition-colors border-t border-white/5"
                                 >
                                     Export Filtered ({filteredLeads.length})
                                 </button>
@@ -165,9 +165,9 @@ export const LeadManagementPanel: React.FC<LeadManagementPanelProps> = ({
                 </div>
 
                 {/* Filter Info */}
-                <div className="bg-blue-600/10 border border-blue-600/20 rounded-xl p-4">
+                <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4">
                     <div className="flex items-start gap-3">
-                        <Filter className="w-5 h-5 text-blue-500 mt-0.5" />
+                        <Filter className="w-5 h-5 text-cyan-500 mt-0.5" />
                         <div className="flex-1">
                             <p className="text-sm text-zinc-300">
                                 <strong>Active Filters:</strong> {config.accountType === 'all' ? 'All accounts' : config.accountType === 'public' ? 'Public only' : 'Private only'}

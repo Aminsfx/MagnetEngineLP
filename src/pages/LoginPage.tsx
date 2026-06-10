@@ -1,26 +1,81 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Lock, Mail, Loader2 } from 'lucide-react';
+import { ArrowLeft, Lock, Mail, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+type Mode = 'login' | 'signup';
 
 const LoginPage: React.FC = () => {
+    const [mode, setMode] = useState<Mode>('login');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmEmail, setConfirmEmail] = useState(false);
+
+    const { signIn, signUp } = useAuth();
     const navigate = useNavigate();
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError(null);
         setIsLoading(true);
-        // Simulate auth delay
-        setTimeout(() => {
+
+        try {
+            if (mode === 'login') {
+                const err = await signIn(email, password);
+                if (err) {
+                    setError(err);
+                } else {
+                    navigate('/dashboard');
+                }
+            } else {
+                const result = await signUp(email, password, firstName.trim(), lastName.trim());
+                if (result === '__CONFIRM_EMAIL__') {
+                    setConfirmEmail(true);
+                } else if (result) {
+                    setError(result);
+                } else {
+                    navigate('/dashboard');
+                }
+            }
+        } finally {
             setIsLoading(false);
-            navigate('/dashboard');
-        }, 1500);
+        }
     };
+
+    if (confirmEmail) {
+        return (
+            <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
+                <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
+                <div className="fixed inset-0 bg-gradient-to-b from-black via-emerald-900/10 to-black pointer-events-none z-0" />
+                <div className="relative z-10 w-full max-w-md text-center">
+                    <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-6 mx-auto">
+                        <CheckCircle className="w-8 h-8 text-emerald-400" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
+                    <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+                        We sent a confirmation link to <span className="text-white font-medium">{email}</span>.
+                        Click it to activate your account, then come back to log in.
+                    </p>
+                    <button
+                        onClick={() => { setConfirmEmail(false); setMode('login'); }}
+                        className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors"
+                    >
+                        ← Back to sign in
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
-            {/* Background Grid Elements */}
+            {/* Background */}
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-blue-900/10 to-black pointer-events-none z-0" />
+            <div className="fixed inset-0 bg-gradient-to-b from-black via-emerald-900/10 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 w-full max-w-md">
                 <Link
@@ -32,64 +87,143 @@ const LoginPage: React.FC = () => {
                 </Link>
 
                 <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-                        <p className="text-zinc-500">Enter your credentials to access the software</p>
+                    {/* Tab switcher */}
+                    <div className="flex bg-black/30 rounded-xl p-1 mb-8 border border-white/8">
+                        {(['login', 'signup'] as Mode[]).map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => { setMode(m); setError(null); }}
+                                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                    mode === m
+                                        ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                                        : 'text-zinc-500 hover:text-white'
+                                }`}
+                            >
+                                {m === 'login' ? 'Sign In' : 'Create Account'}
+                            </button>
+                        ))}
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-6">
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-bold text-white mb-1">
+                            {mode === 'login' ? 'Welcome back' : 'Get started'}
+                        </h1>
+                        <p className="text-zinc-500 text-sm">
+                            {mode === 'login'
+                                ? 'Enter your credentials to access your dashboard'
+                                : 'Create your MagnetEngine account'
+                            }
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* First + Last name — signup only */}
+                        {mode === 'signup' && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-400 mb-2">First Name</label>
+                                    <div className="relative">
+                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                        <input
+                                            type="text"
+                                            required
+                                            value={firstName}
+                                            onChange={e => setFirstName(e.target.value)}
+                                            placeholder="John"
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-400 mb-2">Last Name</label>
+                                    <div className="relative">
+                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                        <input
+                                            type="text"
+                                            required
+                                            value={lastName}
+                                            onChange={e => setLastName(e.target.value)}
+                                            placeholder="Doe"
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Email */}
                         <div>
                             <label className="block text-sm font-medium text-zinc-400 mb-2">
                                 Email Address
                             </label>
                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
                                 <input
+                                    id="email"
                                     type="email"
                                     required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@company.com"
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
                                 />
                             </div>
                         </div>
 
+                        {/* Password */}
                         <div>
                             <label className="block text-sm font-medium text-zinc-400 mb-2">
                                 Password
                             </label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
                                 <input
+                                    id="password"
                                     type="password"
                                     required
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    minLength={6}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
                                 />
                             </div>
                         </div>
 
+                        {/* Error state */}
+                        {error && (
+                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/20">
+                                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                                <p className="text-sm text-red-400">{error}</p>
+                            </div>
+                        )}
+
+                        {/* Sign-up info */}
+                        {mode === 'signup' && (
+                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white/4 border border-white/8">
+                                <User className="w-4 h-4 text-zinc-400 flex-shrink-0 mt-0.5" />
+                                <p className="text-xs text-zinc-500 leading-relaxed">
+                                    A confirmation email may be sent. Minimum password length is 6 characters.
+                                </p>
+                            </div>
+                        )}
+
                         <button
                             type="submit"
+                            id="auth-submit-btn"
                             disabled={isLoading}
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center group disabled:opacity-70"
+                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold py-3 rounded-full transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 group disabled:opacity-70 mt-2"
                         >
                             {isLoading ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <>
-                                    Sign In
-                                    <ArrowLeft className="w-4 h-4 ml-2 rotate-180 group-hover:translate-x-1 transition-transform" />
+                                    {mode === 'login' ? 'Sign In' : 'Create Account'}
+                                    <ArrowLeft className="w-4 h-4 rotate-180 group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}
                         </button>
                     </form>
-
-                    <p className="mt-8 text-center text-sm text-zinc-600">
-                        Don't have an account?{' '}
-                        <a href="#" className="text-blue-500 hover:text-blue-400 transition-colors">
-                            Request Access
-                        </a>
-                    </p>
                 </div>
             </div>
         </div>

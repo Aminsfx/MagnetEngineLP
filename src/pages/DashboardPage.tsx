@@ -1,20 +1,18 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, LogOut, Users, Settings, Zap, BarChart3, Search } from 'lucide-react';
+import Logo from '../components/Logo';
 
 const DashboardPage: React.FC = () => {
     const navigate = useNavigate();
 
     return (
-        <div className="flex h-screen bg-black text-white overflow-hidden">
+        <div className="flex h-screen bg-[#050A08] text-white overflow-hidden">
             {/* Sidebar */}
-            <aside className="w-64 border-r border-white/10 bg-zinc-950/50 flex flex-col">
+            <aside className="w-64 border-r border-white/10 bg-[#030604] flex flex-col">
                 <div className="p-6">
-                    <div className="flex items-center space-x-3 mb-8">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                            <Zap className="w-5 h-5 text-white fill-white" />
-                        </div>
-                        <span className="text-xl font-bold tracking-tight">MagnetEngine</span>
+                    <div className="mb-8 pl-1">
+                        <Logo size="sm" />
                     </div>
 
                     <nav className="space-y-1">
@@ -28,8 +26,8 @@ const DashboardPage: React.FC = () => {
                                 key={item.label}
                                 href="#"
                                 className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${item.active
-                                        ? 'bg-blue-600/10 text-blue-500'
-                                        : 'text-zinc-500 hover:text-white hover:bg-white/5'
+                                    ? 'bg-emerald-500/10 text-emerald-400'
+                                    : 'text-zinc-500 hover:text-white hover:bg-white/5'
                                     }`}
                             >
                                 <item.icon className="w-4 h-4" />
@@ -53,17 +51,17 @@ const DashboardPage: React.FC = () => {
             {/* Main Content */}
             <main className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
-                <header className="h-16 border-b border-white/10 bg-zinc-950/50 flex items-center justify-between px-8">
+                <header className="h-16 border-b border-white/10 bg-[#030604] flex items-center justify-between px-8">
                     <div className="relative w-96">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                         <input
                             type="text"
                             placeholder="Search prospects..."
-                            className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                            className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
                         />
                     </div>
                     <div className="flex items-center space-x-4">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 border border-white/20" />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-500 border border-white/20" />
                     </div>
                 </header>
 
@@ -81,7 +79,7 @@ const DashboardPage: React.FC = () => {
                                 { label: 'Responses', value: '342', change: '+5.4%' },
                                 { label: 'Meetings Booked', value: '28', change: '+18%' },
                             ].map((stat) => (
-                                <div key={stat.label} className="bg-zinc-900/50 border border-white/10 p-6 rounded-2xl">
+                                <div key={stat.label} className="bg-[#030604] border border-white/5 p-6 rounded-2xl">
                                     <p className="text-sm text-zinc-500 mb-1">{stat.label}</p>
                                     <div className="flex items-end space-x-3">
                                         <span className="text-3xl font-bold">{stat.value}</span>
@@ -91,8 +89,8 @@ const DashboardPage: React.FC = () => {
                             ))}
                         </div>
 
-                        <div className="bg-zinc-900/50 border border-white/10 rounded-2xl overflow-hidden">
-                            <div className="p-6 border-b border-white/10">
+                        <div className="bg-[#030604] border border-white/5 rounded-2xl overflow-hidden">
+                            <div className="p-6 border-b border-white/5">
                                 <h3 className="font-semibold">Recent Activity</h3>
                             </div>
                             <div className="divide-y divide-white/10">
@@ -111,9 +109,9 @@ const DashboardPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="mt-8 p-12 bg-blue-600/5 border border-dashed border-blue-600/20 rounded-3xl flex flex-col items-center text-center">
-                            <Zap className="w-12 h-12 text-blue-500 mb-4 opacity-50" />
-                            <h4 className="text-lg font-medium text-blue-400 mb-2">Backend Integration Ready</h4>
+                        <div className="mt-8 p-12 bg-emerald-500/5 border border-dashed border-emerald-500/20 rounded-3xl flex flex-col items-center text-center">
+                            <Zap className="w-12 h-12 text-emerald-500 mb-4 opacity-50" />
+                            <h4 className="text-lg font-medium text-emerald-400 mb-2">Backend Integration Ready</h4>
                             <p className="text-zinc-500 max-w-md">
                                 This is a placeholder dashboard. You can now integrate the Google Apps Script backend from your repository by embedding the URL here.
                             </p>
