@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Mail, Lock, CheckCircle, AlertCircle, Loader2, Copy, Check, Camera } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { usePlan } from '../contexts/PlanContext';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface ProfilePageProps {
@@ -11,6 +12,7 @@ interface ProfilePageProps {
 const AVATAR_KEY = (id: string) => `avatar_${id}`;
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
+    const { tier } = usePlan();
     const [newPw, setNewPw] = useState('');
     const [confirmPw, setConfirmPw] = useState('');
     const [pwLoading, setPwLoading] = useState(false);
@@ -92,7 +94,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
             setPwMessage({ type: 'error', text: error.message });
         } else {
             setPwMessage({ type: 'success', text: 'Password updated successfully.' });
-            setCurrentPw('');
             setNewPw('');
             setConfirmPw('');
         }
@@ -146,9 +147,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                             )}
                             <p className={`truncate ${fullName ? 'text-zinc-500 text-sm' : 'text-white font-semibold text-base'}`}>{user.email}</p>
                             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold capitalize">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                    Pro Plan
+                                    {tier} Plan
                                 </span>
                                 <span className="text-zinc-600 text-xs">Member since {memberSince}</span>
                             </div>

@@ -206,7 +206,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to Approval Queue ✓`);
         setResults([]);
         setSelected(new Set());
-        setProgressLog([]);
+        setScrapeProgress(0);
+        setScrapeStatus('');
     };
 
     return (
@@ -215,14 +216,14 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             {/* ── Tabs ───────────────────────────────────────────────── */}
             <div className="flex gap-1 bg-white/3 border border-white/5 rounded-xl p-1 w-fit">
                 <button
-                    onClick={() => { setTab('search'); setError(''); setResults([]); setProgressLog([]); }}
+                    onClick={() => { setTab('search'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'search' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
                 >
                     <Search className="w-3.5 h-3.5" />
                     Keyword Search
                 </button>
                 <button
-                    onClick={() => { setTab('followers'); setError(''); setResults([]); setProgressLog([]); }}
+                    onClick={() => { setTab('followers'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'followers' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
                 >
                     <UserCheck className="w-3.5 h-3.5" />

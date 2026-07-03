@@ -95,9 +95,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
                     </div>
 
                     <button
-                        onClick={() => {
-                            if (onLogout) onLogout();
-                            window.location.href = '/';
+                        onClick={async () => {
+                            // Await sign-out before any navigation so the session is
+                            // actually cleared (App's onLogout handles the redirect)
+                            await onLogout?.();
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-600 hover:text-red-400 hover:bg-red-400/8 transition-all duration-300 group"
                     >

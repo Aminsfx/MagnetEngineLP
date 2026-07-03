@@ -48,7 +48,7 @@
 import { supabase } from './supabase';
 import { storage } from './storage'; // legacy localStorage fallback
 import type { AppConfig, Lead, FollowUpSequence } from './types';
-import type { PlanTier } from './plans';
+import type { PlanTier, Subscription } from './plans';
 
 /** True when Supabase env vars are present and client is usable */
 function isSupabaseReady(): boolean {
@@ -231,21 +231,49 @@ export const db = {
 
   // ─── Subscriptions ────────────────────────────────────────────────────────
 
-  async getSubscription(userId: string): Promise<PlanTier> {
-    if (!isSupabaseReady()) return 'starter';
+  /**
+   * Fetch the user's subscription (tier + activation status).
+   *
+   * Access model: the OWNER activates accounts manually after confirming
+   * payment, by upserting a row in the `subscriptions` table:
+   *
+   *   create table if not exists subscriptions (
+   *     user_id    uuid primary key references auth.users(id) on delete cascade,
+   *     plan       text not null default 'starter' check (plan in ('starter','pro','agency')),
+   *     status     text not null default 'pending' check (status in ('pending','active','cancelled')),
+   *     updated_at timestamptz default now()
+   *   );
+   *   alter table subscriptions enable row level security;
+   *   create policy "Users read own subscription" on subscriptions
+   *     for select using (auth.uid() = user_id);
+   *   -- NOTE: no insert/update policy on purpose — only the owner (via the
+   *   -- Supabase dashboard / service role) can activate accounts.
+   *
+   * No row → 'pending' (signed up, not yet paid/activated).
+   * Supabase not configured (local dev) → active starter so the app still runs.
+   */
+  async getSubscription(userId: string): Promise<Subscription> {
+    if (!isSupabaseReady()) return { tier: 'starter', status: 'active' };
 
     const { data, error } = await supabase
       .from('subscriptions')
-      .select('plan')
+      .select('plan, status')
       .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
       console.error('[db] getSubscription error:', error.message);
-      return 'starter';
+      // Fail closed: unknown state = not activated (prevents free access when
+      // the table is missing or the query is blocked)
+      return { tier: 'starter', status: 'pending' };
     }
 
-    return (data?.plan as PlanTier) ?? 'starter';
+    if (!data) return { tier: 'starter', status: 'pending' };
+
+    return {
+      tier: (data.plan as PlanTier) ?? 'starter',
+      status: (data.status as Subscription['status']) ?? 'active',
+    };
   },
 
   // ─── DM Generation Usage (localStorage-first, always reliable) ──────────

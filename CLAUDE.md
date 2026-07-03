@@ -1,50 +1,68 @@
 # MagnetEngine — AI Lead Automation SaaS
 
 ## Project Overview
-MagnetEngine is a React SaaS app that helps users find Instagram leads, generate AI-crafted DMs, manage an approval queue, and (via a browser extension) auto-send approved messages. It is a **client-side-only** app — no backend server. State is persisted to `localStorage`.
+MagnetEngine is a React SaaS app that helps users find Instagram leads, generate AI-crafted DMs, manage an approval queue, and (via a browser extension) auto-send approved messages. There is **no custom backend server** — Supabase provides auth + Postgres persistence (with a localStorage fallback when unconfigured), and all third-party API calls currently go directly from the browser.
 
 ## Tech Stack
-- **React 19 + TypeScript** (strict mode)
+- **React 19 + TypeScript**
 - **Vite 6** — dev server on port 3000, env vars via `VITE_` prefix (`import.meta.env`)
-- **Tailwind CSS** — dark theme, emerald/cyan/zinc palette, `#030A06` near-black background
-- **React Router v7** — `/` (landing), `/login`, `/dashboard`, `/privacy`, `/terms`
-- **Recharts** — conversion funnel chart
+- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme, emerald/cyan/zinc palette, `#030A06` near-black background. Do NOT re-add the CDN `<script>`.
+- **React Router v7** — public: `/` (landing), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/follow-ups`, `/calculator`, `/settings`, `/profile`)
+- **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
+- **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
 - **Lucide React** — icons
 - **Apify** — `apify~instagram-search-scraper` actor for lead scraping
 
 ## Repository Layout
 ```
 src/
-  App.tsx                        # Root: state, routing, lead callbacks
+  App.tsx                        # Slim router: lazy routes + auth/payment guards
   pages/
     LandingPage.tsx              # Marketing landing page
-    LoginPage.tsx                # Auth entry (no real auth — demo)
-    DashboardPage.tsx            # Main SaaS dashboard shell
+    LoginPage.tsx                # Sign in / sign up / forgot-password (Supabase)
+    ResetPasswordPage.tsx        # Password-recovery landing (from email link)
+    PendingActivationPage.tsx    # /activate — payment links + "check status"
+    DashboardShell.tsx           # Dashboard shell: state, lead callbacks, sub-routes
+    ProfilePage.tsx              # Account, change password, real plan badge
   components/
     campaign/
       CampaignBuilder.tsx        # Apify search UI — scrape leads
       ApprovalQueue.tsx          # Review / edit / approve / reject DMs
+      FollowUpSequencer.tsx      # Multi-touch sequences (Pro+)
     dashboard/
-      MetricsGrid.tsx            # 8 funnel-stage metric cards
+      MetricsGrid.tsx            # Funnel-stage metric cards
       AIAnalyst.tsx              # Rule-based insights from DashboardStats
-      ConversionChart.tsx        # Recharts funnel chart
-    crm/
-      LeadManagementPanel.tsx    # CRM table with status management
-      LeadTable.tsx              # Sortable/filterable lead table
-      LeadsPreviewTable.tsx      # Read-only preview table
+      ConversionChart.tsx        # Last-7-days sends/replies chart (real data)
+      OnboardingChecklist.tsx    # First-run checklist
+    calculator/RevenueCalculator.tsx
     settings/
       SettingsPanel.tsx          # AI Prompt Wizard + Lead Filtering Rules
-    Sidebar.tsx                  # Left nav: Campaign / Dashboard / CRM / Settings
+    common/UpgradePrompt.tsx     # Plan-gate CTA
+    Sidebar.tsx                  # Left nav
     Hero.tsx / Features.tsx / Pricing.tsx / FAQ.tsx / CTA.tsx / SocialProof.tsx
     LiveWorkflowDemo.tsx         # Animated demo on landing page
     Logo.tsx                     # Brand logo component
+  contexts/
+    AuthContext.tsx              # Supabase session + signIn/signUp/signOut/resetPassword
+    PlanContext.tsx              # tier + status ('pending'|'active'|'cancelled') + refresh()
   lib/
     types.ts                     # All shared TypeScript interfaces
+    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, PAYMENT_LINKS
     apify.ts                     # Apify API client (scrape + poll)
     storage.ts                   # localStorage read/write with obfuscation
     api.ts                       # AI DM generation helpers
+    db.ts                        # Supabase persistence (incl. subscriptions)
     filters.ts                   # filterLeads() + calculateStats()
+extension/                       # Chrome MV3 extension (drip DM execution)
 ```
+Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, root-level `components/` duplicates.
+
+## Access Gating (payment before access)
+- Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
+- `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
+- The owner activates an account after confirming payment (SQL upsert in README). No client-side write path to `subscriptions` exists on purpose.
+- Payment buttons on `/activate` use `PAYMENT_LINKS` from `src/lib/plans.ts`, fed by `VITE_PAYMENT_LINK_STARTER|PRO|AGENCY` env vars; fallback is the `UPGRADE_CONTACT` mailto.
+- Without Supabase env vars (local dev): subscription is treated as `active` starter so the app runs standalone.
 
 ## Key Data Types (src/lib/types.ts)
 ```typescript
@@ -94,8 +112,11 @@ APIKeys { openai?, claude?, gemini? }  // NO apify — backend-managed
 VITE_APIFY_API_KEY=<your_key>          # Admin-managed, never shown to end users
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # Publishable/anon key from Supabase dashboard
+VITE_OPENAI_API_KEY / VITE_CLAUDE_API_KEY / VITE_GEMINI_API_KEY   # AI providers (owner-managed)
+VITE_PAYMENT_LINK_STARTER / _PRO / _AGENCY    # Stripe/etc. payment links for /activate
 ```
 Template: `.env.example` (committed, no real values).
+⚠️ All `VITE_*` values are embedded in the shipped JS bundle — see README → Security for the key-exposure caveat and the Edge Function migration plan.
 
 ## Supabase Integration
 - **Package**: `@supabase/supabase-js` v2 (in dependencies)
@@ -105,7 +126,8 @@ Template: `.env.example` (committed, no real values).
 - **DB**: `src/lib/db.ts` — cloud persistence layer (leads, configs, follow_up_sequences tables)
   - Falls back to localStorage automatically when env vars are not set
   - Batches upserts in groups of 200 to avoid Supabase request-size limits
-- **Protected routes**: `ProtectedRoute` in `App.tsx` redirects to `/login` if not authenticated
+- **Protected routes**: `ProtectedRoute` in `App.tsx` redirects to `/login` when not authenticated and to `/activate` when the subscription isn't `active`; `RequireUser` guards `/activate` itself
+- **Password reset**: `resetPasswordForEmail` → email link → `/reset-password` → `auth.updateUser`
 
 ### Required SQL (run once in Supabase SQL editor)
 ```sql
@@ -139,6 +161,17 @@ create table if not exists follow_up_sequences (
 );
 alter table follow_up_sequences enable row level security;
 create policy "Users see own sequences" on follow_up_sequences for all using (auth.uid() = user_id);
+
+-- Subscriptions (payment gating; owner-activated — users can only READ their row)
+create table if not exists subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'starter' check (plan in ('starter','pro','agency')),
+  status text not null default 'pending' check (status in ('pending','active','cancelled')),
+  updated_at timestamptz default now()
+);
+alter table subscriptions enable row level security;
+create policy "Users read own subscription" on subscriptions
+  for select using (auth.uid() = user_id);
 ```
 
 ## Security Constraints — MUST NEVER CHANGE
@@ -153,7 +186,7 @@ create policy "Users see own sequences" on follow_up_sequences for all using (au
 - AI provider keys (OpenAI/Claude/Gemini) can optionally be set by the owner in `localStorage` directly; no UI form
 
 ## Filter Architecture
-`App.tsx` runs `filterUtils.filterLeads(leads, config)` on every state change → `filteredLeads`.  
+`DashboardShell.tsx` runs `filterUtils.filterLeads(leads, config)` on every state change → `filteredLeads`.  
 Filters (min/max followers, include/exclude keywords, account type) live in `Settings → Lead Filtering Rules`.  
 `CampaignBuilder` has **no filter UI** — it only exposes what the Apify actor natively accepts.
 
@@ -172,8 +205,8 @@ npm run preview  # Preview production build
 - Toast: custom hook (`useRef` timer), bottom-right, auto-dismiss 4 s
 
 ## Notable Decisions
-1. **No real auth** — LoginPage is cosmetic; dashboard accessible directly
-2. **localStorage for persistence** — all leads/config survive page refresh
+1. **Real Supabase auth + manual payment gating** — sign-up works for anyone, but the dashboard requires an owner-activated `subscriptions` row (see Access Gating above). Local dev without Supabase env vars bypasses both.
+2. **localStorage as fallback persistence** — Supabase when configured; leads/config survive refresh either way
 3. **AI DM generation is template-based** in the wizard step; live AI calls use the selected provider key from localStorage
 4. **CampaignBuilder fallback**: if user scrapes results but selects none, clicking "Add to Queue" adds all results (prevents silent no-op)
 5. **250 lead cap**: Apify actor enforces this server-side; UI dropdown max is 250

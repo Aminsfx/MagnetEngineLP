@@ -391,10 +391,4 @@ export const FollowUpSequencer: React.FC = () => {
       </div>
     </div>
   );
-
-  function renderPreview(template: string): string {
-    return template
-      .replace(/\{\{handle\}\}/g, `@${previewHandle}`)
-      .replace(/\{\{name\}\}/g, previewName);
-  }
 };

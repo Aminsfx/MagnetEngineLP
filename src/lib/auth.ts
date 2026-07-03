@@ -25,12 +25,31 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { first_name: firstName ?? '', last_name: lastName ?? '' } },
+    options: {
+      data: { first_name: firstName ?? '', last_name: lastName ?? '' },
+      // Confirmation email link returns the user to the app (Supabase must
+      // also allow this URL under Auth → URL Configuration → Redirect URLs)
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
   });
   return {
     user: data.user,
     error: error ? formatAuthError(error.message) : null,
   };
+}
+
+/** Send a password-reset email with a link back to /reset-password */
+export async function resetPassword(email: string): Promise<string | null> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  return error ? formatAuthError(error.message) : null;
+}
+
+/** Set a new password for the currently authenticated user (used after a recovery link) */
+export async function updatePassword(newPassword: string): Promise<string | null> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  return error ? formatAuthError(error.message) : null;
 }
 
 /** Sign out the current user */

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
-import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, onAuthStateChange } from '../lib/auth';
+import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
 
 interface AuthContextValue {
   user: User | null;
@@ -10,6 +10,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string, firstName?: string, lastName?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -55,8 +56,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(null);
   }, []);
 
+  const resetPassword = useCallback(async (email: string): Promise<string | null> => {
+    return authResetPassword(email);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut: handleSignOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

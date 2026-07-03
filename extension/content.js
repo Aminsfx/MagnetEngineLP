@@ -5,8 +5,11 @@
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ── Localhost: Relay campaign payload to background worker ──────
-if (window.location.hostname === "localhost") {
+// ── Web app: Relay campaign payload to background worker ──────
+// Runs on every non-Instagram page the manifest matches (localhost + the
+// production dashboard domain). To support a new domain, add it to
+// "content_scripts.matches" in manifest.json — no change needed here.
+if (!window.location.hostname.includes("instagram.com")) {
     window.addEventListener("message", (event) => {
         if (event.source !== window || !event.data.type) return;
 

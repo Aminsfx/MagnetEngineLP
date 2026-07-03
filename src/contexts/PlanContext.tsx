@@ -1,19 +1,26 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
 import { getPlanLimits } from '../lib/plans';
-import type { PlanTier, PlanLimits } from '../lib/plans';
+import type { PlanTier, PlanLimits, SubscriptionStatus } from '../lib/plans';
 
 interface PlanContextValue {
     tier: PlanTier;
     limits: PlanLimits;
+    /** 'active' unlocks the dashboard; 'pending' keeps the user on /activate */
+    status: SubscriptionStatus;
+    /** True until the first subscription fetch resolves — gate routing on this */
     loading: boolean;
+    /** Re-fetch the subscription (used by the "check activation" button) */
+    refresh: () => Promise<SubscriptionStatus>;
 }
 
 const PlanContext = createContext<PlanContextValue>({
     tier: 'starter',
     limits: getPlanLimits('starter'),
-    loading: false,
+    status: 'pending',
+    loading: true,
+    refresh: async () => 'pending',
 });
 
 export const usePlan = (): PlanContextValue => useContext(PlanContext);
@@ -21,23 +28,30 @@ export const usePlan = (): PlanContextValue => useContext(PlanContext);
 export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
     const [tier, setTier] = useState<PlanTier>('starter');
-    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<SubscriptionStatus>('pending');
+    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const fetchSubscription = useCallback(async (): Promise<SubscriptionStatus> => {
         if (!user) {
             setTier('starter');
-            return;
-        }
-
-        setLoading(true);
-        db.getSubscription(user.id).then((fetchedTier) => {
-            setTier(fetchedTier);
+            setStatus('pending');
             setLoading(false);
-        });
+            return 'pending';
+        }
+        const sub = await db.getSubscription(user.id);
+        setTier(sub.tier);
+        setStatus(sub.status);
+        setLoading(false);
+        return sub.status;
     }, [user]);
 
+    useEffect(() => {
+        setLoading(true);
+        fetchSubscription();
+    }, [fetchSubscription]);
+
     return (
-        <PlanContext.Provider value={{ tier, limits: getPlanLimits(tier), loading }}>
+        <PlanContext.Provider value={{ tier, limits: getPlanLimits(tier), status, loading, refresh: fetchSubscription }}>
             {children}
         </PlanContext.Provider>
     );

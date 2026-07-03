@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Lock, Mail, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-type Mode = 'login' | 'signup';
+type Mode = 'login' | 'signup' | 'forgot';
 
 const LoginPage: React.FC = () => {
     const [mode, setMode] = useState<Mode>('login');
@@ -14,8 +14,9 @@ const LoginPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmEmail, setConfirmEmail] = useState(false);
+    const [resetSent, setResetSent] = useState(false);
 
-    const { signIn, signUp } = useAuth();
+    const { signIn, signUp, resetPassword } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -31,6 +32,13 @@ const LoginPage: React.FC = () => {
                 } else {
                     navigate('/dashboard');
                 }
+            } else if (mode === 'forgot') {
+                const err = await resetPassword(email);
+                if (err) {
+                    setError(err);
+                } else {
+                    setResetSent(true);
+                }
             } else {
                 const result = await signUp(email, password, firstName.trim(), lastName.trim());
                 if (result === '__CONFIRM_EMAIL__') {
@@ -38,13 +46,40 @@ const LoginPage: React.FC = () => {
                 } else if (result) {
                     setError(result);
                 } else {
-                    navigate('/dashboard');
+                    // New accounts land on the activation page until the owner
+                    // confirms payment — ProtectedRoute enforces this too.
+                    navigate('/activate');
                 }
             }
         } finally {
             setIsLoading(false);
         }
     };
+
+    if (resetSent) {
+        return (
+            <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
+                <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
+                <div className="fixed inset-0 bg-gradient-to-b from-black via-emerald-900/10 to-black pointer-events-none z-0" />
+                <div className="relative z-10 w-full max-w-md text-center">
+                    <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-6 mx-auto">
+                        <CheckCircle className="w-8 h-8 text-emerald-400" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
+                    <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+                        If an account exists for <span className="text-white font-medium">{email}</span>,
+                        we sent a password-reset link. Click it to choose a new password.
+                    </p>
+                    <button
+                        onClick={() => { setResetSent(false); setMode('login'); setError(null); }}
+                        className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors"
+                    >
+                        ← Back to sign in
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (confirmEmail) {
         return (
@@ -106,11 +141,13 @@ const LoginPage: React.FC = () => {
 
                     <div className="text-center mb-6">
                         <h1 className="text-2xl font-bold text-white mb-1">
-                            {mode === 'login' ? 'Welcome back' : 'Get started'}
+                            {mode === 'login' ? 'Welcome back' : mode === 'forgot' ? 'Reset your password' : 'Get started'}
                         </h1>
                         <p className="text-zinc-500 text-sm">
                             {mode === 'login'
                                 ? 'Enter your credentials to access your dashboard'
+                                : mode === 'forgot'
+                                ? "Enter your email and we'll send you a reset link"
                                 : 'Create your MagnetEngine account'
                             }
                         </p>
@@ -170,25 +207,38 @@ const LoginPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Password */}
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-400 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
-                                <input
-                                    id="password"
-                                    type="password"
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    minLength={6}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
-                                />
+                        {/* Password — hidden in forgot mode */}
+                        {mode !== 'forgot' && (
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                                    Password
+                                </label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                    <input
+                                        id="password"
+                                        type="password"
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        minLength={6}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                    />
+                                </div>
+                                {mode === 'login' && (
+                                    <div className="text-right mt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setMode('forgot'); setError(null); }}
+                                            className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors"
+                                        >
+                                            Forgot password?
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        </div>
+                        )}
 
                         {/* Error state */}
                         {error && (
@@ -218,11 +268,21 @@ const LoginPage: React.FC = () => {
                                 <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <>
-                                    {mode === 'login' ? 'Sign In' : 'Create Account'}
+                                    {mode === 'login' ? 'Sign In' : mode === 'forgot' ? 'Send Reset Link' : 'Create Account'}
                                     <ArrowLeft className="w-4 h-4 rotate-180 group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}
                         </button>
+
+                        {mode === 'forgot' && (
+                            <button
+                                type="button"
+                                onClick={() => { setMode('login'); setError(null); }}
+                                className="w-full text-center text-xs text-zinc-500 hover:text-white transition-colors"
+                            >
+                                ← Back to sign in
+                            </button>
+                        )}
                     </form>
                 </div>
             </div>

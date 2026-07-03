@@ -46,7 +46,7 @@ export const storage = {
         keys[provider] = key;
 
         const obfuscated: Record<string, string> = {};
-        for (const [p, v] of Object.entries(keys)) {
+        for (const [p, v] of Object.entries(keys) as [string, string | undefined][]) {
             if (v) obfuscated[p] = obfuscate(v);
         }
         localStorage.setItem(STORAGE_KEYS.API_KEYS, JSON.stringify(obfuscated));
@@ -73,6 +73,7 @@ export const storage = {
             maxFollowers: 100000000,
             accountType: 'all',
             selectedAIProvider: 'openai',
+            dailySendCap: 40,
         };
     },
 

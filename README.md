@@ -1,20 +1,125 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# MagnetEngine — AI Lead Automation
 
-# Run and deploy your AI Studio app
+MagnetEngine finds Instagram leads with Apify, writes personalized DMs with AI, queues them for approval, and auto-sends approved messages through a Chrome extension.
 
-This contains everything you need to run your app locally.
+## Stack
 
-View your app in AI Studio: https://ai.studio/apps/drive/1F5eQqHCAYQU_sME05V_b0skHosbNZbdh
+React 19 + TypeScript + Vite 6 + Tailwind CSS 3 (build-time) + Supabase (auth & data) + Recharts.
 
-## Run Locally
+## Run locally
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+cp .env.example .env    # fill in your keys
+npm run dev             # http://localhost:3000
+```
 
+Without Supabase env vars the app falls back to localStorage (dev mode: no real auth, subscription treated as active).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm run build           # production build → dist/
+npm run preview         # serve the production build
+npx tsc --noEmit        # type-check
+```
+
+## Supabase setup (once)
+
+1. Create a project at supabase.com, copy the URL + anon key into `.env`.
+2. In **Auth → URL Configuration**, set your Site URL and add these Redirect URLs:
+   - `https://YOUR_DOMAIN/login` (email confirmation)
+   - `https://YOUR_DOMAIN/reset-password` (password recovery)
+   - the same two with `http://localhost:3000` for dev
+3. Run this in the **SQL editor**:
+
+```sql
+-- Leads
+create table if not exists leads (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  data jsonb not null,
+  created_at timestamptz default now()
+);
+alter table leads enable row level security;
+create policy "Users see own leads" on leads for all using (auth.uid() = user_id);
+
+-- Config
+create table if not exists configs (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table configs enable row level security;
+create policy "Users see own config" on configs for all using (auth.uid() = user_id);
+
+-- Follow-up sequences
+create table if not exists follow_up_sequences (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  campaign_id text,
+  steps jsonb not null default '[]',
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+alter table follow_up_sequences enable row level security;
+create policy "Users see own sequences" on follow_up_sequences for all using (auth.uid() = user_id);
+
+-- Subscriptions (payment gating — see below)
+create table if not exists subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'starter' check (plan in ('starter','pro','agency')),
+  status text not null default 'pending' check (status in ('pending','active','cancelled')),
+  updated_at timestamptz default now()
+);
+alter table subscriptions enable row level security;
+create policy "Users read own subscription" on subscriptions
+  for select using (auth.uid() = user_id);
+-- Deliberately NO insert/update policy: only you (via the dashboard or
+-- service role) can activate accounts.
+```
+
+## How payment gating works
+
+1. A visitor signs up → account is created, but their subscription is **pending** (no row in `subscriptions` = pending).
+2. They land on **/activate**, which shows the three plans with payment buttons (`VITE_PAYMENT_LINK_*` from `.env`; falls back to your contact email until you add links).
+3. They pay. You confirm the money actually arrived.
+4. You activate them — run this in the Supabase SQL editor:
+
+```sql
+insert into subscriptions (user_id, plan, status)
+select id, 'pro', 'active' from auth.users where email = 'customer@example.com'
+on conflict (user_id) do update
+  set plan = excluded.plan, status = excluded.status, updated_at = now();
+```
+
+5. The customer clicks **"Check activation status"** on /activate (or reloads) and is let into the dashboard with the limits of their plan (`starter` / `pro` / `agency`).
+
+To revoke access, set `status = 'cancelled'` for that user.
+
+## Auth flows
+
+- **Sign in / Sign up** — /login (Supabase email+password). New sign-ups go to /activate.
+- **Forgot password** — "Forgot password?" on /login emails a recovery link to **/reset-password**, where the user sets a new password.
+- **Change password** — Profile page inside the dashboard.
+
+## Chrome extension
+
+`extension/` is loaded unpacked via `chrome://extensions` → Developer mode → *Load unpacked*.
+
+- The web app posts approved campaigns via `window.postMessage`; the content script relays them to the background worker, which opens Instagram profiles on a randomized drip (test mode: ~20 s; production mode: 15–45 min, 25 DMs/day cap).
+- **Before launch:** add your production dashboard domain to `content_scripts.matches` in `extension/manifest.json` (it currently matches `localhost` and `instagram.com` only) — otherwise "Send to Extension" only works from localhost.
+
+## Security — read before onboarding paying users
+
+**Every `VITE_*` variable is baked into the public JS bundle.** That includes the Apify key and the OpenAI/Claude/Gemini keys. A curious user can open DevTools and extract them, and you pay for whatever they do with them. Mitigations, in order of preference:
+
+1. **Move scraping + AI calls behind a backend** (Supabase Edge Functions are the natural fit — the anon key + RLS already handle auth). The frontend calls your function; the function holds the secret keys server-side.
+2. Until then: set hard **spending limits** on all provider keys, rotate them regularly, and keep the customer count small.
+
+The Supabase anon key is designed to be public (RLS protects the data) — that one is fine.
+
+## Deploying (Vercel or similar)
+
+1. Set all env vars from `.env.example` in the project settings.
+2. Build command `npm run build`, output `dist/`.
+3. Add a SPA rewrite so deep links work: all routes → `/index.html`.
+4. Update Supabase Auth redirect URLs and the extension manifest with the final domain.
