@@ -6,6 +6,7 @@ import {
     CheckCircle, XCircle, Clock, Search, Filter, MessageCircle,
 } from 'lucide-react';
 import { UpgradePrompt } from '../common/UpgradePrompt';
+import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
 
 interface ApprovalQueueProps {
@@ -16,6 +17,8 @@ interface ApprovalQueueProps {
     onDeleteLead?: (id: string) => void;
     onLeadsSent?: (ids: string[]) => void;
     onApproveLead?: (id: string) => void;
+    /** Bulk approve — one state update + one batched DB write */
+    onApproveLeads?: (ids: string[]) => void;
     onRejectLead?: (id: string) => void;
     onUpdateDM?: (id: string, content: string) => void;
     onUpdateLead?: (lead: Lead) => void;
@@ -73,12 +76,14 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     onDeleteLead,
     onLeadsSent,
     onApproveLead,
+    onApproveLeads,
     onRejectLead,
     onUpdateDM,
     onUpdateLead,
     forcedTestMode = false,
 }) => {
-    const [campaignMode, setCampaignMode] = useState<CampaignMode>(forcedTestMode ? 'test' : 'test');
+    const toast = useToast();
+    const [campaignMode, setCampaignMode] = useState<CampaignMode>('test');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editDraft, setEditDraft] = useState('');
@@ -129,7 +134,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     const handleSendToExtension = () => {
         const approved = leads.filter(l => l.approved && l.dmContent);
         if (approved.length === 0) {
-            alert('No approved DMs to send. Approve some leads first.');
+            toast.error('No approved DMs to send. Approve some leads first.');
             return;
         }
         window.postMessage({
@@ -140,12 +145,29 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
             },
         }, '*');
         onLeadsSent?.(approved.map(l => l.id));
-        alert(`${approved.length} leads sent to extension in ${campaignMode} mode.`);
+        toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent to extension in ${campaignMode} mode.`);
     };
 
     const handleGenerateForPending = () => {
         const pending = leads.filter(l => !l.dmContent);
         onGenerateDMs(pending.length > 0 ? pending : undefined);
+    };
+
+    const handleApproveAllReady = () => {
+        const readyIds = leads
+            .filter(l => !!l.dmContent && !l.approved && !l.rejected)
+            .map(l => l.id);
+        if (readyIds.length === 0) {
+            toast.info('No DMs waiting for approval.');
+            return;
+        }
+        onApproveLeads?.(readyIds);
+    };
+
+    const handleDelete = (lead: Lead) => {
+        if (window.confirm(`Delete @${lead.handle} from the queue? This cannot be undone.`)) {
+            onDeleteLead?.(lead.id);
+        }
     };
 
     return (
@@ -185,6 +207,17 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         </div>
                     )}
                 </div>
+
+                {/* Approve all ready */}
+                {counts.ready > 0 && (
+                    <button
+                        onClick={handleApproveAllReady}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-emerald-500/25 text-emerald-400 font-medium rounded-xl transition-all text-sm"
+                    >
+                        <CheckCircle className="w-4 h-4" />
+                        Approve All ({counts.ready})
+                    </button>
+                )}
 
                 {/* Send to Extension */}
                 <button
@@ -488,7 +521,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                 {/* Delete */}
                                                 {onDeleteLead && (
                                                     <button
-                                                        onClick={() => onDeleteLead(lead.id)}
+                                                        onClick={() => handleDelete(lead)}
                                                         title="Delete"
                                                         className="p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
                                                     >

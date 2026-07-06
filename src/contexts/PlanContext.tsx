@@ -31,6 +31,17 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [status, setStatus] = useState<SubscriptionStatus>('pending');
     const [loading, setLoading] = useState(true);
 
+    // When the signed-in user changes, flip back to loading *during render* —
+    // otherwise route guards see one frame of the previous user's (stale)
+    // status and can wrongly redirect, e.g. an active subscriber bounced to
+    // /activate right after login.
+    const [lastUserId, setLastUserId] = useState<string | null | undefined>(undefined);
+    const currentUserId = user?.id ?? null;
+    if (currentUserId !== lastUserId) {
+        setLastUserId(currentUserId);
+        setLoading(true);
+    }
+
     const fetchSubscription = useCallback(async (): Promise<SubscriptionStatus> => {
         if (!user) {
             setTier('starter');

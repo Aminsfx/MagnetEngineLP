@@ -6,9 +6,13 @@ import Logo from './Logo';
 
 interface SidebarProps {
     onLogout?: () => void;
+    /** Mobile: whether the slide-in sidebar is visible (always visible ≥ lg) */
+    isOpen?: boolean;
+    /** Mobile: called after a nav link is clicked so the parent can close the drawer */
+    onNavigate?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNavigate }) => {
     const location = useLocation();
     const { limits } = usePlan();
     const [time, setTime] = useState(new Date());
@@ -29,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
     ];
 
     return (
-        <aside className="w-64 h-screen bg-[#030604] border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden">
+        <aside className={`w-64 h-screen bg-[#030604] border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden z-40 transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             {/* Ambient glow matching landing page */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[200%] h-[300px] rounded-[100%] bg-gradient-to-t from-emerald-500/10 via-transparent to-transparent blur-[60px] pointer-events-none" />
 
@@ -56,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
                             <Link
                                 key={item.path}
                                 to={item.path}
+                                onClick={onNavigate}
                                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden ${
                                     isActive
                                         ? 'text-emerald-400'

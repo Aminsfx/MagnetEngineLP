@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     CreditCard, LogOut, RefreshCw, CheckCircle2, Clock,
@@ -51,11 +51,18 @@ const PLAN_OPTIONS: {
  */
 const PendingActivationPage: React.FC = () => {
     const { user, signOut } = useAuth();
-    const { refresh } = usePlan();
+    const { refresh, status, loading } = usePlan();
     const navigate = useNavigate();
 
     const [checking, setChecking] = useState(false);
     const [stillPending, setStillPending] = useState(false);
+
+    // If the subscription is (or becomes) active, this page shouldn't be shown
+    useEffect(() => {
+        if (!loading && status === 'active') {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [loading, status, navigate]);
 
     const handleCheck = async () => {
         setChecking(true);

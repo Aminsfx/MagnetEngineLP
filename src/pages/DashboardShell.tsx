@@ -19,7 +19,17 @@ import { Lead, AppConfig, DashboardStats } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { UpgradePrompt } from '../components/common/UpgradePrompt';
-import { Loader2, Sparkles } from 'lucide-react';
+import { useToast } from '../components/common/Toast';
+import { Loader2, Sparkles, Menu } from 'lucide-react';
+
+/** Time-aware greeting for the dashboard header */
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return 'Working late';
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 // ─── Default config ───────────────────────────────────────────────────────────
 const DEFAULT_CONFIG: AppConfig = {
@@ -57,6 +67,8 @@ const DashboardShell: React.FC = () => {
   const { user, signOut } = useAuth();
   const { limits } = usePlan();
   const navigate = useNavigate();
+  const toast = useToast();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -140,7 +152,7 @@ const DashboardShell: React.FC = () => {
     const planCap = limits.maxLeadsPerCampaign;
     const planIds = planCap !== null ? ids.slice(0, planCap) : ids;
     if (planCap !== null && ids.length > planCap) {
-      alert(`Your plan allows up to ${planCap} leads per send. Upgrade to Pro for unlimited.`);
+      toast.info(`Your plan allows up to ${planCap} leads per send. Upgrade to Pro for unlimited.`);
     }
 
     const cap = config.dailySendCap ?? 40;
@@ -148,13 +160,13 @@ const DashboardShell: React.FC = () => {
     const remaining = cap - current;
 
     if (remaining <= 0) {
-      alert(`Daily send limit reached (${cap} DMs/day). Resets at midnight.`);
+      toast.error(`Daily send limit reached (${cap} DMs/day). Resets at midnight.`);
       return;
     }
 
     const allowed = planIds.slice(0, remaining);
     if (allowed.length < planIds.length) {
-      alert(`Daily cap almost reached — sending ${allowed.length} of ${ids.length} DMs. Resets at midnight.`);
+      toast.info(`Daily cap almost reached — sending ${allowed.length} of ${ids.length} DMs. Resets at midnight.`);
     }
 
     const updatedLeads: Lead[] = [];
@@ -176,7 +188,24 @@ const DashboardShell: React.FC = () => {
     if (user && updatedLeads.length > 0) {
       await db.upsertLeads(updatedLeads, user.id);
     }
-  }, [user, config.dailySendCap, limits.maxLeadsPerCampaign]);
+  }, [user, config.dailySendCap, limits.maxLeadsPerCampaign, toast]);
+
+  /** Bulk-approve: one state update + one batched DB write */
+  const handleApproveLeads = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const updatedBatch: Lead[] = [];
+    setLeads((prev) => prev.map((l) => {
+      if (idSet.has(l.id)) {
+        const updated = { ...l, approved: true, rejected: false };
+        updatedBatch.push(updated);
+        return updated;
+      }
+      return l;
+    }));
+    if (user && updatedBatch.length > 0) await db.upsertLeads(updatedBatch, user.id);
+    toast.success(`${ids.length} DM${ids.length !== 1 ? 's' : ''} approved`);
+  }, [user, toast]);
 
   const handleApproveLead = useCallback(async (id: string) => {
     let updated: Lead | undefined;
@@ -208,13 +237,13 @@ const DashboardShell: React.FC = () => {
   const handleGenerateDMs = useCallback(async (targetLeads?: Lead[]) => {
     const remaining = limits.maxDMGenerations - dmUsed;
     if (remaining <= 0) {
-      alert(`You've used all ${limits.maxDMGenerations} DM generations for this month. Upgrade your plan to generate more.`);
+      toast.error(`You've used all ${limits.maxDMGenerations} DM generations for this month. Upgrade your plan to generate more.`);
       return;
     }
 
     const leadsToProcess = (targetLeads ?? filteredLeads).filter((l) => !l.dmContent).slice(0, remaining);
     if (leadsToProcess.length === 0) {
-      alert('All selected leads already have DMs generated.');
+      toast.info('All selected leads already have DMs generated.');
       return;
     }
 
@@ -233,7 +262,7 @@ const DashboardShell: React.FC = () => {
       } catch (error: any) {
         console.error(`Error generating DM for ${lead.name}:`, error);
         setIsGenerating(false);
-        alert(`DM generation failed: ${error?.message ?? 'Unknown error'}. Make sure your AI provider key is set in .env and the server has been restarted.`);
+        toast.error(`DM generation failed: ${error?.message ?? 'Unknown error'}`);
         return;
       }
     }
@@ -252,9 +281,9 @@ const DashboardShell: React.FC = () => {
 
     setIsGenerating(false);
     if (successCount > 0) {
-      alert(`Generated ${successCount} DMs. Review them in the Approval Queue.`);
+      toast.success(`Generated ${successCount} DM${successCount !== 1 ? 's' : ''} — review them in the Approval Queue.`);
     }
-  }, [config, filteredLeads, user, limits, dmUsed]);
+  }, [config, filteredLeads, user, limits, dmUsed, toast]);
 
   const handleLogout = useCallback(async () => {
     await signOut();
@@ -275,7 +304,7 @@ const DashboardShell: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#030604] relative overflow-hidden">
       {/* Global ambient glow */}
-      <div className="fixed bottom-0 left-64 right-0 h-[400px] pointer-events-none z-0"
+      <div className="fixed bottom-0 left-0 lg:left-64 right-0 h-[400px] pointer-events-none z-0"
         style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(16,185,129,0.07) 0%, transparent 70%)' }}
       />
       {/* Noise overlay */}
@@ -283,11 +312,27 @@ const DashboardShell: React.FC = () => {
         style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '256px 256px' }}
       />
 
-      <Sidebar onLogout={handleLogout} />
+      {/* Mobile backdrop when sidebar is open */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      <div className="flex-1 ml-64 flex flex-col relative z-10">
+      <Sidebar onLogout={handleLogout} isOpen={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
+
+      <div className="flex-1 ml-0 lg:ml-64 flex flex-col relative z-10">
         {/* Top header */}
-        <header className="h-14 border-b border-white/5 bg-[#030604]/80 backdrop-blur-xl flex items-center justify-end px-8 sticky top-0 z-20">
+        <header className="h-14 border-b border-white/5 bg-[#030604]/80 backdrop-blur-xl flex items-center justify-between lg:justify-end px-4 sm:px-8 sticky top-0 z-20">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            className="lg:hidden p-2 -ml-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
 
           <div className="flex items-center gap-4">
             {/* Daily send counter — cap is the lower of the plan's max and the user-configured value */}
@@ -350,7 +395,7 @@ const DashboardShell: React.FC = () => {
                         Overview
                       </div>
                       <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">
-                        Good morning{(() => {
+                        {getGreeting()}{(() => {
                           const first = user?.user_metadata?.first_name;
                           const last = user?.user_metadata?.last_name;
                           const full = [first, last].filter(Boolean).join(' ');
@@ -405,6 +450,7 @@ const DashboardShell: React.FC = () => {
                     onDeleteLead={handleDeleteLead}
                     onLeadsSent={handleLeadsSent}
                     onApproveLead={handleApproveLead}
+                    onApproveLeads={handleApproveLeads}
                     onRejectLead={handleRejectLead}
                     onUpdateDM={handleUpdateDM}
                     onUpdateLead={handleUpdateLead}

@@ -75,7 +75,13 @@ export function onAuthStateChange(
 function formatAuthError(msg: string): string {
   if (msg.includes('Invalid login credentials')) return 'Invalid email or password.';
   if (msg.includes('Email not confirmed')) return 'Please confirm your email before logging in.';
-  if (msg.includes('User already registered')) return 'An account with this email already exists.';
+  if (msg.includes('User already registered')) return 'An account with this email already exists. Try signing in instead.';
   if (msg.includes('Password should be')) return 'Password must be at least 6 characters.';
+  if (msg.toLowerCase().includes('rate limit') || msg.includes('Too many requests')) {
+    return 'Too many attempts — please wait a minute and try again.';
+  }
+  if (msg.includes('Failed to fetch') || msg.toLowerCase().includes('network')) {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
   return msg;
 }

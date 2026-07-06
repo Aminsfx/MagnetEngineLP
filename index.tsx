@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { PlanProvider } from './src/contexts/PlanContext';
+import { ToastProvider } from './src/components/common/Toast';
 import App from './src/App';
 
 injectSpeedInsights();
@@ -19,7 +20,9 @@ root.render(
     <BrowserRouter>
       <AuthProvider>
         <PlanProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </PlanProvider>
       </AuthProvider>
     </BrowserRouter>

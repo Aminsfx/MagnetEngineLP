@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Shield, Calendar } from 'lucide-react';
 
 const tiers = [
@@ -14,6 +15,7 @@ const tiers = [
             subtext: '+ $47/month · cancel anytime'
         },
         cta: 'Get Started',
+        selfServe: true,
         ctaStyle: 'border border-white/10 hover:border-white/20 text-white bg-transparent hover:bg-white/5',
         features: [
             'AI DM generation (1 provider)',
@@ -36,6 +38,7 @@ const tiers = [
             subtext: '+ $97/month · cancel anytime'
         },
         cta: 'Claim Founding Spot',
+        selfServe: true,
         ctaStyle: 'border border-white/10 hover:border-white/20 text-white bg-transparent hover:bg-white/5',
         features: [
             'Everything in Starter',
@@ -60,6 +63,7 @@ const tiers = [
             subtext: 'No setup fee · application only'
         },
         cta: 'Apply for a Spot',
+        selfServe: false,
         ctaStyle: 'border border-white/10 hover:border-white/20 text-white bg-transparent hover:bg-white/5',
         features: [
             'Everything in Pro',
@@ -164,15 +168,24 @@ const Pricing: React.FC = () => {
                                         ))}
                                     </div>
 
-                                    {/* CTA Button */}
-                                    <button
-                                        data-cal-link="magnetengine/15min"
-                                        data-cal-namespace="15min"
-                                        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                                        className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300 mt-auto ${tier.ctaStyle}`}
-                                    >
-                                        {tier.cta}
-                                    </button>
+                                    {/* CTA Button — self-serve tiers go to sign-up; Agency books a call */}
+                                    {tier.selfServe ? (
+                                        <Link
+                                            to="/login?mode=signup"
+                                            className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300 mt-auto text-center block ${tier.ctaStyle}`}
+                                        >
+                                            {tier.cta}
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            data-cal-link="magnetengine/15min"
+                                            data-cal-namespace="15min"
+                                            data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                                            className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300 mt-auto ${tier.ctaStyle}`}
+                                        >
+                                            {tier.cta}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );

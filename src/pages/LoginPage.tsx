@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Lock, Mail, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Lock, Mail, Loader2, CheckCircle, AlertCircle, User, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
 const LoginPage: React.FC = () => {
-    const [mode, setMode] = useState<Mode>('login');
+    // Deep link support: /login?mode=signup opens the Create Account tab
+    const [searchParams] = useSearchParams();
+    const [mode, setMode] = useState<Mode>(
+        searchParams.get('mode') === 'signup' ? 'signup' : 'login'
+    );
+    const [showPw, setShowPw] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [firstName, setFirstName] = useState('');
@@ -164,6 +169,7 @@ const LoginPage: React.FC = () => {
                                         <input
                                             type="text"
                                             required
+                                            autoComplete="given-name"
                                             value={firstName}
                                             onChange={e => setFirstName(e.target.value)}
                                             placeholder="John"
@@ -178,6 +184,7 @@ const LoginPage: React.FC = () => {
                                         <input
                                             type="text"
                                             required
+                                            autoComplete="family-name"
                                             value={lastName}
                                             onChange={e => setLastName(e.target.value)}
                                             placeholder="Doe"
@@ -199,6 +206,7 @@ const LoginPage: React.FC = () => {
                                     id="email"
                                     type="email"
                                     required
+                                    autoComplete="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@company.com"
@@ -217,15 +225,30 @@ const LoginPage: React.FC = () => {
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
                                     <input
                                         id="password"
-                                        type="password"
+                                        type={showPw ? 'text' : 'password'}
                                         required
+                                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="••••••••"
                                         minLength={6}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-11 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
                                     />
+                                    <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onClick={() => setShowPw(v => !v)}
+                                        aria-label={showPw ? 'Hide password' : 'Show password'}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition-colors"
+                                    >
+                                        {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
                                 </div>
+                                {mode === 'signup' && password.length > 0 && password.length < 6 && (
+                                    <p className="text-[11px] text-amber-400/90 mt-1.5">
+                                        Password must be at least 6 characters ({6 - password.length} more to go)
+                                    </p>
+                                )}
                                 {mode === 'login' && (
                                     <div className="text-right mt-2">
                                         <button
@@ -253,7 +276,11 @@ const LoginPage: React.FC = () => {
                             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white/4 border border-white/8">
                                 <User className="w-4 h-4 text-zinc-400 flex-shrink-0 mt-0.5" />
                                 <p className="text-xs text-zinc-500 leading-relaxed">
-                                    A confirmation email may be sent. Minimum password length is 6 characters.
+                                    By creating an account you agree to our{' '}
+                                    <Link to="/terms" className="text-emerald-500/90 hover:text-emerald-400 underline underline-offset-2">Terms of Service</Link>
+                                    {' '}and{' '}
+                                    <Link to="/privacy" className="text-emerald-500/90 hover:text-emerald-400 underline underline-offset-2">Privacy Policy</Link>.
+                                    After sign-up you'll pick a plan and complete payment to unlock your dashboard.
                                 </p>
                             </div>
                         )}
