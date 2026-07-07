@@ -8,7 +8,8 @@ Build in this order (dependencies noted):
 
 | # | Item | Blueprint | Builder | Notes |
 |---|------|-----------|---------|-------|
-| 1 | Polar payments + automatic activation | `blueprints/polar-auto-activation.md` | Sonnet | Replaces manual SQL activation; auto-revoke on cancel |
+| 10 | Single-plan pricing ($97/mo · $970/yr) | `blueprints/single-plan-pricing.md` | Sonnet | BUILD FIRST — replaces the 3-tier model everywhere; adds 500 leads/mo + 3 campaigns/mo quotas |
+| 1 | Polar payments + automatic activation | `blueprints/polar-auto-activation.md` | Sonnet | Build after #10. Two Polar products (monthly/annual); auto-revoke on cancel |
 | 2 | CSV lead import | `blueprints/csv-lead-import.md` | Sonnet | Third tab in Campaign Builder; Apify/scraper exports |
 | 3 | Chrome Web Store readiness | `blueprints/chrome-web-store-publish.md` | Sonnet | Kills the "downloadable file" trust problem — store install |
 | 4 | Reply Battlecards | `blueprints/reply-battlecards.md` | Sonnet | Adds `calendarLink` to AppConfig + Settings card |
@@ -18,8 +19,9 @@ Build in this order (dependencies noted):
 | 8 | Outreach Health Score | `blueprints/outreach-health-score.md` | Haiku | Red/yellow/green weekly behavior score on dashboard |
 | 9 | Benchmark overlays on metrics | `blueprints/benchmark-overlays.md` | Haiku | "AI Analyst" is already rule-based — kept; this adds context |
 
-Ordering constraints: 4 before 7 is nice (7's Settings card slots after 4's Booking Link card)
-but not required — each blueprint stands alone. 1–3 have no dependencies on 4–9.
+Ordering constraints: #10 first (it rewrites pricing/plans that #1 depends on). 4 before 7 is nice
+(7's Settings card slots after 4's Booking Link card) but not required — each other blueprint
+stands alone. 2–3 have no dependencies on anything.
 
 Deferred (decided, not blueprinted yet):
 - **AI Reply Assistant / appointment booker** — feasible only through the Chrome extension
