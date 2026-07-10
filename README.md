@@ -80,7 +80,7 @@ create policy "Users read own subscription" on subscriptions
 ## How payment gating works
 
 1. A visitor signs up → account is created, but their subscription is **pending** (no row in `subscriptions` = pending).
-2. They land on **/activate**, which shows the three plans with payment buttons (`VITE_PAYMENT_LINK_*` from `.env`; falls back to your contact email until you add links).
+2. They land on **/activate**, which shows the single $97/mo · $970/yr plan with payment buttons (`VITE_PAYMENT_LINK_MONTHLY|ANNUAL` Polar checkout links from `.env`; falls back to your contact email until you add links).
 3. They pay. You confirm the money actually arrived.
 4. You activate them — run this in the Supabase SQL editor:
 

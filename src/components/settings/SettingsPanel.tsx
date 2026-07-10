@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown } from 'lucide-react';
+import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook } from 'lucide-react';
 import { AppConfig } from '../../lib/types';
 import { storage } from '../../lib/storage';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
 import { usePlan } from '../../contexts/PlanContext';
-import { UpgradePrompt } from '../common/UpgradePrompt';
 
 interface SettingsPanelProps {
     config: AppConfig;
@@ -210,14 +209,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         <div className="max-w-4xl mx-auto space-y-6">
 
             {/* ── Niche Preset Picker ───────────────────────────────────── */}
-            <div className="relative">
-                <div className={limits.canUsePresets ? '' : 'opacity-40 pointer-events-none select-none'}>
-                    <PresetPicker onApply={handleApplyPreset} />
-                </div>
-                {!limits.canUsePresets && (
-                    <UpgradePrompt message="3 pre-built niche DM scripts (presets)" variant="overlay" />
-                )}
-            </div>
+            <PresetPicker onApply={handleApplyPreset} />
 
             {/* ── AI Onboarding Wizard ──────────────────────────────────── */}
             <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
@@ -482,20 +474,97 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                                 type="number"
                                 min={1}
                                 max={limits.maxDailyCap}
-                                value={limits.canAdjustDailyCap ? (config.dailySendCap ?? 40) : limits.maxDailyCap}
+                                value={config.dailySendCap ?? 40}
                                 onChange={e => {
-                                    if (!limits.canAdjustDailyCap) return;
                                     onUpdateConfig({ ...config, dailySendCap: Math.min(limits.maxDailyCap, Math.max(1, Number(e.target.value))) });
                                 }}
-                                disabled={!limits.canAdjustDailyCap}
-                                className={`w-28 bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-opacity ${!limits.canAdjustDailyCap ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                className="w-28 bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                             />
                             <span className="text-xs text-zinc-600">DMs per day</span>
-                            {!limits.canAdjustDailyCap && (
-                                <UpgradePrompt message="Adjustable daily DM cap" variant="tooltip" />
-                            )}
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* ── Booking Link ─────────────────────────────────────────────── */}
+            <div className="bg-[#050A08] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                        <CalendarClock className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Booking Link</h3>
+                        <p className="text-[11px] text-zinc-600">Inserted into your reply battlecards in the Approval Queue</p>
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-xs text-zinc-500 mb-1.5">Calendly / booking page URL</label>
+                    <input
+                        type="url"
+                        value={config.calendarLink ?? ''}
+                        onChange={e => onUpdateConfig({ ...config, calendarLink: e.target.value })}
+                        placeholder="https://calendly.com/yourname/15min"
+                        className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    />
+                </div>
+            </div>
+
+            {/* ── Integrations — Zapier / Make ─────────────────────────────── */}
+            <div className="bg-[#050A08] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
+                        <Webhook className="w-4 h-4 text-cyan-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">Integrations — Zapier / Make</h3>
+                        <p className="text-[11px] text-zinc-600">Push events to your CRM, Slack, or email the moment they happen</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Webhook URL (Zapier Catch Hook, Make, etc.)</label>
+                        <input
+                            type="url"
+                            value={config.webhookUrl ?? ''}
+                            onChange={e => onUpdateConfig({ ...config, webhookUrl: e.target.value })}
+                            placeholder="https://hooks.zapier.com/hooks/catch/…"
+                            className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                        />
+                        {!!config.webhookUrl && !config.webhookUrl.startsWith('https://') && (
+                            <p className="text-[11px] text-amber-400/90 mt-1.5">
+                                Must be an https:// URL — events won't fire until it is.
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-4">
+                        {([
+                            { key: 'replied' as const, label: 'Lead replied' },
+                            { key: 'positiveReply' as const, label: 'Positive reply' },
+                            { key: 'booked' as const, label: 'Call booked' },
+                        ]).map(({ key, label }) => {
+                            const toggles = config.webhookEvents ?? { replied: false, positiveReply: true, booked: true };
+                            return (
+                                <label key={key} className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={toggles[key]}
+                                        onChange={e => onUpdateConfig({
+                                            ...config,
+                                            webhookEvents: { ...toggles, [key]: e.target.checked },
+                                        })}
+                                        className="accent-cyan-500"
+                                    />
+                                    {label}
+                                </label>
+                            );
+                        })}
+                    </div>
+
+                    <p className="text-[11px] text-zinc-600">
+                        Each event POSTs JSON: {'{ event, timestamp, lead: { handle, name, followers, campaignId, dmContent } }'}. In Zapier, use "Webhooks by Zapier → Catch Hook".
+                    </p>
                 </div>
             </div>
 

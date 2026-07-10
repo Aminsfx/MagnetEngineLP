@@ -5,6 +5,30 @@ import {
 } from 'lucide-react';
 import { DashboardStats } from '../../lib/types';
 
+// Cold-DM industry benchmarks used for the overlay lines on the rate cards
+const BENCHMARKS = {
+    replyRate:         { avg: 8,  good: 15 },  // % of DMs getting any reply
+    positiveReplyRate: { avg: 40, good: 55 },  // % of replies that are positive
+    bookingRate:       { avg: 6,  good: 20 },  // % of positive replies that book
+};
+
+const BELOW_AVG_HINT: Record<keyof typeof BENCHMARKS, string> = {
+    replyRate: 'below 8% avg — try shorter DMs',
+    positiveReplyRate: 'below 40% avg — tighten targeting',
+    bookingRate: 'below 6% avg — add your booking link',
+};
+
+function benchmarkFor(
+    key: keyof typeof BENCHMARKS,
+    value: number,
+): { text: string; tone: 'good' | 'bad' } | undefined {
+    if (value === 0) return undefined;
+    const { avg, good } = BENCHMARKS[key];
+    if (value >= good) return { text: `vs ${avg}% avg — top 25%`, tone: 'good' };
+    if (value >= avg) return { text: `vs ${avg}% avg — above average`, tone: 'good' };
+    return { text: BELOW_AVG_HINT[key], tone: 'bad' };
+}
+
 interface MetricCardProps {
     title: string;
     value: string | number;
@@ -14,6 +38,7 @@ interface MetricCardProps {
     glowColor?: string;
     iconBg?: string;
     delay?: number;
+    benchmark?: { text: string; tone: 'good' | 'bad' };
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -25,6 +50,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
     glowColor = 'rgba(16,185,129,0.15)',
     iconBg = 'bg-emerald-500/10 border-emerald-500/15',
     delay = 0,
+    benchmark,
 }) => {
     const [visible, setVisible] = useState(false);
 
@@ -79,6 +105,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
                     <p className="text-[10px] text-zinc-700 mt-1 leading-tight">{subtext}</p>
                 )}
 
+                {/* Benchmark overlay */}
+                {benchmark && (
+                    <p className={`text-[10px] mt-1 font-medium ${benchmark.tone === 'good' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {benchmark.text}
+                    </p>
+                )}
+
                 {/* Bottom accent */}
                 <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </div>
@@ -116,6 +149,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 title="Reply Rate"
                 value={`${stats.replyRate}%`}
                 subtext="any reply to DM sent"
+                benchmark={benchmarkFor('replyRate', stats.replyRate)}
                 icon={<TrendingUp className="w-4.5 h-4.5 text-emerald-400" />}
                 glowColor="rgba(16,185,129,0.15)"
                 iconBg="bg-emerald-500/10 border-emerald-500/15"
@@ -125,6 +159,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 title="Positive Reply Rate"
                 value={`${stats.positiveReplyRate}%`}
                 subtext="of replies showing interest"
+                benchmark={benchmarkFor('positiveReplyRate', stats.positiveReplyRate)}
                 icon={<ThumbsUp className="w-4.5 h-4.5 text-violet-400" />}
                 glowColor="rgba(139,92,246,0.2)"
                 iconBg="bg-violet-500/10 border-violet-500/15"
@@ -136,6 +171,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 title="Booking Rate"
                 value={`${stats.bookingRate}%`}
                 subtext="positive replies → booked call"
+                benchmark={benchmarkFor('bookingRate', stats.bookingRate)}
                 icon={<Calendar className="w-4.5 h-4.5 text-amber-400" />}
                 glowColor="rgba(245,158,11,0.15)"
                 iconBg="bg-amber-500/10 border-amber-500/15"

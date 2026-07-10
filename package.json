@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ext:icons": "node scripts/gen-ext-icons.mjs",
+    "ext:zip": "cd extension && zip -r ../magnetengine-extension.zip . -x 'generate-icons.html'"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -23,6 +25,7 @@
     "recharts": "^3.7.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.14.0",
     "@types/papaparse": "^5.5.2",

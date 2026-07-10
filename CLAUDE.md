@@ -47,7 +47,7 @@ src/
     PlanContext.tsx              # tier + status ('pending'|'active'|'cancelled') + refresh()
   lib/
     types.ts                     # All shared TypeScript interfaces
-    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, PAYMENT_LINKS
+    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, BILLING_LINKS
     apify.ts                     # Apify API client (scrape + poll)
     storage.ts                   # localStorage read/write with obfuscation
     api.ts                       # AI DM generation helpers
@@ -61,7 +61,7 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
 - `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
 - The owner activates an account after confirming payment (SQL upsert in README). No client-side write path to `subscriptions` exists on purpose.
-- Payment buttons on `/activate` use `PAYMENT_LINKS` from `src/lib/plans.ts`, fed by `VITE_PAYMENT_LINK_STARTER|PRO|AGENCY` env vars; fallback is the `UPGRADE_CONTACT` mailto.
+- Payment buttons on `/activate` use `BILLING_LINKS` from `src/lib/plans.ts` (single plan: $97/mo or $970/yr), fed by `VITE_PAYMENT_LINK_MONTHLY|ANNUAL` env vars; fallback is the `UPGRADE_CONTACT` mailto.
 - Without Supabase env vars (local dev): subscription is treated as `active` starter so the app runs standalone.
 
 ## Key Data Types (src/lib/types.ts)
@@ -113,7 +113,7 @@ VITE_APIFY_API_KEY=<your_key>          # Admin-managed, never shown to end users
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # Publishable/anon key from Supabase dashboard
 VITE_OPENAI_API_KEY / VITE_CLAUDE_API_KEY / VITE_GEMINI_API_KEY   # AI providers (owner-managed)
-VITE_PAYMENT_LINK_STARTER / _PRO / _AGENCY    # Stripe/etc. payment links for /activate
+VITE_PAYMENT_LINK_MONTHLY / _ANNUAL          # Polar checkout links for /activate ($97/mo · $970/yr)
 ```
 Template: `.env.example` (committed, no real values).
 ⚠️ All `VITE_*` values are embedded in the shipped JS bundle — see README → Security for the key-exposure caveat and the Edge Function migration plan.

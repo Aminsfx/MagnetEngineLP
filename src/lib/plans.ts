@@ -14,15 +14,15 @@ export interface Subscription {
 }
 
 /**
- * Payment links shown on the activation page.
- * Owner: create your Stripe/Lemon Squeezy/PayPal payment links and set them in .env:
- *   VITE_PAYMENT_LINK_STARTER, VITE_PAYMENT_LINK_PRO, VITE_PAYMENT_LINK_AGENCY
+ * Payment links shown on the activation page — one plan, two billing cycles.
+ * Owner: create the two Polar.sh checkout links and set them in .env:
+ *   VITE_PAYMENT_LINK_MONTHLY, VITE_PAYMENT_LINK_ANNUAL
  * Until a link is configured, the button falls back to the contact email below.
  */
-export const PAYMENT_LINKS: Record<PlanTier, string> = {
-    starter: (import.meta.env.VITE_PAYMENT_LINK_STARTER as string) ?? '',
-    pro: (import.meta.env.VITE_PAYMENT_LINK_PRO as string) ?? '',
-    agency: (import.meta.env.VITE_PAYMENT_LINK_AGENCY as string) ?? '',
+export type BillingCycle = 'monthly' | 'annual';
+export const BILLING_LINKS: Record<BillingCycle, string> = {
+    monthly: (import.meta.env.VITE_PAYMENT_LINK_MONTHLY as string) ?? '',
+    annual: (import.meta.env.VITE_PAYMENT_LINK_ANNUAL as string) ?? '',
 };
 
 export interface PlanLimits {
@@ -33,40 +33,31 @@ export interface PlanLimits {
     canAccessFollowUps: boolean;
     canUsePresets: boolean;
     isTestModeOnly: boolean;
-    maxDMGenerations: number; // per month, centrally billed
+    maxDMGenerations: number;   // per month, centrally billed
+    maxLeadsPerMonth: number;   // monthly lead-import quota
+    maxCampaignsPerMonth: number; // monthly campaign quota
 }
 
+// Single-plan model: every activated member gets full access. The PlanTier
+// keys are kept only for backward compatibility with existing subscription
+// rows — all three resolve to the same limits.
+const MEMBER_LIMITS: PlanLimits = {
+    maxLeadsPerCampaign: null,
+    allowedAIProviders: ['openai', 'gemini', 'claude'],
+    canAdjustDailyCap: true,
+    maxDailyCap: 200,
+    canAccessFollowUps: true,
+    canUsePresets: true,
+    isTestModeOnly: false,
+    maxDMGenerations: 500,
+    maxLeadsPerMonth: 500,
+    maxCampaignsPerMonth: 3,
+};
+
 const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
-    starter: {
-        maxLeadsPerCampaign: 100,
-        allowedAIProviders: ['openai'],
-        canAdjustDailyCap: false,
-        maxDailyCap: 40,
-        canAccessFollowUps: false,
-        canUsePresets: false,
-        isTestModeOnly: true,
-        maxDMGenerations: 100,
-    },
-    pro: {
-        maxLeadsPerCampaign: null,
-        allowedAIProviders: ['openai', 'gemini', 'claude'],
-        canAdjustDailyCap: true,
-        maxDailyCap: 200,
-        canAccessFollowUps: true,
-        canUsePresets: true,
-        isTestModeOnly: false,
-        maxDMGenerations: 1000,
-    },
-    agency: {
-        maxLeadsPerCampaign: null,
-        allowedAIProviders: ['openai', 'gemini', 'claude'],
-        canAdjustDailyCap: true,
-        maxDailyCap: 200,
-        canAccessFollowUps: true,
-        canUsePresets: true,
-        isTestModeOnly: false,
-        maxDMGenerations: 10000,
-    },
+    starter: MEMBER_LIMITS,
+    pro: MEMBER_LIMITS,
+    agency: MEMBER_LIMITS,
 };
 
 export function getPlanLimits(tier: PlanTier): PlanLimits {

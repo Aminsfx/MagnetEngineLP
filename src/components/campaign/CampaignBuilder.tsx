@@ -5,9 +5,10 @@ import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
     X, ArrowRight, Plus, Settings, Mail, UserCheck,
+    FileSpreadsheet,
 } from 'lucide-react';
-import { usePlan } from '../../contexts/PlanContext';
-import { UpgradePrompt } from '../common/UpgradePrompt';
+import { NICHE_PRESETS } from '../../lib/presets';
+import { CsvImport } from './CsvImport';
 
 interface CampaignBuilderProps {
     onLeadsScraped: (leads: Lead[]) => void;
@@ -51,10 +52,8 @@ function formatFollowers(n: number): string {
 }
 
 export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped }) => {
-    const { limits } = usePlan();
-
     // ── Tab ──────────────────────────────────────────────────────
-    const [tab, setTab] = useState<'search' | 'followers'>('search');
+    const [tab, setTab] = useState<'search' | 'followers' | 'import'>('search');
 
     // ── Keyword search inputs ────────────────────────────────────
     const [searchType, setSearchType]   = useState<SearchParams['searchType']>('user');
@@ -187,19 +186,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         );
 
     const handleAddToQueue = () => {
-        let toAdd = selected.size > 0
+        const toAdd = selected.size > 0
             ? results.filter(l => selected.has(l.id))
             : [...results]; // if nothing explicitly selected, add all
 
         if (toAdd.length === 0) {
             showToast('No leads to add. Run a search first.', false);
             return;
-        }
-
-        const planCap = limits.maxLeadsPerCampaign;
-        if (planCap !== null && toAdd.length > planCap) {
-            toAdd = toAdd.slice(0, planCap);
-            showToast(`Starter plan: capped at ${planCap} leads. Upgrade to Pro for unlimited.`, false);
         }
 
         onLeadsScraped(toAdd);
@@ -228,6 +221,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 >
                     <UserCheck className="w-3.5 h-3.5" />
                     Followers / Following
+                </button>
+                <button
+                    onClick={() => { setTab('import'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'import' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+                >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    Import CSV
                 </button>
             </div>
 
@@ -382,12 +382,38 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 </div>
             )}
 
+            {/* ── CSV Import ──────────────────────────────────────────── */}
+            {tab === 'import' && (
+                <CsvImport
+                    maxLeads={null}
+                    onLeadsReady={(leads) => { onLeadsScraped(leads); }}
+                />
+            )}
+
             {/* ── Search Card ─────────────────────────────────────────── */}
             {tab === 'search' && (
             <div className="bg-[#050A08] border border-white/5 rounded-2xl p-6 space-y-5">
                 <div className="flex items-center gap-2">
                     <Search className="w-4 h-4 text-emerald-400" />
                     <h3 className="text-sm font-semibold text-white">Search Instagram</h3>
+                </div>
+
+                {/* Quick-fill niche packs */}
+                <div>
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1.5 font-semibold">
+                        Quick fill from a niche pack:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {NICHE_PRESETS.map(preset => (
+                            <button
+                                key={preset.id}
+                                onClick={() => setSearchRaw(preset.suggestedSearch)}
+                                className="px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-[11px] text-zinc-400 hover:border-violet-500/30 hover:text-violet-300 transition-all"
+                            >
+                                {preset.emoji} {preset.name}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Search term */}
@@ -428,9 +454,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     <div>
                         <label className="block text-xs text-zinc-500 mb-1.5 font-medium">
                             Search limit per term
-                            <span className="ml-2 text-zinc-700 font-normal">
-                                {limits.maxLeadsPerCampaign !== null ? `max ${limits.maxLeadsPerCampaign} (plan limit)` : 'max 250'}
-                            </span>
+                            <span className="ml-2 text-zinc-700 font-normal">max 250</span>
                         </label>
                         <div className="relative">
                             <select
@@ -438,17 +462,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 onChange={e => setSearchLimit(Number(e.target.value))}
                                 className="w-full appearance-none bg-[#030604] border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 cursor-pointer"
                             >
-                                {LIMIT_OPTIONS
-                                    .filter(n => limits.maxLeadsPerCampaign === null || n <= limits.maxLeadsPerCampaign)
-                                    .map(n => (
-                                        <option key={n} value={n}>{n} results</option>
-                                    ))}
+                                {LIMIT_OPTIONS.map(n => (
+                                    <option key={n} value={n}>{n} results</option>
+                                ))}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
                         </div>
-                        {limits.maxLeadsPerCampaign !== null && (
-                            <UpgradePrompt message="Unlimited leads per campaign" variant="inline" />
-                        )}
                     </div>
                 </div>
 

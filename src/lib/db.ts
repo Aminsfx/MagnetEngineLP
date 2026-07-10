@@ -298,4 +298,32 @@ export const db = {
     localStorage.setItem(key, String(newCount));
     return newCount;
   },
+
+  // ─── Monthly quotas (leads + campaigns) — same pattern as DM usage ───────
+
+  getMonthlyLeadCount(userId: string): number {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    return parseInt(localStorage.getItem(`leads_added_${userId}_${monthKey}`) ?? '0', 10);
+  },
+
+  incrementMonthlyLeadCount(userId: string, n: number): number {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    const key = `leads_added_${userId}_${monthKey}`;
+    const next = this.getMonthlyLeadCount(userId) + n;
+    localStorage.setItem(key, String(next));
+    return next;
+  },
+
+  getMonthlyCampaignCount(userId: string): number {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    return parseInt(localStorage.getItem(`campaigns_${userId}_${monthKey}`) ?? '0', 10);
+  },
+
+  incrementMonthlyCampaignCount(userId: string): number {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    const key = `campaigns_${userId}_${monthKey}`;
+    const next = this.getMonthlyCampaignCount(userId) + 1;
+    localStorage.setItem(key, String(next));
+    return next;
+  },
 };

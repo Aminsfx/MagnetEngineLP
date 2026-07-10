@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Save, Play, Pause, CalendarClock, ChevronDown, Info, CheckCircle2, AlertCircle } from 'lucide-react';
-import { FollowUpStep, FollowUpSequence } from '../../lib/types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Trash2, Save, Play, Pause, CalendarClock, ChevronDown, Info, CheckCircle2, AlertCircle, Send } from 'lucide-react';
+import { FollowUpStep, FollowUpSequence, Lead } from '../../lib/types';
 import { db } from '../../lib/db';
 import { useAuth } from '../../contexts/AuthContext';
+import { computeDueFollowUps, type DueFollowUp } from '../../lib/followups';
 
 const DELAY_OPTIONS = [1, 2, 3, 4, 5, 7, 10, 14];
 const CONDITION_LABELS: Record<FollowUpStep['condition'], string> = {
@@ -31,7 +32,12 @@ function createDefaultStep(index: number): FollowUpStep {
 
 interface SaveState { type: 'idle' | 'saving' | 'saved' | 'error'; message?: string }
 
-export const FollowUpSequencer: React.FC = () => {
+interface FollowUpSequencerProps {
+  leads: Lead[];
+  onSendFollowUps: (due: DueFollowUp[]) => Promise<number>;
+}
+
+export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onSendFollowUps }) => {
   const { user } = useAuth();
   const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
   const [activeSeq, setActiveSeq] = useState<FollowUpSequence | null>(null);
@@ -39,6 +45,21 @@ export const FollowUpSequencer: React.FC = () => {
   const [previewHandle, setPreviewHandle] = useState('johndoe');
   const [previewName, setPreviewName] = useState('John');
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  // Compute due follow-ups from the CURRENT (possibly unsaved) sequence so
+  // what the user sees is exactly what sends.
+  const due = useMemo(() => computeDueFollowUps(leads, activeSeq), [leads, activeSeq]);
+
+  const handleSendDue = async () => {
+    if (due.length === 0 || sending) return;
+    setSending(true);
+    try {
+      await onSendFollowUps(due);
+    } finally {
+      setSending(false);
+    }
+  };
 
   // Load existing sequences
   useEffect(() => {
@@ -127,7 +148,53 @@ export const FollowUpSequencer: React.FC = () => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="space-y-6">
+      {/* ── Due follow-ups panel ─────────────────────────────────────── */}
+      <div
+        className="rounded-[1.5rem] p-[1px]"
+        style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+      >
+        <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6" style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                <CalendarClock className="w-4 h-4 text-violet-400" />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">Due follow-ups</p>
+                <p className="text-sm text-white font-semibold leading-none mt-1">
+                  {activeSeq?.active
+                    ? `${due.length} lead${due.length !== 1 ? 's' : ''} ${due.length === 1 ? 'is' : 'are'} due a follow-up step`
+                    : 'Sequence is paused — resume it to send.'}
+                </p>
+              </div>
+            </div>
+            <button
+              id="send-due-followups-btn"
+              onClick={handleSendDue}
+              disabled={due.length === 0 || sending || !activeSeq?.active}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sending
+                ? <div className="w-3.5 h-3.5 border-2 border-emerald-900/40 border-t-emerald-900 rounded-full animate-spin" />
+                : <Send className="w-3.5 h-3.5" />}
+              Send due follow-ups ({due.length})
+            </button>
+          </div>
+
+          {activeSeq?.active && due.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              {due.slice(0, 3).map(d => (
+                <p key={d.lead.id} className="text-[11px] text-zinc-500 font-mono truncate">
+                  @{d.lead.handle} → Day {activeSeq.steps[d.stepIndex]?.delayDays}: {d.message.slice(0, 60)}{d.message.length > 60 ? '…' : ''}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left column: Sequence editor */}
       <div className="lg:col-span-2 space-y-4">
         {/* Header */}
@@ -388,6 +455,7 @@ export const FollowUpSequencer: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

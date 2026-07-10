@@ -2,51 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     CreditCard, LogOut, RefreshCw, CheckCircle2, Clock,
-    Sparkles, ArrowRight, Mail,
+    Sparkles, ArrowRight, Mail, Check, Gift,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { PAYMENT_LINKS, UPGRADE_CONTACT } from '../lib/plans';
-import type { PlanTier } from '../lib/plans';
+import { BILLING_LINKS, UPGRADE_CONTACT } from '../lib/plans';
+import type { BillingCycle } from '../lib/plans';
 
-const PLAN_OPTIONS: {
-    tier: PlanTier;
-    name: string;
-    price: string;
-    subtext: string;
-    highlight: boolean;
-    features: string[];
-}[] = [
-    {
-        tier: 'starter',
-        name: 'Starter',
-        price: '$197 setup',
-        subtext: '+ $47/month',
-        highlight: false,
-        features: ['AI DM generation', 'Chrome extension auto-send', '100 leads per campaign', 'Test mode'],
-    },
-    {
-        tier: 'pro',
-        name: 'Pro',
-        price: '$397 setup',
-        subtext: '+ $97/month',
-        highlight: true,
-        features: ['Everything in Starter', 'Production mode', 'Unlimited leads', 'Follow-up sequencer', 'All AI providers'],
-    },
-    {
-        tier: 'agency',
-        name: 'Agency',
-        price: '$1,497/mo',
-        subtext: 'Done-for-you',
-        highlight: false,
-        features: ['Everything in Pro', 'We run your campaigns', 'Reply inbox handled', 'Weekly reports'],
-    },
+const FEATURES = [
+    '500 leads/month',
+    '3 campaigns/month',
+    'All AI providers (Claude, OpenAI, Gemini)',
+    'Production Mode sending',
+    'Full approval queue + CRM',
+    'CSV/JSON export',
+    '3 pre-built niche scripts',
+    'Direct Slack access to founder',
 ];
 
 /**
  * Shown to signed-in users whose subscription is not yet activated.
- * Flow: user pays via the payment link → owner confirms payment and activates
- * the account in Supabase → user clicks "Check activation status" (or just
+ * Flow: user pays via the Polar checkout link → the webhook (or the owner)
+ * activates the account → user clicks "Check activation status" (or just
  * reloads) and lands in the dashboard.
  */
 const PendingActivationPage: React.FC = () => {
@@ -56,6 +33,7 @@ const PendingActivationPage: React.FC = () => {
 
     const [checking, setChecking] = useState(false);
     const [stillPending, setStillPending] = useState(false);
+    const [billing, setBilling] = useState<BillingCycle>('monthly');
 
     // If the subscription is (or becomes) active, this page shouldn't be shown
     useEffect(() => {
@@ -81,14 +59,20 @@ const PendingActivationPage: React.FC = () => {
         navigate('/login');
     };
 
-    const paymentHref = (tier: PlanTier) => PAYMENT_LINKS[tier] || UPGRADE_CONTACT;
+    const paymentLink = BILLING_LINKS[billing];
+    const paymentHref = (() => {
+        if (!paymentLink) return UPGRADE_CONTACT;
+        if (!user?.email) return paymentLink;
+        const sep = paymentLink.includes('?') ? '&' : '?';
+        return `${paymentLink}${sep}customer_email=${encodeURIComponent(user.email)}`;
+    })();
 
     return (
         <div className="relative min-h-screen bg-black overflow-hidden">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
             <div className="fixed inset-0 bg-gradient-to-b from-black via-emerald-900/10 to-black pointer-events-none z-0" />
 
-            <div className="relative z-10 max-w-4xl mx-auto px-4 py-16">
+            <div className="relative z-10 max-w-2xl mx-auto px-4 py-16">
                 {/* Header */}
                 <div className="text-center mb-10">
                     <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-6">
@@ -98,7 +82,7 @@ const PendingActivationPage: React.FC = () => {
                     <p className="text-zinc-400 text-sm leading-relaxed max-w-xl mx-auto">
                         Welcome{user?.email ? <>, <span className="text-white font-medium">{user.email}</span></> : ''}!
                         Your account was created successfully. To unlock the dashboard, complete your payment —
-                        we'll activate your access as soon as it's confirmed (usually within a few hours).
+                        your access activates as soon as it's confirmed.
                     </p>
                 </div>
 
@@ -113,60 +97,98 @@ const PendingActivationPage: React.FC = () => {
                     </span>
                     <ArrowRight className="w-3 h-3 text-zinc-700" />
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/4 text-zinc-500">
-                        <Sparkles className="w-3.5 h-3.5" /> 3. We activate your access
+                        <Sparkles className="w-3.5 h-3.5" /> 3. Access unlocks
                     </span>
                 </div>
 
-                {/* Plan cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-                    {PLAN_OPTIONS.map(plan => (
-                        <div
-                            key={plan.tier}
-                            className={`rounded-2xl p-6 flex flex-col bg-[#050A08] border transition-all ${
-                                plan.highlight
-                                    ? 'border-emerald-500/30 shadow-[0_0_40px_-12px_rgba(16,185,129,0.3)]'
-                                    : 'border-white/8 hover:border-white/15'
+                {/* Single plan card */}
+                <div className="rounded-2xl p-8 flex flex-col bg-[#050A08] border border-emerald-500/30 shadow-[0_0_40px_-12px_rgba(16,185,129,0.3)] mb-10">
+                    <span className="self-start px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold mb-4">
+                        Founding Member
+                    </span>
+
+                    <h3 className="text-lg font-semibold text-white mb-4">
+                        One plan. Full access. Zero setup fee.
+                    </h3>
+
+                    {/* Billing toggle */}
+                    <div className="flex gap-1 bg-white/3 border border-white/5 rounded-xl p-1 w-fit mb-5">
+                        <button
+                            onClick={() => setBilling('monthly')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                                billing === 'monthly'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    : 'text-zinc-600 hover:text-zinc-400'
                             }`}
                         >
-                            {plan.highlight && (
-                                <span className="self-start px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold mb-3">
-                                    Most popular
-                                </span>
-                            )}
-                            <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
-                            <div className="mt-2 mb-1">
-                                <span className="text-2xl font-bold text-white">{plan.price}</span>
-                            </div>
-                            <p className="text-xs text-zinc-500 mb-4">{plan.subtext}</p>
-                            <ul className="space-y-2 mb-6 flex-1">
-                                {plan.features.map(f => (
-                                    <li key={f} className="flex items-start gap-2 text-xs text-zinc-400">
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                                        {f}
-                                    </li>
-                                ))}
-                            </ul>
-                            <a
-                                href={paymentHref(plan.tier)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all ${
-                                    plan.highlight
-                                        ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950'
-                                        : 'border border-white/10 hover:border-white/20 text-white bg-white/5 hover:bg-white/10'
-                                }`}
-                            >
-                                {PAYMENT_LINKS[plan.tier] ? <CreditCard className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
-                                {PAYMENT_LINKS[plan.tier] ? `Pay for ${plan.name}` : 'Contact us to pay'}
-                            </a>
-                        </div>
-                    ))}
+                            Monthly
+                        </button>
+                        <button
+                            onClick={() => setBilling('annual')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                                billing === 'annual'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    : 'text-zinc-600 hover:text-zinc-400'
+                            }`}
+                        >
+                            Annual
+                        </button>
+                    </div>
+
+                    {/* Price */}
+                    <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                        <span className="text-3xl font-bold text-white">
+                            {billing === 'monthly' ? '$97' : '$970'}
+                        </span>
+                        <span className="text-base font-semibold text-white">
+                            {billing === 'monthly' ? '/month' : '/year'}
+                        </span>
+                        {billing === 'annual' && (
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold">
+                                2 months free
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-xs text-zinc-500 mb-5">Cancel anytime. 30-day money-back guarantee.</p>
+
+                    {/* Features */}
+                    <p className="text-xs font-semibold text-white mb-3">What's included:</p>
+                    <ul className="space-y-2 mb-5">
+                        {FEATURES.map(f => (
+                            <li key={f} className="flex items-start gap-2 text-xs text-zinc-400">
+                                <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                                {f}
+                            </li>
+                        ))}
+                    </ul>
+
+                    {/* Founding Member Bonus */}
+                    <div className="flex items-start gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-4 mb-6">
+                        <Gift className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-zinc-300">
+                            <strong className="text-white">Founding Member Bonus:</strong>{' '}
+                            I'll personally optimize your first campaign with you on a 30-minute call.
+                        </p>
+                    </div>
+
+                    {/* Pay button */}
+                    <a
+                        href={paymentHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-emerald-950"
+                    >
+                        {paymentLink ? <CreditCard className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                        {paymentLink
+                            ? (billing === 'monthly' ? 'Pay $97/month' : 'Pay $970/year')
+                            : 'Contact us to pay'}
+                    </a>
                 </div>
 
                 {/* Already paid */}
                 <div className="rounded-2xl bg-[#050A08] border border-white/8 p-6 text-center">
                     <p className="text-sm text-zinc-400 mb-4">
-                        Already paid? Once we confirm your payment your account unlocks automatically.
+                        Already paid? Your account unlocks automatically within a minute of payment — click below to refresh.
                     </p>
                     <div className="flex items-center justify-center gap-3 flex-wrap">
                         <button
@@ -187,7 +209,7 @@ const PendingActivationPage: React.FC = () => {
                     </div>
                     {stillPending && (
                         <p className="text-xs text-amber-400/90 mt-4">
-                            Not activated yet — if you've already paid, hang tight. We activate accounts as soon as payment is confirmed.
+                            Not activated yet — if you've already paid, hang tight. Access unlocks as soon as payment is confirmed.
                         </p>
                     )}
                 </div>

@@ -4,10 +4,11 @@ import {
     Sparkles, Send, Trash2, Check, X, Edit3,
     Download, ChevronDown, Users, MessageSquare,
     CheckCircle, XCircle, Clock, Search, Filter, MessageCircle,
+    MessagesSquare, CalendarCheck,
 } from 'lucide-react';
-import { UpgradePrompt } from '../common/UpgradePrompt';
 import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
+import { ReplyBattlecards } from './ReplyBattlecards';
 
 interface ApprovalQueueProps {
     leads: Lead[];
@@ -22,7 +23,6 @@ interface ApprovalQueueProps {
     onRejectLead?: (id: string) => void;
     onUpdateDM?: (id: string, content: string) => void;
     onUpdateLead?: (lead: Lead) => void;
-    forcedTestMode?: boolean;
 }
 
 type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
@@ -80,11 +80,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     onRejectLead,
     onUpdateDM,
     onUpdateLead,
-    forcedTestMode = false,
 }) => {
     const toast = useToast();
     const [campaignMode, setCampaignMode] = useState<CampaignMode>('test');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+    const [battlecardsFor, setBattlecardsFor] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editDraft, setEditDraft] = useState('');
     const [showExport, setShowExport] = useState(false);
@@ -229,31 +229,21 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 </button>
 
                 {/* Mode Toggle */}
-                {forcedTestMode ? (
-                    <div className="ml-auto flex items-center gap-2">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
-                            <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Mode:</span>
-                            <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">⚡ Test</span>
-                        </div>
-                        <UpgradePrompt message="Production mode (15–45 min delays)" variant="tooltip" />
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
-                        <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Mode:</span>
-                        <button
-                            onClick={() => setCampaignMode('test')}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'test' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
-                        >
-                            ⚡ Test
-                        </button>
-                        <button
-                            onClick={() => setCampaignMode('production')}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'production' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
-                        >
-                            🛡️ Production
-                        </button>
-                    </div>
-                )}
+                <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
+                    <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Mode:</span>
+                    <button
+                        onClick={() => setCampaignMode('test')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'test' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    >
+                        ⚡ Test
+                    </button>
+                    <button
+                        onClick={() => setCampaignMode('production')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'production' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    >
+                        🛡️ Production
+                    </button>
+                </div>
             </div>
 
             {/* ── Status filter tabs ───────────────────────────────────────── */}
@@ -358,7 +348,8 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                     : '';
 
                                 return (
-                                    <tr key={lead.id} className={`transition-colors hover:bg-white/[0.02] ${rowClass}`}>
+                                    <React.Fragment key={lead.id}>
+                                    <tr className={`transition-colors hover:bg-white/[0.02] ${rowClass}`}>
                                         {/* Prospect */}
                                         <td className="px-5 py-4">
                                             <div className="flex items-center gap-3">
@@ -447,6 +438,9 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                     <Clock className="w-3 h-3" /> Pending
                                                 </span>
                                             )}
+                                            {lead.booked && (
+                                                <span className="block mt-1.5 text-[10px] font-medium text-emerald-400">Booked ✓</span>
+                                            )}
                                         </td>
 
                                         {/* Actions */}
@@ -488,7 +482,10 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                 {/* Mark replied */}
                                                 {lead.dmSent && !lead.replied && (
                                                     <button
-                                                        onClick={() => onUpdateLead?.({ ...lead, replied: true })}
+                                                        onClick={() => {
+                                                            onUpdateLead?.({ ...lead, replied: true });
+                                                            setBattlecardsFor(lead.id);
+                                                        }}
                                                         title="Mark as Replied"
                                                         className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
                                                     >
@@ -503,6 +500,26 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                         className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
                                                     >
                                                         <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
+                                                    </button>
+                                                )}
+                                                {/* Mark booked */}
+                                                {lead.positiveReply && !lead.booked && (
+                                                    <button
+                                                        onClick={() => onUpdateLead?.({ ...lead, booked: true })}
+                                                        title="Mark as Booked"
+                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+                                                    >
+                                                        <CalendarCheck className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                                {/* Reply battlecards */}
+                                                {lead.replied && (
+                                                    <button
+                                                        onClick={() => setBattlecardsFor(prev => prev === lead.id ? null : lead.id)}
+                                                        title="Reply battlecards"
+                                                        className={`p-1.5 rounded-lg transition-all ${battlecardsFor === lead.id ? 'text-cyan-400 bg-cyan-500/10' : 'text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10'}`}
+                                                    >
+                                                        <MessagesSquare className="w-3.5 h-3.5" />
                                                     </button>
                                                 )}
 
@@ -531,6 +548,18 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                             </div>
                                         </td>
                                     </tr>
+                                    {battlecardsFor === lead.id && lead.replied && (
+                                        <tr>
+                                            <td colSpan={5} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
+                                                <ReplyBattlecards
+                                                    lead={lead}
+                                                    calendarLink={config.calendarLink}
+                                                    onUpdateLead={onUpdateLead}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </React.Fragment>
                                 );
                             })}
 

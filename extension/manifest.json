@@ -1,17 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Magnet Engine Drip Execution",
-  "version": "1.0.0",
-  "description": "Executes Magnet Engine campaigns safely.",
+  "name": "MagnetEngine \u2014 DM Campaign Sender",
+  "version": "1.1.0",
+  "description": "Sends the Instagram DMs you approved in your MagnetEngine dashboard \u2014 one at a time, with human-like pacing and a daily safety cap.",
   "permissions": [
     "storage",
     "alarms",
-    "activeTab",
-    "scripting",
     "tabs"
   ],
   "host_permissions": [
-    "https://*.instagram.com/*"
+    "https://*.instagram.com/*",
+    "https://magnetengine.io/*",
+    "https://*.magnetengine.io/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -20,12 +20,26 @@
     {
       "matches": [
         "http://localhost:*/*",
+        "https://magnetengine.io/*",
+        "https://*.magnetengine.io/*",
         "https://*.instagram.com/*"
       ],
       "js": ["content.js"]
     }
   ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }

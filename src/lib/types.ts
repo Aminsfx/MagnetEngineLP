@@ -58,6 +58,11 @@ export interface AppConfig {
     valueProposition?: string;
     exampleDM?: string;
     dmTone?: 'casual' | 'professional' | 'friendly' | 'bold';
+    // Booking/Calendly link inserted into reply battlecards
+    calendarLink?: string;
+    // Outbound webhook integration (Zapier/Make catch hooks)
+    webhookUrl?: string;
+    webhookEvents?: { replied: boolean; positiveReply: boolean; booked: boolean };
     onboardingComplete?: boolean;
     // Safety governor
     dailySendCap: number;        // max DMs per day (default 40)

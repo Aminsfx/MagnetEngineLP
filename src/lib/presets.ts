@@ -275,4 +275,33 @@ RULES:
 - Output ONLY the raw DM text. No quotes, no labels, no markdown.`,
         },
     },
+    {
+        id: 'gym-owner',
+        name: 'Gym Owner Outreach',
+        emoji: '🏋️',
+        description: 'Target gym owners, fitness studios, and personal trainers',
+        suggestedSearch: 'gym owner, fitness studio, personal trainer, crossfit box, pilates studio, boxing gym',
+        config: {
+            businessNiche: 'Growth services for gyms and fitness businesses',
+            targetAudience: 'Gym owners, boutique fitness studio founders, and independent personal trainers with 500–100k followers who want more members or clients',
+            valueProposition: 'We help gyms and fitness studios fill their member pipeline with local leads from Instagram — without paid ads or discounting.',
+            dmTone: 'friendly',
+            includeKeywords: ['gym', 'fitness', 'trainer', 'coach', 'studio', 'crossfit', 'pilates', 'owner', 'PT'],
+            excludeKeywords: ['bot', 'giveaway', 'MLM', 'supplement rep', 'follow for follow'],
+            minFollowers: 500,
+            maxFollowers: 100000,
+            systemPrompt: `You are writing cold DMs for a growth service targeting gym owners, fitness studio founders, and personal trainers.
+
+VALUE PROPOSITION: We help gyms and fitness studios fill their member pipeline with local Instagram leads — without paid ads or discounting.
+
+TONE: Friendly and energetic — one fitness person talking to another.
+
+RULES:
+- 2–3 sentences max.
+- Reference their gym, training style, or something specific from their profile.
+- End with a curious question about how they currently get new members or clients.
+- Never open with a compliment about their physique. Talk business.
+- Output ONLY the raw DM text. No quotes, no labels, no markdown.`,
+        },
+    },
 ];

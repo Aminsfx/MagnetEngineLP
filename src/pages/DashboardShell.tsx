@@ -11,14 +11,16 @@ import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
 import { RevenueCalculator } from '../components/calculator/RevenueCalculator';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
 import ProfilePage from './ProfilePage';
+import { HealthScore } from '../components/dashboard/HealthScore';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
 import { filterUtils } from '../lib/filters';
 import { aiAPI } from '../lib/api';
+import { stampFollowUp, type DueFollowUp } from '../lib/followups';
+import { fireWebhook, detectTransitions } from '../lib/webhooks';
 import { Lead, AppConfig, DashboardStats } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { UpgradePrompt } from '../components/common/UpgradePrompt';
 import { useToast } from '../components/common/Toast';
 import { Loader2, Sparkles, Menu } from 'lucide-react';
 
@@ -130,12 +132,37 @@ const DashboardShell: React.FC = () => {
   }, [user]);
 
   const handleAddLeads = useCallback(async (newLeads: Lead[]) => {
+    let toAdd = newLeads;
+
+    // Monthly quotas (skipped in dev mode without a user)
+    if (user) {
+      if (db.getMonthlyCampaignCount(user.id) >= limits.maxCampaignsPerMonth) {
+        toast.error(`You've used all ${limits.maxCampaignsPerMonth} campaigns this month. Resets on the 1st.`);
+        return;
+      }
+      const remaining = limits.maxLeadsPerMonth - db.getMonthlyLeadCount(user.id);
+      if (remaining <= 0) {
+        toast.error(`You've reached your ${limits.maxLeadsPerMonth} leads/month limit. Resets on the 1st.`);
+        return;
+      }
+      if (toAdd.length > remaining) {
+        toAdd = toAdd.slice(0, remaining);
+        toast.info(`Monthly lead limit: added ${toAdd.length} of ${newLeads.length} (${limits.maxLeadsPerMonth}/month on your plan).`);
+      }
+    }
+
+    const added = toAdd;
     setLeads((prev) => {
-      const merged = [...prev, ...newLeads];
-      if (user) db.upsertLeads(newLeads, user.id).catch(console.error);
+      const merged = [...prev, ...added];
+      if (user) db.upsertLeads(added, user.id).catch(console.error);
       return merged;
     });
-  }, [user]);
+
+    if (user) {
+      db.incrementMonthlyLeadCount(user.id, added.length);
+      db.incrementMonthlyCampaignCount(user.id);
+    }
+  }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast]);
 
   const handleDeleteLead = useCallback(async (id: string) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
@@ -143,18 +170,20 @@ const DashboardShell: React.FC = () => {
   }, [user]);
 
   const handleUpdateLead = useCallback(async (updated: Lead) => {
-    setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    let oldLead: Lead | undefined;
+    setLeads((prev) => prev.map((l) => {
+      if (l.id === updated.id) { oldLead = l; return updated; }
+      return l;
+    }));
+    if (oldLead) {
+      for (const event of detectTransitions(oldLead, updated)) {
+        fireWebhook(config, event, updated);
+      }
+    }
     if (user) await db.upsertLead(updated, user.id);
-  }, [user]);
+  }, [user, config]);
 
   const handleLeadsSent = useCallback(async (ids: string[]) => {
-    // Plan-level guard: Starter capped at maxLeadsPerCampaign per send batch
-    const planCap = limits.maxLeadsPerCampaign;
-    const planIds = planCap !== null ? ids.slice(0, planCap) : ids;
-    if (planCap !== null && ids.length > planCap) {
-      toast.info(`Your plan allows up to ${planCap} leads per send. Upgrade to Pro for unlimited.`);
-    }
-
     const cap = config.dailySendCap ?? 40;
     const current = storage.getDailySends().count;
     const remaining = cap - current;
@@ -164,8 +193,8 @@ const DashboardShell: React.FC = () => {
       return;
     }
 
-    const allowed = planIds.slice(0, remaining);
-    if (allowed.length < planIds.length) {
+    const allowed = ids.slice(0, remaining);
+    if (allowed.length < ids.length) {
       toast.info(`Daily cap almost reached — sending ${allowed.length} of ${ids.length} DMs. Resets at midnight.`);
     }
 
@@ -188,7 +217,44 @@ const DashboardShell: React.FC = () => {
     if (user && updatedLeads.length > 0) {
       await db.upsertLeads(updatedLeads, user.id);
     }
-  }, [user, config.dailySendCap, limits.maxLeadsPerCampaign, toast]);
+  }, [user, config.dailySendCap, toast]);
+
+  /** Dispatch due follow-ups to the extension via the same channel as initial DMs */
+  const handleFollowUpsSent = useCallback(async (due: DueFollowUp[]): Promise<number> => {
+    const cap = config.dailySendCap ?? 40;
+    const current = storage.getDailySends().count;
+    const remaining = cap - current;
+
+    if (remaining <= 0) {
+      toast.error(`Daily send limit reached (${cap} DMs/day). Resets at midnight.`);
+      return 0;
+    }
+
+    const allowed = due.slice(0, remaining);
+    if (allowed.length < due.length) {
+      toast.info(`Daily cap almost reached — sending ${allowed.length} of ${due.length} follow-ups.`);
+    }
+    if (allowed.length === 0) return 0;
+
+    window.postMessage({
+      type: 'MAGNET_ENGINE_CAMPAIGN',
+      payload: {
+        leads: allowed.map((d) => ({ handle: d.lead.handle, message: d.message })),
+        mode: limits.isTestModeOnly ? 'test' : 'production',
+      },
+    }, '*');
+
+    const sentAt = new Date().toISOString();
+    const batch = allowed.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
+    const batchById = new Map(batch.map((l) => [l.id, l]));
+    setLeads((prev) => prev.map((l) => batchById.get(l.id) ?? l));
+    if (user) await db.upsertLeads(batch, user.id);
+
+    const newCount = storage.incrementDailySends(allowed.length);
+    setDailySendCount(newCount);
+    toast.success(`${allowed.length} follow-up${allowed.length !== 1 ? 's' : ''} sent to extension.`);
+    return allowed.length;
+  }, [user, config.dailySendCap, limits.isTestModeOnly, toast]);
 
   /** Bulk-approve: one state update + one batched DB write */
   const handleApproveLeads = useCallback(async (ids: string[]) => {
@@ -406,6 +472,7 @@ const DashboardShell: React.FC = () => {
                     </div>
                   </div>
                   <OnboardingChecklist leads={leads} config={config} />
+                  <HealthScore leads={leads} />
                   <MetricsGrid stats={stats} />
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <div className="lg:col-span-2">
@@ -454,7 +521,6 @@ const DashboardShell: React.FC = () => {
                     onRejectLead={handleRejectLead}
                     onUpdateDM={handleUpdateDM}
                     onUpdateLead={handleUpdateLead}
-                    forcedTestMode={limits.isTestModeOnly}
                   />
                 </div>
               }
@@ -472,13 +538,7 @@ const DashboardShell: React.FC = () => {
                       Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
                     </p>
                   </div>
-                  {limits.canAccessFollowUps ? (
-                    <FollowUpSequencer />
-                  ) : (
-                    <div className="p-8 rounded-2xl bg-[#050A08] border border-white/5 flex flex-col items-center text-center gap-4">
-                      <UpgradePrompt message="Follow-up sequencer — automated multi-touch sequences" variant="inline" />
-                    </div>
-                  )}
+                  <FollowUpSequencer leads={leads} onSendFollowUps={handleFollowUpsSent} />
                 </div>
               }
             />
