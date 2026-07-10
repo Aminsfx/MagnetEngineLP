@@ -6,7 +6,7 @@ import type { BillingCycle } from '../lib/plans';
 const FEATURES = [
     '500 leads/month',
     '3 campaigns/month',
-    'All AI providers (Claude, OpenAI, Gemini)',
+    'AI-written personalized DMs — no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',
     'CSV/JSON export',
@@ -83,7 +83,7 @@ const Pricing: React.FC = () => {
                                 )}
                             </div>
                             <p className="text-sm mt-2 text-zinc-300">
-                                Cancel anytime. 30-day money-back guarantee.
+                                Cancel anytime. 7-day money-back guarantee.
                             </p>
                         </div>
 
@@ -125,7 +125,7 @@ const Pricing: React.FC = () => {
                     <div className="inline-flex items-center gap-3 px-6 py-3 bg-[#050A08] border border-white/5 rounded-2xl">
                         <Shield size={20} className="text-emerald-400" />
                         <span className="text-zinc-300 text-sm">
-                            <strong className="text-white">30-Day Money-Back Guarantee</strong> — Not happy? Full refund. No questions asked.
+                            <strong className="text-white">7-Day Money-Back Guarantee</strong> — give it a real shot and if it's not for you, full refund. See Terms for details.
                         </span>
                     </div>
 

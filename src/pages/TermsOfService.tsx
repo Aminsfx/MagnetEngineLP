@@ -32,12 +32,12 @@ const TermsOfService: React.FC = () => {
                     </div>
                     <h1 className="text-4xl font-bold text-white mb-3">Terms of Service</h1>
                     <p className="text-zinc-500 text-sm">
-                        Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: February 27, 2026
+                        Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: July 10, 2026
                     </p>
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-10 text-sm text-blue-300">
-                    <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding API Keys and Section 8 regarding Limitation of Liability.
+                    <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding AI Services, Section 7 regarding Refunds, and Section 9 regarding Limitation of Liability.
                 </div>
 
                 <Section title="1. Acceptance of Terms">
@@ -60,7 +60,7 @@ const TermsOfService: React.FC = () => {
 
                 <Section title="4. Description of Service">
                     <p>
-                        MagnetEngine is a lead automation platform that allows users to import lead data, apply AI-powered filters, and generate personalized outreach messages. The Service may integrate with third-party AI providers (such as OpenAI, Anthropic, or others) at the user's direction.
+                        MagnetEngine is a lead automation platform that allows users to find leads, apply AI-powered filters, and generate personalized outreach messages. All AI processing and data services used by the platform are provided, managed, and paid for by MagnetEngine — you do not need to supply, configure, or pay for any third-party API keys or accounts to use the Service.
                     </p>
                 </Section>
 
@@ -70,48 +70,53 @@ const TermsOfService: React.FC = () => {
                         <li>Use the Service for unlawful purposes or to violate any applicable laws or regulations.</li>
                         <li>Send unsolicited, harassing, or abusive communications through the platform.</li>
                         <li>Attempt to gain unauthorized access to any system or data.</li>
+                        <li>Attempt to extract, copy, or misuse any credentials, API keys, or service integrations embedded in or used by the platform.</li>
+                        <li>Circumvent, disable, or interfere with usage limits, quotas, or safety features of the Service.</li>
                         <li>Reverse engineer, decompile, or disassemble any part of the Service.</li>
                         <li>Use the Service in any way that disrupts, damages, or impairs its functionality.</li>
                     </ul>
                 </Section>
 
-                <Section title="6. Third-Party API Keys — User Responsibility">
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-300 mb-4">
-                        <strong>⚠️ Critical Notice:</strong> This section critically affects your rights. Please read carefully.
-                    </div>
+                <Section title="6. AI Services — Provided by Us">
                     <p>
-                        MagnetEngine allows you to connect third-party AI service API keys (e.g., from OpenAI, Anthropic, Google, or other providers) to enhance the functionality of the Service ("User API Keys").
+                        MagnetEngine provides all AI generation and data services as part of your subscription ("Included Services"). You do not enter, store, or manage any third-party API keys in the Service.
                     </p>
                     <p>
-                        <strong className="text-white">You are solely and exclusively responsible for:</strong>
+                        <strong className="text-white">The following applies to the Included Services:</strong>
                     </p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>The safeguarding, confidentiality, and security of any API keys you enter into the Service.</li>
-                        <li>Any costs, charges, overages, or fees billed by third-party API providers as a result of your API key usage through the Service.</li>
-                        <li>Any unauthorized use, exposure, theft, or misuse of API keys you provide to the Service.</li>
-                        <li>Rotating or revoking compromised API keys immediately upon suspicion of unauthorized access.</li>
-                        <li>Compliance with all terms and conditions of the respective third-party API providers.</li>
+                        <li><strong className="text-white">We pay the AI bills.</strong> All AI usage within your plan's limits is included in your subscription price at no extra cost to you.</li>
+                        <li><strong className="text-white">Usage limits apply.</strong> Your plan includes defined monthly quotas (e.g., leads, campaigns, and AI message generations). Usage beyond these quotas may be throttled or paused until the next billing cycle.</li>
+                        <li><strong className="text-white">Fair use.</strong> The Included Services are for your own business outreach. Reselling, sharing accounts, or automated bulk extraction of AI output beyond normal product use is prohibited.</li>
+                        <li><strong className="text-white">Providers may change.</strong> We may add, remove, or substitute underlying AI or data providers at any time to maintain quality and availability, without notice, provided the core functionality of the Service is preserved.</li>
+                        <li><strong className="text-white">No warranty on AI output.</strong> AI-generated messages are suggestions. You review and approve every message before it is sent, and you are solely responsible for the content of messages you approve and send.</li>
                     </ul>
+                </Section>
+
+                <Section title="7. Refunds — 7-Day Money-Back Guarantee">
                     <p>
-                        <strong className="text-white">MagnetEngine does not:</strong>
+                        We offer a 7-day money-back guarantee on your first payment. To qualify for a refund, all of the following conditions must be met:
                     </p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>Transmit your API keys to any party other than the designated third-party provider for the purpose of completing your requested actions.</li>
-                        <li>Permanently store your User API Keys on our servers beyond what is required for your active session or as locally stored in your browser.</li>
-                        <li>Guarantee that any locally-stored API key data is immune from exposure due to device compromise, browser vulnerabilities, or other factors outside our control.</li>
+                        <li><strong className="text-white">Timing:</strong> Your refund request must be received within seven (7) calendar days of your first payment. Requests received after day 7 are not eligible.</li>
+                        <li><strong className="text-white">Genuine use:</strong> You must have completed the AI setup wizard and launched at least one campaign. The guarantee exists for people who tried the product, not for accounts that never used it.</li>
+                        <li><strong className="text-white">Real outreach attempted:</strong> You must have approved and sent at least twenty (20) DMs through the platform during the 7-day period.</li>
+                        <li><strong className="text-white">First-time customers only:</strong> The guarantee applies once per customer, on your first subscription payment only. Renewals, reactivations, and repeat purchases are not eligible.</li>
+                        <li><strong className="text-white">No abuse:</strong> Accounts that exhaust their monthly quotas (e.g., bulk-scraping leads or bulk-generating messages for export) and then request a refund are not eligible, at our reasonable discretion.</li>
+                        <li><strong className="text-white">How to request:</strong> Email <a href="mailto:support@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">support@magnetengine.xyz</a> from your account email with the subject "Refund request".</li>
                     </ul>
                     <p>
-                        <strong className="text-white">WE EXPRESSLY DISCLAIM ALL LIABILITY</strong> for any losses, damages, claims, costs, or consequences — direct, indirect, incidental, consequential, or punitive — arising from or related to the exposure, theft, unauthorized access, or misuse of any User API Keys entered into the Service, regardless of the cause. This includes but is not limited to: data breaches, security vulnerabilities, third-party service errors, device compromise, network interception, or your own negligence in managing API key credentials.
+                        Approved refunds are issued to the original payment method within 5–10 business days, and your access ends when the refund is issued. Except as stated in this section, all payments are final and non-refundable, including partial billing periods after cancellation.
                     </p>
                 </Section>
 
-                <Section title="7. Intellectual Property">
+                <Section title="8. Intellectual Property">
                     <p>
                         All content, features, and functionality of the Service — including but not limited to text, graphics, logos, icons, and software — are the exclusive property of MagnetEngine and are protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works without our express written consent.
                     </p>
                 </Section>
 
-                <Section title="8. Limitation of Liability">
+                <Section title="9. Limitation of Liability">
                     <p>
                         TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, MAGNETENGINE AND ITS OFFICERS, EMPLOYEES, AGENTS, PARTNERS, AND LICENSORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO: LOSS OF PROFITS, LOSS OF DATA, LOSS OF GOODWILL, SERVICE INTERRUPTION, COMPUTER DAMAGE, SYSTEM FAILURE, OR THE COST OF SUBSTITUTE SERVICES, ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE OR THESE TERMS.
                     </p>
@@ -120,35 +125,35 @@ const TermsOfService: React.FC = () => {
                     </p>
                 </Section>
 
-                <Section title="9. Disclaimer of Warranties">
+                <Section title="10. Disclaimer of Warranties">
                     <p>
-                        THE SERVICE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS.
+                        THE SERVICE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS. WE DO NOT GUARANTEE ANY SPECIFIC BUSINESS RESULTS, REPLY RATES, BOOKED CALLS, OR REVENUE FROM YOUR USE OF THE SERVICE.
                     </p>
                 </Section>
 
-                <Section title="10. Indemnification">
+                <Section title="11. Indemnification">
                     <p>
-                        You agree to defend, indemnify, and hold harmless MagnetEngine and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses — including reasonable legal fees — arising out of or in any way related to: (a) your access to or use of the Service; (b) your violation of these Terms; (c) your violation of any third-party rights, including privacy or intellectual property rights; or (d) any User API Keys you provide to the Service.
+                        You agree to defend, indemnify, and hold harmless MagnetEngine and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses — including reasonable legal fees — arising out of or in any way related to: (a) your access to or use of the Service; (b) your violation of these Terms; (c) your violation of any third-party rights, including privacy or intellectual property rights; or (d) the content of any messages you approve and send through the Service.
                     </p>
                 </Section>
 
-                <Section title="11. Modifications to Terms">
+                <Section title="12. Modifications to Terms">
                     <p>
                         We reserve the right to update or modify these Terms at any time. We will notify you of material changes by posting the updated Terms on this page and updating the "Last Updated" date. Your continued use of the Service after changes become effective constitutes your acceptance of the revised Terms.
                     </p>
                 </Section>
 
-                <Section title="12. Governing Law">
+                <Section title="13. Governing Law">
                     <p>
                         These Terms shall be governed by and construed in accordance with the laws of the applicable jurisdiction, without regard to its conflict of law principles. Any disputes arising under these Terms shall be resolved through binding arbitration or in the courts of competent jurisdiction.
                     </p>
                 </Section>
 
-                <Section title="13. Contact">
+                <Section title="14. Contact">
                     <p>
                         If you have any questions about these Terms, please contact us at:{' '}
-                        <a href="mailto:legal@magnetengine.ai" className="text-blue-500 hover:text-blue-400 transition-colors">
-                            legal@magnetengine.ai
+                        <a href="mailto:legal@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">
+                            legal@magnetengine.xyz
                         </a>
                     </p>
                 </Section>

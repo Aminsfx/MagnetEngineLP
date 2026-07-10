@@ -64,4 +64,4 @@ export function getPlanLimits(tier: PlanTier): PlanLimits {
     return PLAN_LIMITS[tier];
 }
 
-export const UPGRADE_CONTACT = 'mailto:support@magnetengine.io?subject=Upgrade%20Plan';
+export const UPGRADE_CONTACT = 'mailto:support@magnetengine.xyz?subject=Upgrade%20Plan';

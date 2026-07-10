@@ -12,7 +12,7 @@ import type { BillingCycle } from '../lib/plans';
 const FEATURES = [
     '500 leads/month',
     '3 campaigns/month',
-    'All AI providers (Claude, OpenAI, Gemini)',
+    'AI-written personalized DMs — no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',
     'CSV/JSON export',
@@ -149,7 +149,7 @@ const PendingActivationPage: React.FC = () => {
                             </span>
                         )}
                     </div>
-                    <p className="text-xs text-zinc-500 mb-5">Cancel anytime. 30-day money-back guarantee.</p>
+                    <p className="text-xs text-zinc-500 mb-5">Cancel anytime. 7-day money-back guarantee.</p>
 
                     {/* Features */}
                     <p className="text-xs font-semibold text-white mb-3">What's included:</p>

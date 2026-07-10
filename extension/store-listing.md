@@ -30,7 +30,7 @@ This extension's single purpose is to deliver Instagram direct messages that the
 - **alarms** — spaces out sends with randomized delays.
 - **tabs** — opens the prospect's Instagram profile to deliver the approved message and closes it after.
 - **host: instagram.com** — where messages are delivered.
-- **host: magnetengine.io** — receives the approved campaign from the user's own dashboard.
+- **host: magnetengine.xyz** — receives the approved campaign from the user's own dashboard.
 
 ## Data usage disclosures
 - Collects no user data.
@@ -39,7 +39,7 @@ This extension's single purpose is to deliver Instagram direct messages that the
 - No analytics.
 
 ## Privacy policy URL
-https://magnetengine.io/privacy
+https://magnetengine.xyz/privacy
 
 ## Submission steps (owner)
 1. Register a Chrome Web Store developer account ($5 one-time): https://chrome.google.com/webstore/devconsole
@@ -48,4 +48,4 @@ https://magnetengine.io/privacy
 4. Add 3–5 screenshots (1280×800): the popup mid-campaign, the dashboard approval queue, the follow-up sequencer.
 5. Submit. Expect extra review time because the extension automates a third-party site — if rejected with data-usage questions, re-check the Data Usage tab answers above.
 
-**Note:** if the production dashboard is NOT served from magnetengine.io, edit the two domain entries in `manifest.json` (`host_permissions` and `content_scripts.matches`) before zipping.
+**Note:** if the production dashboard is NOT served from magnetengine.xyz, edit the two domain entries in `manifest.json` (`host_permissions` and `content_scripts.matches`) before zipping.

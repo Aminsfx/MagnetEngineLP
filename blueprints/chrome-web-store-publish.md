@@ -15,15 +15,15 @@ CONTEXT THE BUILDER NEEDS (it has no memory of the planning chat)
   - `extension/popup.html` / `extension/popup.js` — progress popup
   - `src/pages/PrivacyPolicy.tsx` — the app already serves a privacy policy at `/privacy`
 - Real inputs, in full:
-  - Product name: MagnetEngine. Brand colors: emerald `#10B981` on near-black `#030A06`. Support email: `support@magnetengine.io`.
-  - Production web-app domain: `magnetengine.io` (derived from the support address in `src/lib/plans.ts`; if the deployed dashboard lives elsewhere the owner edits one manifest line — flag this in the output README).
+  - Product name: MagnetEngine. Brand colors: emerald `#10B981` on near-black `#030A06`. Support email: `support@magnetengine.xyz`.
+  - Production web-app domain: `magnetengine.xyz` (derived from the support address in `src/lib/plans.ts`; if the deployed dashboard lives elsewhere the owner edits one manifest line — flag this in the output README).
   - What the extension actually does (single purpose, for the listing): it receives DM campaigns the user explicitly approved in their MagnetEngine dashboard and sends those DMs from the user's own logged-in Instagram session, one at a time with randomized human-like delays and a hard daily cap of 25.
 - Data shapes / examples: n/a (no data model changes).
 - Gotchas:
   - `activeTab` and `scripting` are declared but never used → REMOVE both (fewer permissions = easier review). Keep `storage`, `alarms`, `tabs` (tabs.create/remove is used and requires it).
-  - `content_scripts.matches` includes `http://localhost:*/*` — Chrome Web Store allows it, but the store build must ALSO match the production dashboard or the "Send to Extension" button silently does nothing in production. Add `https://magnetengine.io/*` and `https://*.magnetengine.io/*` to matches AND `host_permissions`.
+  - `content_scripts.matches` includes `http://localhost:*/*` — Chrome Web Store allows it, but the store build must ALSO match the production dashboard or the "Send to Extension" button silently does nothing in production. Add `https://magnetengine.xyz/*` and `https://*.magnetengine.xyz/*` to matches AND `host_permissions`.
   - There is no `icons` field and no PNG icons — the store hard-requires a 128px icon; the toolbar needs 16/32/48. `extension/generate-icons.html` exists for manual generation but a reviewer/builder can't click it; generate PNGs programmatically instead (step 2).
-  - The store requires a privacy policy URL: use `https://magnetengine.io/privacy` (already a live route).
+  - The store requires a privacy policy URL: use `https://magnetengine.xyz/privacy` (already a live route).
   - Remote code: the extension loads no remote code — say so explicitly in the listing answers.
 
 CONSTRAINTS (the limits)
@@ -38,8 +38,8 @@ STEP-BY-STEP PLAN (in build order)
 1. Edit `extension/manifest.json`:
    - `"name": "MagnetEngine — DM Campaign Sender"`, `"version": "1.1.0"`, `"description": "Sends the Instagram DMs you approved in your MagnetEngine dashboard — one at a time, with human-like pacing and a daily safety cap."`
    - `"permissions": ["storage", "alarms", "tabs"]` (activeTab and scripting removed).
-   - `"host_permissions": ["https://*.instagram.com/*", "https://magnetengine.io/*", "https://*.magnetengine.io/*"]`
-   - content_scripts matches: `["http://localhost:*/*", "https://magnetengine.io/*", "https://*.magnetengine.io/*", "https://*.instagram.com/*"]`
+   - `"host_permissions": ["https://*.instagram.com/*", "https://magnetengine.xyz/*", "https://*.magnetengine.xyz/*"]`
+   - content_scripts matches: `["http://localhost:*/*", "https://magnetengine.xyz/*", "https://*.magnetengine.xyz/*", "https://*.instagram.com/*"]`
    - Add `"icons": {"16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png"}` and the same object under `"action": {"default_icon": ...}` keeping `default_popup`.
 2. Create `scripts/gen-ext-icons.mjs`: renders this inline SVG at 16/32/48/128 into `extension/icons/icon<N>.png` using `@resvg/resvg-js`:
    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#030A06"/><path d="M32 96V48a16 16 0 0 1 32 0v20a8 8 0 0 0 16 0V48a16 16 0 0 1 16-16" stroke="#10B981" stroke-width="14" stroke-linecap="round" fill="none"/><rect x="25" y="88" width="28" height="14" rx="4" fill="#34D399"/><rect x="75" y="24" width="28" height="14" rx="4" fill="#34D399"/></svg>`
@@ -51,11 +51,11 @@ STEP-BY-STEP PLAN (in build order)
    - **Description**: 3 short paragraphs — what it does (executes user-approved DM campaigns from the MagnetEngine dashboard), how it stays safe (one DM at a time, 15–45 min randomized delays in production mode, hard 25/day cap, pause anytime from the popup), what it never does (no data collection, no posting, no following, never messages anyone the user didn't approve).
    - **Category**: Workflow & Planning. **Language**: English.
    - **Single-purpose statement**: "This extension's single purpose is to deliver Instagram direct messages that the user individually reviewed and approved in their MagnetEngine dashboard."
-   - **Permission justifications**, one line each: storage (persists the user's own campaign queue and progress locally), alarms (spaces out sends with randomized delays), tabs (opens the prospect's Instagram profile to deliver the approved message and closes it after), host instagram.com (where messages are delivered), host magnetengine.io (receives the approved campaign from the user's own dashboard).
+   - **Permission justifications**, one line each: storage (persists the user's own campaign queue and progress locally), alarms (spaces out sends with randomized delays), tabs (opens the prospect's Instagram profile to deliver the approved message and closes it after), host instagram.com (where messages are delivered), host magnetengine.xyz (receives the approved campaign from the user's own dashboard).
    - **Data usage disclosures**: collects no user data; all campaign data stays in chrome.storage.local; no remote code; no analytics.
-   - **Privacy policy URL**: https://magnetengine.io/privacy
+   - **Privacy policy URL**: https://magnetengine.xyz/privacy
    - **Submission steps for the owner**: register Chrome Web Store developer account ($5 one-time), run `npm run ext:icons && npm run ext:zip`, upload zip, paste the sections above, add 3–5 screenshots (1280×800) of the popup + dashboard queue, submit; expect extra review time because the extension automates a third-party site — if rejected for "user data" questions, re-check the Data Usage tab answers above.
-   - **Note to owner**: if the production dashboard is NOT served from magnetengine.io, edit the two domain entries in manifest.json before zipping.
+   - **Note to owner**: if the production dashboard is NOT served from magnetengine.xyz, edit the two domain entries in manifest.json before zipping.
 5. Run `npm run ext:icons`, verify the four PNGs exist and are non-empty, then `npm run ext:zip` once to confirm the zip builds (then delete the zip or leave it untracked).
 
 EXACT INPUTS TO USE

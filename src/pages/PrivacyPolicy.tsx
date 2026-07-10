@@ -37,7 +37,7 @@ const PrivacyPolicy: React.FC = () => {
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-10 text-sm text-blue-300">
-                    <strong>Summary:</strong> MagnetEngine does not sell your personal data. API keys you enter are stored locally in your browser and are never transmitted to our servers. You retain full control and responsibility over your credentials.
+                    <strong>Summary:</strong> MagnetEngine does not sell your personal data. You never need to enter any API keys or third-party credentials — all AI and data services are provided and managed by us as part of your subscription.
                 </div>
 
                 <Section title="1. Introduction">
@@ -61,9 +61,9 @@ const PrivacyPolicy: React.FC = () => {
                     </ul>
                     <p><strong className="text-white">c) Information NOT collected by us:</strong></p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>Third-party API keys you enter into the Service (see Section 5).</li>
+                        <li>Third-party API keys or credentials — the Service never asks you for any (see Section 5).</li>
                         <li>The content of AI-generated messages beyond what is needed to display them to you.</li>
-                        <li>Lead data you import — this is stored locally in your browser and not on our servers.</li>
+                        <li>Your Instagram password — the Service and its extension operate only through your own logged-in browser session and never see or store your Instagram credentials.</li>
                     </ul>
                 </Section>
 
@@ -89,19 +89,14 @@ const PrivacyPolicy: React.FC = () => {
                     </p>
                 </Section>
 
-                <Section title="5. Third-Party API Keys — Your Responsibility">
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-300 mb-4">
-                        <strong>⚠️ Important:</strong> API keys you provide are your sole responsibility. Please read this section carefully.
-                    </div>
+                <Section title="5. AI Services — Managed by Us">
                     <p>
-                        The Service may allow you to enter API keys issued by third-party AI providers ("User API Keys"). The following applies to all such keys:
+                        MagnetEngine provides all AI generation and data services as part of your subscription. You never enter, store, or manage any third-party API keys or credentials in the Service.
                     </p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong className="text-white">Local Storage Only:</strong> User API Keys are stored in your browser's local storage on your device and are not transmitted to or stored on MagnetEngine's servers, except transiently for the purpose of making API calls on your behalf in real-time.</li>
-                        <li><strong className="text-white">No Retention:</strong> We do not retain, log, or archive your API keys beyond the active session in which they are used.</li>
-                        <li><strong className="text-white">User Responsibility:</strong> You are solely responsible for the security of your API keys. This includes ensuring your device is secure, your browser is updated, and that you rotate or revoke keys if you suspect compromise.</li>
-                        <li><strong className="text-white">No Liability:</strong> MagnetEngine is not responsible for any unauthorized access, exposure, or misuse of User API Keys, including but not limited to: charges incurred on third-party platforms, data exposure, or service disruption resulting from key compromise. See our Terms of Service Section 6 for the full disclaimer.</li>
-                        <li><strong className="text-white">Third-Party Terms:</strong> Your use of third-party AI APIs through MagnetEngine is also subject to the respective provider's terms and privacy policies.</li>
+                        <li><strong className="text-white">Nothing for you to secure:</strong> Because you provide no credentials, there are no API keys of yours to expose, leak, or rotate. The service credentials the platform runs on belong to us and are managed and paid for by us.</li>
+                        <li><strong className="text-white">What is sent to AI providers:</strong> To generate a message, the Service transmits the relevant lead's public profile information (e.g., name, handle, bio) to our AI processing providers. This data is used solely to generate your message and is subject to those providers' data-processing terms.</li>
+                        <li><strong className="text-white">Provider changes:</strong> We may change the underlying AI or data providers at any time to maintain quality and availability; this does not change what data of yours is processed.</li>
                     </ul>
                 </Section>
 
@@ -142,8 +137,8 @@ const PrivacyPolicy: React.FC = () => {
                     </ul>
                     <p>
                         To exercise any of these rights, contact us at{' '}
-                        <a href="mailto:privacy@magnetengine.ai" className="text-blue-500 hover:text-blue-400 transition-colors">
-                            privacy@magnetengine.ai
+                        <a href="mailto:privacy@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">
+                            privacy@magnetengine.xyz
                         </a>.
                     </p>
                 </Section>
@@ -166,8 +161,8 @@ const PrivacyPolicy: React.FC = () => {
                     </p>
                     <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 mt-2">
                         <p className="text-white font-medium">MagnetEngine</p>
-                        <p>Email: <a href="mailto:privacy@magnetengine.ai" className="text-blue-500 hover:text-blue-400 transition-colors">privacy@magnetengine.ai</a></p>
-                        <p>Legal inquiries: <a href="mailto:legal@magnetengine.ai" className="text-blue-500 hover:text-blue-400 transition-colors">legal@magnetengine.ai</a></p>
+                        <p>Email: <a href="mailto:privacy@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">privacy@magnetengine.xyz</a></p>
+                        <p>Legal inquiries: <a href="mailto:legal@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">legal@magnetengine.xyz</a></p>
                     </div>
                 </Section>
 
