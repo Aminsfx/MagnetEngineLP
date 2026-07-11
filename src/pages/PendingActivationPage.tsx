@@ -12,7 +12,7 @@ import type { BillingCycle } from '../lib/plans';
 const FEATURES = [
     '500 leads/month',
     '3 campaigns/month',
-    'AI-written personalized DMs — no API keys needed',
+    'AI writes every DM for you, no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',
     'CSV/JSON export',

@@ -6,7 +6,7 @@ import type { BillingCycle } from '../lib/plans';
 const FEATURES = [
     '500 leads/month',
     '3 campaigns/month',
-    'AI-written personalized DMs — no API keys needed',
+    'AI writes every DM for you, no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',
     'CSV/JSON export',
@@ -125,7 +125,7 @@ const Pricing: React.FC = () => {
                     <div className="inline-flex items-center gap-3 px-6 py-3 bg-[#050A08] border border-white/5 rounded-2xl">
                         <Shield size={20} className="text-emerald-400" />
                         <span className="text-zinc-300 text-sm">
-                            <strong className="text-white">7-Day Money-Back Guarantee</strong> — give it a real shot and if it's not for you, full refund. See Terms for details.
+                            <strong className="text-white">7-Day Money-Back Guarantee.</strong> Give it a real shot and if it's not for you, full refund. See Terms for details.
                         </span>
                     </div>
 
