@@ -47,7 +47,7 @@ src/
     PlanContext.tsx              # tier + status ('pending'|'active'|'cancelled') + refresh()
   lib/
     types.ts                     # All shared TypeScript interfaces
-    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, BILLING_LINKS
+    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, WHOP_PLAN_IDS, PRICES, isAdminEmail
     apify.ts                     # Apify API client (scrape + poll)
     storage.ts                   # localStorage read/write with obfuscation
     api.ts                       # AI DM generation helpers
@@ -60,8 +60,8 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
 - `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
-- The owner activates an account after confirming payment (SQL upsert in README). No client-side write path to `subscriptions` exists on purpose.
-- Payment buttons on `/activate` use `BILLING_LINKS` from `src/lib/plans.ts` (single plan: $97/mo or $970/yr), fed by `VITE_PAYMENT_LINK_MONTHLY|ANNUAL` env vars; fallback is the `UPGRADE_CONTACT` mailto.
+- Payment is an **embedded Whop checkout** on `/activate` (single plan: $197/mo or $1,970/yr via `WHOP_PLAN_IDS`/`PRICES` in `src/lib/plans.ts`, fed by `VITE_WHOP_PLAN_ID_MONTHLY|ANNUAL`); the signup email is prefilled + locked. Fallback is the `UPGRADE_CONTACT` mailto until plan IDs are set.
+- Activation is automatic: the `whop-webhook` Edge Function (Standard Webhooks signature check) matches the payment email to the user and flips `subscriptions` to active; `membership.deactivated` revokes. Manual activate/revoke lives in the owner console at `/admin` (client gate `VITE_ADMIN_EMAILS` + server enforcement via the `admin-api` function's `ADMIN_EMAILS` secret). No client-side write path to `subscriptions` exists on purpose.
 - Without Supabase env vars (local dev): subscription is treated as `active` starter so the app runs standalone.
 
 ## Key Data Types (src/lib/types.ts)
@@ -113,7 +113,8 @@ VITE_APIFY_API_KEY=<your_key>          # Admin-managed, never shown to end users
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # Publishable/anon key from Supabase dashboard
 VITE_OPENAI_API_KEY / VITE_CLAUDE_API_KEY / VITE_GEMINI_API_KEY   # AI providers (owner-managed)
-VITE_PAYMENT_LINK_MONTHLY / _ANNUAL          # Polar checkout links for /activate ($97/mo · $970/yr)
+VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # Whop plan IDs for the embedded checkout on /activate ($197/mo · $1,970/yr)
+VITE_ADMIN_EMAILS                            # Owner emails — unlocks /admin (UI gate; admin-api enforces server-side)
 ```
 Template: `.env.example` (committed, no real values).
 ⚠️ All `VITE_*` values are embedded in the shipped JS bundle — see README → Security for the key-exposure caveat and the Edge Function migration plan.

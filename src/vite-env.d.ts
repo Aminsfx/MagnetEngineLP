@@ -8,8 +8,9 @@ interface ImportMetaEnv {
     readonly VITE_OPENAI_API_KEY?: string;
     readonly VITE_CLAUDE_API_KEY?: string;
     readonly VITE_GEMINI_API_KEY?: string;
-    readonly VITE_PAYMENT_LINK_MONTHLY?: string;
-    readonly VITE_PAYMENT_LINK_ANNUAL?: string;
+    readonly VITE_WHOP_PLAN_ID_MONTHLY?: string;
+    readonly VITE_WHOP_PLAN_ID_ANNUAL?: string;
+    readonly VITE_ADMIN_EMAILS?: string;
 }
 
 interface ImportMeta {

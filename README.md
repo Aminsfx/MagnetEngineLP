@@ -80,20 +80,12 @@ create policy "Users read own subscription" on subscriptions
 ## How payment gating works
 
 1. A visitor signs up → account is created, but their subscription is **pending** (no row in `subscriptions` = pending).
-2. They land on **/activate**, which shows the single $97/mo · $970/yr plan with payment buttons (`VITE_PAYMENT_LINK_MONTHLY|ANNUAL` Polar checkout links from `.env`; falls back to your contact email until you add links).
-3. They pay. You confirm the money actually arrived.
-4. You activate them — run this in the Supabase SQL editor:
+2. They land on **/activate**, which shows the single $197/mo · $1,970/yr plan with an **embedded Whop checkout** (`VITE_WHOP_PLAN_ID_MONTHLY|ANNUAL` plan IDs from `.env`; falls back to your contact email until you add them). Their signup email is prefilled and locked, so the payment always matches their account.
+3. They pay → Whop fires a webhook → the `whop-webhook` Edge Function verifies the signature, matches the email, and flips their subscription to **active** within seconds. The page detects it and drops them into the dashboard.
+4. Cancellations revoke access automatically the same way (`membership.deactivated`).
+5. Manual fallback: the owner console at **/admin** (gated by `VITE_ADMIN_EMAILS` + the `ADMIN_EMAILS` function secret) shows every member and can activate/revoke any email in one click — no SQL needed.
 
-```sql
-insert into subscriptions (user_id, plan, status)
-select id, 'pro', 'active' from auth.users where email = 'customer@example.com'
-on conflict (user_id) do update
-  set plan = excluded.plan, status = excluded.status, updated_at = now();
-```
-
-5. The customer clicks **"Check activation status"** on /activate (or reloads) and is let into the dashboard with the limits of their plan (`starter` / `pro` / `agency`).
-
-To revoke access, set `status = 'cancelled'` for that user.
+Full setup click-path: `docs/WHOP_SETUP.md`.
 
 ## Auth flows
 

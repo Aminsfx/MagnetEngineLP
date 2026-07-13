@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { usePlan } from './contexts/PlanContext';
+import { isAdminEmail } from './lib/plans';
 import { Loader2 } from 'lucide-react';
 
 // Route-level code splitting: visitors hitting the landing page don't download
@@ -13,6 +14,7 @@ const PendingActivationPage = lazy(() => import('./pages/PendingActivationPage')
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const DashboardShell = lazy(() => import('./pages/DashboardShell'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 // ─── Route guards ─────────────────────────────────────────────────────────────
 const AuthLoader: React.FC<{ label: string }> = ({ label }) => (
@@ -45,6 +47,21 @@ const RequireUser: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+/**
+ * Owner-only guard for /admin. Deliberately does NOT require an active
+ * subscription — the owner must reach the console even while unpaid. The
+ * email check here is cosmetic routing; the admin-api Edge Function enforces
+ * the real allowlist server-side.
+ */
+const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <AuthLoader label="Authenticating…" />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isAdminEmail(user.email)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 const App: React.FC = () => {
   return (
@@ -63,6 +80,14 @@ const App: React.FC = () => {
         />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminPage />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="/*"
           element={

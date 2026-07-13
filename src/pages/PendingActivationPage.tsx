@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     CreditCard, LogOut, RefreshCw, CheckCircle2, Clock,
-    Sparkles, ArrowRight, Mail, Check, Gift,
+    Sparkles, ArrowRight, Mail, Check, Gift, Loader2,
 } from 'lucide-react';
+import { WhopCheckoutEmbed } from '@whop/checkout/react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { BILLING_LINKS, UPGRADE_CONTACT } from '../lib/plans';
+import { WHOP_PLAN_IDS, PRICES, UPGRADE_CONTACT } from '../lib/plans';
 import type { BillingCycle } from '../lib/plans';
 
 const FEATURES = [
@@ -22,9 +23,9 @@ const FEATURES = [
 
 /**
  * Shown to signed-in users whose subscription is not yet activated.
- * Flow: user pays via the Polar checkout link → the webhook (or the owner)
- * activates the account → user clicks "Check activation status" (or just
- * reloads) and lands in the dashboard.
+ * Flow: user pays via the embedded Whop checkout (email locked to their signup
+ * email) → the whop-webhook (or the owner via /admin) activates the account →
+ * this page polls status and lands them in the dashboard.
  */
 const PendingActivationPage: React.FC = () => {
     const { user, signOut } = useAuth();
@@ -34,6 +35,8 @@ const PendingActivationPage: React.FC = () => {
     const [checking, setChecking] = useState(false);
     const [stillPending, setStillPending] = useState(false);
     const [billing, setBilling] = useState<BillingCycle>('monthly');
+    const [awaitingActivation, setAwaitingActivation] = useState(false);
+    const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // If the subscription is (or becomes) active, this page shouldn't be shown
     useEffect(() => {
@@ -41,6 +44,35 @@ const PendingActivationPage: React.FC = () => {
             navigate('/dashboard', { replace: true });
         }
     }, [loading, status, navigate]);
+
+    // Clear any pending poll timer on unmount
+    useEffect(() => () => {
+        if (pollTimer.current) clearTimeout(pollTimer.current);
+    }, []);
+
+    // After Whop reports the checkout complete, poll until the webhook has
+    // flipped the subscription to active (usually a few seconds).
+    const handleCheckoutComplete = useCallback(() => {
+        setAwaitingActivation(true);
+        setStillPending(false);
+
+        let attempts = 0;
+        const poll = async () => {
+            attempts += 1;
+            const s = await refresh();
+            if (s === 'active') {
+                navigate('/dashboard', { replace: true });
+                return;
+            }
+            if (attempts >= 20) { // ~60s — webhook should have landed by now
+                setAwaitingActivation(false);
+                setStillPending(true);
+                return;
+            }
+            pollTimer.current = setTimeout(poll, 3000);
+        };
+        poll();
+    }, [refresh, navigate]);
 
     const handleCheck = async () => {
         setChecking(true);
@@ -59,13 +91,7 @@ const PendingActivationPage: React.FC = () => {
         navigate('/login');
     };
 
-    const paymentLink = BILLING_LINKS[billing];
-    const paymentHref = (() => {
-        if (!paymentLink) return UPGRADE_CONTACT;
-        if (!user?.email) return paymentLink;
-        const sep = paymentLink.includes('?') ? '&' : '?';
-        return `${paymentLink}${sep}customer_email=${encodeURIComponent(user.email)}`;
-    })();
+    const planId = WHOP_PLAN_IDS[billing];
 
     return (
         <div className="relative min-h-screen bg-black overflow-hidden">
@@ -138,10 +164,10 @@ const PendingActivationPage: React.FC = () => {
                     {/* Price */}
                     <div className="flex items-baseline gap-2 flex-wrap mb-1">
                         <span className="text-3xl font-bold text-white">
-                            {billing === 'monthly' ? '$97' : '$970'}
+                            {PRICES[billing].label}
                         </span>
                         <span className="text-base font-semibold text-white">
-                            {billing === 'monthly' ? '/month' : '/year'}
+                            {PRICES[billing].suffix}
                         </span>
                         {billing === 'annual' && (
                             <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold">
@@ -171,18 +197,40 @@ const PendingActivationPage: React.FC = () => {
                         </p>
                     </div>
 
-                    {/* Pay button */}
-                    <a
-                        href={paymentHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-emerald-950"
-                    >
-                        {paymentLink ? <CreditCard className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
-                        {paymentLink
-                            ? (billing === 'monthly' ? 'Pay $97/month' : 'Pay $970/year')
-                            : 'Contact us to pay'}
-                    </a>
+                    {/* Embedded Whop checkout */}
+                    {awaitingActivation ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                            <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+                            <p className="text-sm text-white font-medium">Payment received — unlocking your account…</p>
+                            <p className="text-xs text-zinc-500">This usually takes a few seconds.</p>
+                        </div>
+                    ) : planId ? (
+                        <div className="rounded-xl overflow-hidden border border-white/8">
+                            <WhopCheckoutEmbed
+                                key={billing}
+                                planId={planId}
+                                theme="dark"
+                                themeOptions={{ accentColor: '#10b981', backgroundColor: '#050A08', borderRadius: 12 }}
+                                prefill={user?.email ? { email: user.email } : undefined}
+                                disableEmail={!!user?.email}
+                                onComplete={handleCheckoutComplete}
+                                fallback={
+                                    <div className="flex items-center justify-center gap-2 py-12 text-zinc-500 text-sm">
+                                        <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                                        Loading secure checkout…
+                                    </div>
+                                }
+                            />
+                        </div>
+                    ) : (
+                        <a
+                            href={UPGRADE_CONTACT}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-emerald-950"
+                        >
+                            <Mail className="w-4 h-4" />
+                            Contact us to pay
+                        </a>
+                    )}
                 </div>
 
                 {/* Already paid */}

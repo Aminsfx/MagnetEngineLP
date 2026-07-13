@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Shield, Calendar, Gift } from 'lucide-react';
-import type { BillingCycle } from '../lib/plans';
+import { PRICES, type BillingCycle } from '../lib/plans';
 
 const FEATURES = [
     '500 leads/month',
@@ -71,10 +71,10 @@ const Pricing: React.FC = () => {
                         <div className="mb-8">
                             <div className="flex items-baseline gap-2 flex-wrap">
                                 <span className="text-5xl font-bold tracking-tight text-white">
-                                    {billing === 'monthly' ? '$97' : '$970'}
+                                    {PRICES[billing].label}
                                 </span>
                                 <span className="text-xl font-semibold text-white">
-                                    {billing === 'monthly' ? '/month' : '/year'}
+                                    {PRICES[billing].suffix}
                                 </span>
                                 {billing === 'annual' && (
                                     <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[11px] font-semibold">

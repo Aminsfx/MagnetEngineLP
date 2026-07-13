@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Kanban, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock } from 'lucide-react';
+import { LayoutDashboard, Users, Kanban, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock, Shield } from 'lucide-react';
 import { usePlan } from '../contexts/PlanContext';
+import { useAuth } from '../contexts/AuthContext';
+import { isAdminEmail } from '../lib/plans';
 import Logo from './Logo';
 
 interface SidebarProps {
@@ -15,6 +17,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNavigate }) => {
     const location = useLocation();
     const { limits } = usePlan();
+    const { user } = useAuth();
     const [time, setTime] = useState(new Date());
 
     useEffect(() => {
@@ -30,6 +33,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
         { icon: Calculator, label: 'Calculator', path: '/calculator' },
         { icon: Settings, label: 'Settings', path: '/settings' },
         { icon: UserCircle, label: 'Profile', path: '/profile' },
+        // Owner-only console — hidden for regular members
+        ...(isAdminEmail(user?.email) ? [{ icon: Shield, label: 'Admin', path: '/admin' }] : []),
     ];
 
     return (

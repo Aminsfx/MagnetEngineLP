@@ -14,16 +14,37 @@ export interface Subscription {
 }
 
 /**
- * Payment links shown on the activation page — one plan, two billing cycles.
- * Owner: create the two Polar.sh checkout links and set them in .env:
- *   VITE_PAYMENT_LINK_MONTHLY, VITE_PAYMENT_LINK_ANNUAL
- * Until a link is configured, the button falls back to the contact email below.
+ * Whop embedded checkout — one plan, two billing cycles.
+ * Owner: create the two plans in Whop (Manage Pricing) and set their plan IDs
+ * in .env: VITE_WHOP_PLAN_ID_MONTHLY, VITE_WHOP_PLAN_ID_ANNUAL
+ * Until a plan ID is configured, /activate falls back to the contact email below.
+ * See docs/WHOP_SETUP.md.
  */
 export type BillingCycle = 'monthly' | 'annual';
-export const BILLING_LINKS: Record<BillingCycle, string> = {
-    monthly: (import.meta.env.VITE_PAYMENT_LINK_MONTHLY as string) ?? '',
-    annual: (import.meta.env.VITE_PAYMENT_LINK_ANNUAL as string) ?? '',
+export const WHOP_PLAN_IDS: Record<BillingCycle, string> = {
+    monthly: (import.meta.env.VITE_WHOP_PLAN_ID_MONTHLY as string) ?? '',
+    annual: (import.meta.env.VITE_WHOP_PLAN_ID_ANNUAL as string) ?? '',
 };
+
+/** Single source of truth for displayed prices (landing page + /activate). */
+export const PRICES: Record<BillingCycle, { amount: number; label: string; suffix: string }> = {
+    monthly: { amount: 197, label: '$197', suffix: '/month' },
+    annual: { amount: 1970, label: '$1,970', suffix: '/year' },
+};
+
+/**
+ * Client-side admin check — controls UI visibility only (Sidebar item, /admin
+ * route guard). Real enforcement lives in the admin-api Edge Function, which
+ * checks the caller's JWT email against the server-side ADMIN_EMAILS secret.
+ */
+export function isAdminEmail(email?: string | null): boolean {
+    if (!email) return false;
+    const list = ((import.meta.env.VITE_ADMIN_EMAILS as string) ?? '')
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+    return list.includes(email.trim().toLowerCase());
+}
 
 export interface PlanLimits {
     maxLeadsPerCampaign: number | null; // null = unlimited
