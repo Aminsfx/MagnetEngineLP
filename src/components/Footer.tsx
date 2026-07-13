@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Magnet } from 'lucide-react';
 
 const Footer: React.FC = () => {
@@ -13,8 +14,8 @@ const Footer: React.FC = () => {
         </div>
 
         <div className="flex gap-8 text-sm text-zinc-500">
-          <a href="#" className="hover:text-emerald-400 transition-colors">Privacy</a>
-          <a href="#" className="hover:text-emerald-400 transition-colors">Terms</a>
+          <Link to="/privacy" className="hover:text-emerald-400 transition-colors">Privacy</Link>
+          <Link to="/terms" className="hover:text-emerald-400 transition-colors">Terms</Link>
           <a href="mailto:aminupsellz@gmail.com" className="hover:text-emerald-400 transition-colors">Contact</a>
         </div>
 
