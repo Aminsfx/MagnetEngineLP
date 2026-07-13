@@ -17,7 +17,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "npm:standardwebhooks@1.0.0";
 
-const ACTIVATE_EVENTS = ["membership.activated", "payment.succeeded"];
+// Activation is gated to the canonical "membership became valid" event AND a
+// recognized plan id (see below). payment.succeeded is intentionally NOT an
+// activation trigger — it fires for any payment/amount/product in the Whop
+// company and would let a cheaper/free offering unlock the paid tier.
+const ACTIVATE_EVENTS = ["membership.activated"];
 const REVOKE_EVENTS = ["membership.deactivated"];
 const HANDLED_EVENTS = [...ACTIVATE_EVENTS, ...REVOKE_EVENTS];
 
@@ -96,12 +100,20 @@ Deno.serve(async (req) => {
   }
 
   if (ACTIVATE_EVENTS.includes(type)) {
+    // Hard gate: only the two configured plans grant access. Any other plan in
+    // the Whop company (free tier, add-ons, unrelated products) is ignored, so
+    // a signed event for a cheaper offering can't unlock the paid tier. If the
+    // plan secrets aren't configured, fail closed (activate no one) — the owner
+    // can still activate manually from /admin.
     const knownPlans = [
       Deno.env.get("WHOP_PLAN_ID_MONTHLY"),
       Deno.env.get("WHOP_PLAN_ID_ANNUAL"),
     ].filter(Boolean);
-    if (planId && knownPlans.length > 0 && !knownPlans.includes(planId)) {
-      console.warn(`[whop-webhook] unknown plan ${planId} — activating anyway`);
+    if (!planId || knownPlans.length === 0 || !knownPlans.includes(planId)) {
+      console.warn(
+        `[whop-webhook] ${type} for ${email}: plan ${planId ?? "(none)"} not in configured plans — skipping (activate via /admin if legit)`,
+      );
+      return json(202, { skipped: "unrecognized plan" });
     }
 
     // Single-plan model: 'pro' is the stored value for every activation.

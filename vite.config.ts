@@ -6,19 +6,9 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    // Dev-only proxies to bypass browser CORS for AI providers
-    proxy: {
-      '/api/anthropic': {
-        target: 'https://api.anthropic.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/anthropic/, ''),
-      },
-      '/api/openai': {
-        target: 'https://api.openai.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/openai/, ''),
-      },
-    },
+    // No AI-provider proxies needed: all external API calls now go through the
+    // Supabase Edge Functions (generate-dm / start-scrape / poll-scrape), which
+    // hold the secret keys server-side.
   },
   plugins: [react()],
   build: {

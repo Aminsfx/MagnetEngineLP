@@ -96,28 +96,36 @@ AppConfig {
 APIKeys { openai?, claude?, gemini? }  // NO apify — backend-managed
 ```
 
-## Apify Integration (src/lib/apify.ts)
-- **Actor**: `apify~instagram-search-scraper`
+## Apify Integration (src/lib/apify.ts → Edge Functions)
+- **Actor**: `apify~instagram-search-scraper` (keyword); followers actor via `APIFY_FOLLOWERS_ACTOR_ID`
 - **Input schema** (exact field names):
   - `search` — comma-separated search terms (string)
   - `searchType` — `"user" | "hashtag" | "place"`
   - `searchLimit` — 1–250 (actor hard cap; 250 is the maximum)
   - `enhanceUserSearchWithFacebookPage` — boolean (enriches top 10 user results)
-- **Flow**: POST to start run → poll `actor-runs/{runId}` every 5 s → fetch dataset items on SUCCEEDED
-- **Timeout**: 4 min (48 polls × 5 s)
-- **API key**: stored in `.env` as `VITE_APIFY_API_KEY`, read via `import.meta.env.VITE_APIFY_API_KEY`
+- **Flow**: client calls `start-scrape` (returns `runId`) → polls `poll-scrape` every 5 s → gets dataset items on SUCCEEDED → maps to `Lead[]` client-side. Timeout 4 min (48 polls).
+- **API key**: `APIFY_API_KEY` lives ONLY as a Supabase secret, used by `start-scrape`/`poll-scrape`. The browser never talks to api.apify.com.
 
-## Environment Variables (.env — gitignored)
+## AI DM Generation (src/lib/api.ts → generate-dm Edge Function)
+- `aiAPI.generateDM(provider, lead, systemPrompt)` calls the `generate-dm` Edge Function via `supabase.functions.invoke`. Provider keys (`CLAUDE_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`) are Supabase secrets; prompt building + injection-safe bio handling + output cleanup run server-side. Client sees no key.
+
+## Environment Variables
+**Frontend (`.env`, gitignored — PUBLIC, ships in the bundle; only non-secret values):**
 ```
-VITE_APIFY_API_KEY=<your_key>          # Admin-managed, never shown to end users
 VITE_SUPABASE_URL=https://<ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # Publishable/anon key from Supabase dashboard
-VITE_OPENAI_API_KEY / VITE_CLAUDE_API_KEY / VITE_GEMINI_API_KEY   # AI providers (owner-managed)
-VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # Whop plan IDs for the embedded checkout on /activate ($197/mo · $1,970/yr)
-VITE_ADMIN_EMAILS                            # Owner emails — unlocks /admin (UI gate; admin-api enforces server-side)
+VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # anon/publishable key — safe in browser (RLS protects data)
+VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($197/mo · $1,970/yr)
+VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin gate (admin-api enforces server-side)
 ```
-Template: `.env.example` (committed, no real values).
-⚠️ All `VITE_*` values are embedded in the shipped JS bundle — see README → Security for the key-exposure caveat and the Edge Function migration plan.
+**Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
+```
+CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm
+APIFY_API_KEY / APIFY_FOLLOWERS_ACTOR_ID           # start-scrape / poll-scrape
+WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
+ADMIN_EMAILS                                       # admin-api
+```
+Set via `supabase secrets set KEY=value`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
+Template: `.env.example` (committed, no real values). Edge Functions: `supabase/functions/{generate-dm,start-scrape,poll-scrape,whop-webhook,admin-api}`.
 
 ## Supabase Integration
 - **Package**: `@supabase/supabase-js` v2 (in dependencies)

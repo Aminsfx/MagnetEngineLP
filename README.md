@@ -10,11 +10,17 @@ React 19 + TypeScript + Vite 6 + Tailwind CSS 3 (build-time) + Supabase (auth & 
 
 ```bash
 npm install
-cp .env.example .env    # fill in your keys
+cp .env.example .env    # fill in the PUBLIC (VITE_) values only — see below
 npm run dev             # http://localhost:3000
 ```
 
-Without Supabase env vars the app falls back to localStorage (dev mode: no real auth, subscription treated as active).
+`npm run dev` runs the Vite frontend only. AI DM generation and Instagram
+scraping call **Supabase Edge Functions** (which hold the secret keys), so for
+those features to work locally you must have the functions deployed and their
+secrets set (see "Backend (Edge Functions)" below) — the app calls the deployed
+functions from both dev and production. Without Supabase env vars the app falls
+back to localStorage (dev mode: no real auth, subscription treated as active;
+AI/scraping unavailable).
 
 ```bash
 npm run build           # production build → dist/
@@ -100,18 +106,65 @@ Full setup click-path: `docs/WHOP_SETUP.md`.
 - The web app posts approved campaigns via `window.postMessage`; the content script relays them to the background worker, which opens Instagram profiles on a randomized drip (test mode: ~20 s; production mode: 15–45 min, 25 DMs/day cap).
 - **Before launch:** add your production dashboard domain to `content_scripts.matches` in `extension/manifest.json` (it currently matches `localhost` and `instagram.com` only) — otherwise "Send to Extension" only works from localhost.
 
-## Security — read before onboarding paying users
+## Environment variables — frontend vs backend
 
-**Every `VITE_*` variable is baked into the public JS bundle.** That includes the Apify key and the OpenAI/Claude/Gemini keys. A curious user can open DevTools and extract them, and you pay for whatever they do with them. Mitigations, in order of preference:
+**No secret key ever reaches the browser.** All external API calls (Claude/OpenAI/
+Gemini, Apify) go through Supabase Edge Functions that hold the keys server-side.
 
-1. **Move scraping + AI calls behind a backend** (Supabase Edge Functions are the natural fit — the anon key + RLS already handle auth). The frontend calls your function; the function holds the secret keys server-side.
-2. Until then: set hard **spending limits** on all provider keys, rotate them regularly, and keep the customer count small.
+**Frontend (`VITE_*` in `.env` / Vercel — PUBLIC, shipped in the JS bundle):**
 
-The Supabase anon key is designed to be public (RLS protects the data) — that one is fine.
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | anon/publishable key — designed to be public (RLS protects data) |
+| `VITE_WHOP_PLAN_ID_MONTHLY` / `_ANNUAL` | public Whop plan IDs for the checkout embed |
+| `VITE_ADMIN_EMAILS` | owner emails — cosmetic /admin UI gate only |
 
-## Deploying (Vercel or similar)
+Only put non-secret values here. Never add an API key as a `VITE_` var.
 
-1. Set all env vars from `.env.example` in the project settings.
-2. Build command `npm run build`, output `dist/`.
-3. Add a SPA rewrite so deep links work: all routes → `/index.html`.
+**Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
+
+| Secret | Used by |
+|---|---|
+| `CLAUDE_API_KEY` (and/or `OPENAI_API_KEY`, `GEMINI_API_KEY`) | `generate-dm` |
+| `APIFY_API_KEY` (opt. `APIFY_FOLLOWERS_ACTOR_ID`) | `start-scrape`, `poll-scrape` |
+| `WHOP_WEBHOOK_SECRET` (opt. `WHOP_PLAN_ID_MONTHLY`/`_ANNUAL`) | `whop-webhook` |
+| `ADMIN_EMAILS` | `admin-api` |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected into functions.
+
+## Backend (Edge Functions)
+
+The `supabase/functions/` directory holds five Deno Edge Functions:
+`generate-dm`, `start-scrape`, `poll-scrape` (secret-holding proxies for the app),
+plus `whop-webhook` and `admin-api`. Deploy and configure once:
+
+```bash
+# 1. Set the server-side secrets (never committed, never VITE_-prefixed):
+supabase secrets set \
+  CLAUDE_API_KEY=sk-ant-... \
+  APIFY_API_KEY=apify_api_...
+# optional: OPENAI_API_KEY, GEMINI_API_KEY, APIFY_FOLLOWERS_ACTOR_ID
+
+# 2. Deploy the app proxies (gateway JWT check ON — only signed-in users can call):
+supabase functions deploy generate-dm
+supabase functions deploy start-scrape
+supabase functions deploy poll-scrape
+# webhook is public (verifies its own signature); admin-api keeps JWT check on:
+supabase functions deploy whop-webhook --no-verify-jwt
+supabase functions deploy admin-api
+```
+
+The browser calls the app proxies via `supabase.functions.invoke`, which attaches
+the signed-in user's JWT automatically — so anonymous callers can't spend your
+AI/Apify credits.
+
+## Deploying (Vercel + Supabase)
+
+1. **Frontend (Vercel):** set only the `VITE_*` vars above in Project → Settings →
+   Environment Variables. **Remove any old `VITE_APIFY_API_KEY` / `VITE_*_API_KEY`
+   from Vercel** — they're no longer used and must not be shipped.
+2. Build command `npm run build`, output `dist/`. `vercel.json` already adds the
+   SPA rewrite (all routes → `/index.html`).
+3. **Backend (Supabase):** set the secrets and deploy the functions as above.
 4. Update Supabase Auth redirect URLs and the extension manifest with the final domain.

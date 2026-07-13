@@ -1,9 +1,17 @@
 import { Lead } from './types';
+import { invokeFunction } from './functions';
 
-// ─── Loaded from .env (VITE_APIFY_API_KEY) — never hard-coded in source ──────
-const APIFY_API_KEY = import.meta.env.VITE_APIFY_API_KEY as string;
-const ACTOR_ID = 'apify~instagram-search-scraper';
-const BASE_URL = 'https://api.apify.com/v2';
+/**
+ * Instagram scraping.
+ *
+ * The APIFY_API_KEY lives ONLY in Supabase secrets. The browser never talks to
+ * api.apify.com directly — it calls two backend Edge Functions:
+ *   - `start-scrape` starts an Apify run and returns a runId
+ *   - `poll-scrape`  reports run status and returns the dataset when finished
+ * This module keeps the same public API (runApifyScrape / runFollowersScrape),
+ * progress messages, poll cadence, and Lead mapping as before; only the network
+ * calls changed from direct-Apify to backend proxies.
+ */
 
 /**
  * Exact input schema for apify~instagram-search-scraper:
@@ -58,9 +66,6 @@ function mapItem(item: Record<string, any>, campaignId: string): Lead | null {
 }
 
 // ─── Followers / Following scraper ───────────────────────────────────────────
-// Configurable via VITE_APIFY_FOLLOWERS_ACTOR_ID in .env — requires paid Apify plan
-const FOLLOWERS_ACTOR_ID = (import.meta.env.VITE_APIFY_FOLLOWERS_ACTOR_ID as string) || 'asIjo32NQuUHP4Fnc';
-
 export interface FollowersParams {
     usernames: string[];            // Instagram handles to scrape from
     type: 'followers' | 'following';
@@ -104,6 +109,41 @@ function mapFollowerItem(item: Record<string, any>, campaignId: string): Lead | 
     };
 }
 
+// ─── Shared polling loop (calls the poll-scrape backend proxy) ────────────────
+interface PollResult { status: string; items?: Record<string, any>[] }
+
+async function pollForItems(
+    runId: string,
+    maxPolls: number,
+    label: string,
+    onProgress?: (message: string) => void,
+): Promise<Record<string, any>[]> {
+    let poll = 0;
+    while (poll < maxPolls) {
+        await new Promise(r => setTimeout(r, 5000));
+        poll++;
+
+        let result: PollResult;
+        try {
+            result = await invokeFunction<PollResult>('poll-scrape', { runId });
+        } catch {
+            continue; // transient — keep polling
+        }
+
+        const status = result.status ?? 'RUNNING';
+        onProgress?.(`${poll * 5}s · ${status}`);
+
+        if (status === 'SUCCEEDED') {
+            onProgress?.('Fetching results…');
+            return result.items ?? [];
+        }
+        if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
+            throw new Error(`Apify run ${status.toLowerCase()} after ${poll * 5}s.`);
+        }
+    }
+    throw new Error(`${label} timed out after ${(maxPolls * 5) / 60} minutes.`);
+}
+
 export async function runFollowersScrape(
     params: FollowersParams,
     onProgress?: (message: string) => void,
@@ -112,79 +152,29 @@ export async function runFollowersScrape(
 
     onProgress?.('Connecting to Apify…');
 
-    const startRes = await fetch(
-        `${BASE_URL}/acts/${FOLLOWERS_ACTOR_ID}/runs?token=${APIFY_API_KEY}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username:        params.usernames,
-                type:            params.type,
-                maxItem:         params.maxItem,
-                profileEnriched: params.profileEnriched,
-            }),
-        }
-    );
-
-    if (!startRes.ok) {
-        const err = await startRes.json().catch(() => ({}));
-        throw new Error(`Apify error ${startRes.status}: ${JSON.stringify(err?.error?.message ?? err)}`);
-    }
-
-    const startData = await startRes.json();
-    const runId: string = startData?.data?.id;
-    if (!runId) throw new Error('No run ID returned — check API key.');
+    const { runId } = await invokeFunction<{ runId: string }>('start-scrape', {
+        mode: 'followers',
+        usernames: params.usernames,
+        type: params.type,
+        maxItem: params.maxItem,
+        profileEnriched: params.profileEnriched,
+    });
+    if (!runId) throw new Error('No run ID returned — check server configuration.');
 
     onProgress?.(`Run started (${runId.slice(0, 8)}…) — scraping ${params.type}…`);
 
-    const MAX_POLLS = 60;
-    let poll = 0;
-
-    while (poll < MAX_POLLS) {
-        await new Promise(r => setTimeout(r, 5000));
-        poll++;
-
-        let statusData: any;
-        try {
-            const res = await fetch(`${BASE_URL}/actor-runs/${runId}?token=${APIFY_API_KEY}`);
-            if (!res.ok) continue;
-            statusData = await res.json();
-        } catch { continue; }
-
-        const status: string = statusData?.data?.status ?? 'RUNNING';
-        onProgress?.(`${poll * 5}s · ${status}`);
-
-        if (status === 'SUCCEEDED') {
-            const datasetId = statusData?.data?.defaultDatasetId;
-            onProgress?.('Fetching results…');
-
-            const itemsRes = await fetch(
-                `${BASE_URL}/datasets/${datasetId}/items?token=${APIFY_API_KEY}&clean=true`
-            );
-            if (!itemsRes.ok) throw new Error(`Dataset fetch failed (${itemsRes.status})`);
-
-            const items: Record<string, any>[] = await itemsRes.json();
-            onProgress?.(`Mapping ${items.length} profiles…`);
-
-            const leads = items
-                .map(item => mapFollowerItem(item, campaignId))
-                .filter((l): l is Lead => l !== null);
-
-            onProgress?.(`Done — ${leads.length} profiles scraped.`);
-            return leads;
-        }
-
-        if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
-            throw new Error(`Apify run ${status.toLowerCase()} after ${poll * 5}s.`);
-        }
-    }
-
-    throw new Error('Scrape timed out after 5 minutes.');
+    const items = await pollForItems(runId, 60, 'Scrape', onProgress);
+    onProgress?.(`Mapping ${items.length} profiles…`);
+    const leads = items
+        .map(item => mapFollowerItem(item, campaignId))
+        .filter((l): l is Lead => l !== null);
+    onProgress?.(`Done — ${leads.length} profiles scraped.`);
+    return leads;
 }
 
 // ─── Keyword search scraper ───────────────────────────────────────────────────
 /**
- * Start an async Apify run, poll for completion, return mapped leads.
+ * Start an async Apify run (via backend), poll for completion, return mapped leads.
  * Polling interval: 5 s. Timeout: 4 min (48 polls).
  */
 export async function runApifyScrape(
@@ -192,86 +182,26 @@ export async function runApifyScrape(
     onProgress?: (message: string) => void,
 ): Promise<Lead[]> {
     const campaignId = crypto.randomUUID();
-
-    // Cap at actor's hard limit
     const searchLimit = Math.max(1, Math.min(250, params.searchLimit));
 
-    const actorInput = {
+    onProgress?.('Connecting to Apify…');
+
+    const { runId } = await invokeFunction<{ runId: string }>('start-scrape', {
+        mode: 'keyword',
         search: params.search,
         searchType: params.searchType,
         searchLimit,
         enhanceUserSearchWithFacebookPage: params.enhanceUserSearchWithFacebookPage,
-    };
-
-    onProgress?.('Connecting to Apify…');
-
-    // 1. Start async run
-    const startRes = await fetch(
-        `${BASE_URL}/acts/${ACTOR_ID}/runs?token=${APIFY_API_KEY}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(actorInput),
-        }
-    );
-
-    if (!startRes.ok) {
-        const err = await startRes.json().catch(() => ({}));
-        throw new Error(
-            `Apify error ${startRes.status}: ${JSON.stringify(err?.error?.message ?? err)}`
-        );
-    }
-
-    const startData = await startRes.json();
-    const runId: string = startData?.data?.id;
-    if (!runId) throw new Error('No run ID returned — check actor name or API key.');
+    });
+    if (!runId) throw new Error('No run ID returned — check server configuration.');
 
     onProgress?.(`Run started (${runId.slice(0, 8)}…) — scraping Instagram…`);
 
-    // 2. Poll for completion
-    const MAX_POLLS = 48; // 48 × 5 s = 4 min
-    let poll = 0;
-
-    while (poll < MAX_POLLS) {
-        await new Promise(r => setTimeout(r, 5000));
-        poll++;
-
-        let statusData: any;
-        try {
-            const res = await fetch(`${BASE_URL}/actor-runs/${runId}?token=${APIFY_API_KEY}`);
-            if (!res.ok) continue;
-            statusData = await res.json();
-        } catch {
-            continue; // transient network error — keep polling
-        }
-
-        const status: string = statusData?.data?.status ?? 'RUNNING';
-        onProgress?.(`${poll * 5}s elapsed · ${status}`);
-
-        if (status === 'SUCCEEDED') {
-            const datasetId: string = statusData?.data?.defaultDatasetId;
-            onProgress?.('Fetching results…');
-
-            const itemsRes = await fetch(
-                `${BASE_URL}/datasets/${datasetId}/items?token=${APIFY_API_KEY}&clean=true`
-            );
-            if (!itemsRes.ok) throw new Error(`Dataset fetch failed (${itemsRes.status})`);
-
-            const items: Record<string, any>[] = await itemsRes.json();
-            onProgress?.(`Mapping ${items.length} profiles…`);
-
-            const leads = items
-                .map(item => mapItem(item, campaignId))
-                .filter((l): l is Lead => l !== null);
-
-            onProgress?.(`Done — ${leads.length} profiles scraped.`);
-            return leads;
-        }
-
-        if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
-            throw new Error(`Apify run ${status.toLowerCase()} after ${poll * 5}s.`);
-        }
-    }
-
-    throw new Error('Scrape timed out after 4 minutes. Try a lower search limit.');
+    const items = await pollForItems(runId, 48, 'Scrape', onProgress);
+    onProgress?.(`Mapping ${items.length} profiles…`);
+    const leads = items
+        .map(item => mapItem(item, campaignId))
+        .filter((l): l is Lead => l !== null);
+    onProgress?.(`Done — ${leads.length} profiles scraped.`);
+    return leads;
 }
