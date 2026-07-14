@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { usePlan } from './contexts/PlanContext';
 import { isAdminEmail } from './lib/plans';
@@ -15,6 +15,7 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const DashboardShell = lazy(() => import('./pages/DashboardShell'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 // ─── Route guards ─────────────────────────────────────────────────────────────
 const AuthLoader: React.FC<{ label: string }> = ({ label }) => (
@@ -62,6 +63,32 @@ const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
+// The dashboard shell owns these top-level paths (it renders its own nested
+// <Routes> for each). Everything else is an unknown URL.
+const DASHBOARD_PATHS = [
+  '/dashboard', '/campaign', '/queue', '/follow-ups', '/calculator', '/settings', '/profile',
+];
+
+/**
+ * Catch-all element. Kept under a single `/*` route so the dashboard shell
+ * stays mounted (and keeps its in-memory state) across sidebar navigation.
+ * Known dashboard paths render the protected shell; any other URL renders a
+ * public 404 — so a stray link no longer loads the auth loader then dumps the
+ * user into the dashboard.
+ */
+const DashboardOrNotFound: React.FC = () => {
+  const { pathname } = useLocation();
+  const isDashboardPath = DASHBOARD_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+  if (!isDashboardPath) return <NotFound />;
+  return (
+    <ProtectedRoute>
+      <DashboardShell />
+    </ProtectedRoute>
+  );
+};
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 const App: React.FC = () => {
   return (
@@ -88,14 +115,10 @@ const App: React.FC = () => {
             </RequireAdmin>
           }
         />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <DashboardShell />
-            </ProtectedRoute>
-          }
-        />
+        {/* Everything else: known dashboard paths render the (single, persistent)
+            shell; any other URL renders a public 404 instead of being funneled
+            through the auth loader into the dashboard. */}
+        <Route path="/*" element={<DashboardOrNotFound />} />
       </Routes>
     </Suspense>
   );

@@ -4,10 +4,11 @@ import {
     Sparkles, Send, Trash2, Check, X, Edit3,
     Download, ChevronDown, Users, MessageSquare,
     CheckCircle, XCircle, Clock, Search, Filter, MessageCircle,
-    MessagesSquare, CalendarCheck,
+    MessagesSquare, CalendarCheck, Timer,
 } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
+import { storage } from '../../lib/storage';
 import { ReplyBattlecards } from './ReplyBattlecards';
 
 interface ApprovalQueueProps {
@@ -16,6 +17,8 @@ interface ApprovalQueueProps {
     onGenerateDMs: (leads?: Lead[]) => void;
     isGenerating: boolean;
     onDeleteLead?: (id: string) => void;
+    /** Bulk delete — one state update + one batched DB write */
+    onDeleteLeads?: (ids: string[]) => void;
     onLeadsSent?: (ids: string[]) => void;
     onApproveLead?: (id: string) => void;
     /** Bulk approve — one state update + one batched DB write */
@@ -26,7 +29,6 @@ interface ApprovalQueueProps {
 }
 
 type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
-type CampaignMode = 'test' | 'production';
 
 function formatFollowers(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -74,6 +76,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     onGenerateDMs,
     isGenerating,
     onDeleteLead,
+    onDeleteLeads,
     onLeadsSent,
     onApproveLead,
     onApproveLeads,
@@ -82,7 +85,9 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     onUpdateLead,
 }) => {
     const toast = useToast();
-    const [campaignMode, setCampaignMode] = useState<CampaignMode>('test');
+    const initialDelay = storage.getDmDelay();
+    const [minDelay, setMinDelay] = useState<number>(initialDelay.min);
+    const [maxDelay, setMaxDelay] = useState<number>(initialDelay.max);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [battlecardsFor, setBattlecardsFor] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -91,10 +96,18 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     const [search, setSearch] = useState('');
     const [campaignFilter, setCampaignFilter] = useState<string>('all');
     const [applySettingsFilter, setApplySettingsFilter] = useState(false);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
 
+    // Campaigns as {id, name} — name from the leads' campaignName, fallback to a short id.
     const campaigns = useMemo(() => {
-        const ids = [...new Set(leads.map(l => l.campaignId).filter(Boolean))];
-        return ids as string[];
+        const byId = new Map<string, string>();
+        for (const l of leads) {
+            if (!l.campaignId) continue;
+            if (!byId.has(l.campaignId)) {
+                byId.set(l.campaignId, l.campaignName?.trim() || `Campaign ${l.campaignId.slice(0, 6)}`);
+            }
+        }
+        return [...byId.entries()].map(([id, name]) => ({ id, name }));
     }, [leads]);
 
     const filtered = useMemo(() => {
@@ -131,21 +144,60 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
     const cancelEdit = () => setEditingId(null);
 
+    // Normalize + persist the delay range whenever an input changes.
+    const commitDelay = (min: number, max: number) => {
+        const safeMin = Math.max(1, Math.floor(min) || 1);
+        const safeMax = Math.max(safeMin, Math.floor(max) || safeMin);
+        setMinDelay(safeMin);
+        setMaxDelay(safeMax);
+        storage.setDmDelay({ min: safeMin, max: safeMax });
+    };
+
     const handleSendToExtension = () => {
         const approved = leads.filter(l => l.approved && l.dmContent);
         if (approved.length === 0) {
             toast.error('No approved DMs to send. Approve some leads first.');
             return;
         }
+        const safeMin = Math.max(1, Math.floor(minDelay) || 1);
+        const safeMax = Math.max(safeMin, Math.floor(maxDelay) || safeMin);
         window.postMessage({
             type: 'MAGNET_ENGINE_CAMPAIGN',
             payload: {
                 leads: approved.map(l => ({ handle: l.handle, message: l.dmContent })),
-                mode: campaignMode,
+                minDelay: safeMin,
+                maxDelay: safeMax,
             },
         }, '*');
         onLeadsSent?.(approved.map(l => l.id));
-        toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent to extension in ${campaignMode} mode.`);
+        toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent — DMs will drip every ${safeMin}–${safeMax} min.`);
+    };
+
+    // ── Bulk selection ────────────────────────────────────────────────────────
+    const toggleSelect = (id: string) => setSelected(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    const allFilteredSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id));
+
+    const toggleSelectAll = () => setSelected(prev => {
+        if (allFilteredSelected) {
+            const next = new Set(prev);
+            filtered.forEach(l => next.delete(l.id));
+            return next;
+        }
+        return new Set([...prev, ...filtered.map(l => l.id)]);
+    });
+
+    const handleDeleteSelected = () => {
+        const ids = filtered.filter(l => selected.has(l.id)).map(l => l.id);
+        if (ids.length === 0) return;
+        if (!window.confirm(`Delete ${ids.length} selected lead${ids.length !== 1 ? 's' : ''} from the queue? This cannot be undone.`)) return;
+        if (onDeleteLeads) onDeleteLeads(ids);
+        else ids.forEach(id => onDeleteLead?.(id));
+        setSelected(new Set());
     };
 
     const handleGenerateForPending = () => {
@@ -219,6 +271,17 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     </button>
                 )}
 
+                {/* Delete selected */}
+                {selected.size > 0 && (
+                    <button
+                        onClick={handleDeleteSelected}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 font-medium rounded-xl transition-all text-sm"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        Delete selected ({selected.size})
+                    </button>
+                )}
+
                 {/* Send to Extension */}
                 <button
                     onClick={handleSendToExtension}
@@ -228,21 +291,28 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     Send Approved to Extension
                 </button>
 
-                {/* Mode Toggle */}
+                {/* DM drip delay — random wait (minutes) between each DM */}
                 <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
-                    <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Mode:</span>
-                    <button
-                        onClick={() => setCampaignMode('test')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'test' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
-                    >
-                        ⚡ Test
-                    </button>
-                    <button
-                        onClick={() => setCampaignMode('production')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${campaignMode === 'production' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-600 hover:text-zinc-400'}`}
-                    >
-                        🛡️ Production
-                    </button>
+                    <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Delay</span>
+                    <input
+                        type="number"
+                        min={1}
+                        value={minDelay}
+                        onChange={e => commitDelay(Number(e.target.value), maxDelay)}
+                        title="Minimum minutes between DMs"
+                        className="w-12 bg-[#030604] border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    />
+                    <span className="text-xs text-zinc-600">–</span>
+                    <input
+                        type="number"
+                        min={1}
+                        value={maxDelay}
+                        onChange={e => commitDelay(minDelay, Number(e.target.value))}
+                        title="Maximum minutes between DMs"
+                        className="w-12 bg-[#030604] border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    />
+                    <span className="text-[10px] text-zinc-600">min</span>
                 </div>
             </div>
 
@@ -289,11 +359,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     <select
                         value={campaignFilter}
                         onChange={e => setCampaignFilter(e.target.value)}
-                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all"
+                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all max-w-[200px]"
                     >
                         <option value="all">All campaigns</option>
-                        {campaigns.map(id => (
-                            <option key={id} value={id}>{id.slice(0, 20)}…</option>
+                        {campaigns.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                     </select>
                 )}
@@ -331,6 +401,15 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     <table className="w-full text-left text-sm">
                         <thead className="border-b border-white/5">
                             <tr>
+                                <th className="pl-5 pr-2 py-3.5 w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={allFilteredSelected}
+                                        onChange={toggleSelectAll}
+                                        title="Select all"
+                                        className="w-4 h-4 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
+                                    />
+                                </th>
                                 <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Prospect</th>
                                 <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]">Profile</th>
                                 <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]">AI Generated DM</th>
@@ -349,7 +428,16 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                                 return (
                                     <React.Fragment key={lead.id}>
-                                    <tr className={`transition-colors hover:bg-white/[0.02] ${rowClass}`}>
+                                    <tr className={`transition-colors hover:bg-white/[0.02] ${selected.has(lead.id) ? 'bg-emerald-500/[0.06]' : rowClass}`}>
+                                        {/* Select */}
+                                        <td className="pl-5 pr-2 py-4 align-top">
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.has(lead.id)}
+                                                onChange={() => toggleSelect(lead.id)}
+                                                className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
+                                            />
+                                        </td>
                                         {/* Prospect */}
                                         <td className="px-5 py-4">
                                             <div className="flex items-center gap-3">
@@ -373,6 +461,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                             <span className="bg-amber-500/10 text-amber-500 px-1 py-0.5 rounded">Biz</span>
                                                         )}
                                                     </div>
+                                                    {lead.campaignName && (
+                                                        <div className="mt-1 inline-flex items-center gap-1 text-[9px] text-violet-300/80 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded-full max-w-[140px] truncate">
+                                                            {lead.campaignName}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -550,7 +643,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                     </tr>
                                     {battlecardsFor === lead.id && lead.replied && (
                                         <tr>
-                                            <td colSpan={5} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
+                                            <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
                                                 <ReplyBattlecards
                                                     lead={lead}
                                                     calendarLink={config.calendarLink}
@@ -565,7 +658,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center">
+                                    <td colSpan={6} className="px-6 py-12 text-center">
                                         <div className="flex flex-col items-center gap-3 text-zinc-600">
                                             <Users className="w-8 h-8 opacity-30" />
                                             <p className="text-sm">

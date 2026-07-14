@@ -55,6 +55,9 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
     // ── Tab ──────────────────────────────────────────────────────
     const [tab, setTab] = useState<'search' | 'followers' | 'import'>('search');
 
+    // ── Campaign name (attached to every lead from this scrape for tracking) ─
+    const [campaignName, setCampaignName] = useState('');
+
     // ── Keyword search inputs ────────────────────────────────────
     const [searchType, setSearchType]   = useState<SearchParams['searchType']>('user');
     const [searchRaw, setSearchRaw]     = useState('');
@@ -186,17 +189,22 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         );
 
     const handleAddToQueue = () => {
-        const toAdd = selected.size > 0
+        const picked = selected.size > 0
             ? results.filter(l => selected.has(l.id))
             : [...results]; // if nothing explicitly selected, add all
 
-        if (toAdd.length === 0) {
+        if (picked.length === 0) {
             showToast('No leads to add. Run a search first.', false);
             return;
         }
 
+        // Default a name if the user left it blank, so campaigns stay trackable.
+        const name = campaignName.trim()
+            || `${searchRaw.split(',')[0]?.trim() || fUsername.split(',')[0]?.trim() || 'Campaign'} · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        const toAdd = picked.map(l => ({ ...l, campaignName: name }));
+
         onLeadsScraped(toAdd);
-        showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to Approval Queue ✓`);
+        showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to "${name}" ✓`);
         setResults([]);
         setSelected(new Set());
         setScrapeProgress(0);
@@ -230,6 +238,23 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     Import CSV
                 </button>
             </div>
+
+            {/* ── Campaign name ──────────────────────────────────────── */}
+            {tab !== 'import' && (
+                <div>
+                    <label className="block text-xs text-zinc-500 mb-1.5 font-medium">
+                        Campaign name
+                        <span className="ml-2 text-zinc-700 font-normal">so you can track this batch later — optional</span>
+                    </label>
+                    <input
+                        type="text"
+                        value={campaignName}
+                        onChange={e => setCampaignName(e.target.value)}
+                        placeholder="e.g. Miami coaches — Jan"
+                        className="w-full max-w-md bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                    />
+                </div>
+            )}
 
             {/* ── Toast ──────────────────────────────────────────────── */}
             {toast && (

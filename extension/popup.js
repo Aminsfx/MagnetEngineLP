@@ -42,7 +42,8 @@ function render(d) {
         dailyResetDate,
         currentTask    = null,
         nextAlarmTime  = null,
-        campaignMode   = 'test',
+        minDelay       = 3,
+        maxDelay       = 8,
         failedCount    = 0,
         originalTotal  = 0,
     } = d;
@@ -65,8 +66,7 @@ function render(d) {
     document.getElementById('statToday').textContent  = todayCnt;
     document.getElementById('statLeft').textContent   = left;
     document.getElementById('statFailed').textContent = failedCount;
-    document.getElementById('modeLabel').textContent  =
-        campaignMode === 'production' ? 'Production ⚡' : 'Test 🔧';
+    document.getElementById('modeLabel').textContent  = `Delay: ${minDelay}–${maxDelay} min`;
 
     const leadEl = document.getElementById('activeLead');
     if (isExecuting && currentTask) {

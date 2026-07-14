@@ -5,7 +5,12 @@ const STORAGE_KEYS = {
     LEADS: 'magnetengine_leads',
     CONFIG: 'magnetengine_config',
     DAILY_SENDS: 'magnetengine_daily_sends',
+    DM_DELAY: 'magnetengine_dm_delay',
 };
+
+/** Random delay (in minutes) the extension waits between each DM. */
+export interface DmDelay { min: number; max: number }
+const DEFAULT_DM_DELAY: DmDelay = { min: 3, max: 8 };
 
 // Simple obfuscation (NOT encryption — just prevents casual inspection)
 function obfuscate(text: string): string {
@@ -102,10 +107,32 @@ export const storage = {
         return updated.count;
     },
 
+    // DM drip delay (minutes) — chosen in the Approval Queue send bar, reused by
+    // the follow-up dispatcher, and sent to the extension per campaign.
+    getDmDelay(): DmDelay {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.DM_DELAY);
+            if (!stored) return { ...DEFAULT_DM_DELAY };
+            const parsed = JSON.parse(stored) as Partial<DmDelay>;
+            let min = Number(parsed.min);
+            let max = Number(parsed.max);
+            if (!Number.isFinite(min) || min < 1) min = DEFAULT_DM_DELAY.min;
+            if (!Number.isFinite(max) || max < min) max = Math.max(min, DEFAULT_DM_DELAY.max);
+            return { min, max };
+        } catch {
+            return { ...DEFAULT_DM_DELAY };
+        }
+    },
+
+    setDmDelay(delay: DmDelay): void {
+        localStorage.setItem(STORAGE_KEYS.DM_DELAY, JSON.stringify(delay));
+    },
+
     clearAll(): void {
         localStorage.removeItem(STORAGE_KEYS.API_KEYS);
         localStorage.removeItem(STORAGE_KEYS.LEADS);
         localStorage.removeItem(STORAGE_KEYS.CONFIG);
         localStorage.removeItem(STORAGE_KEYS.DAILY_SENDS);
+        localStorage.removeItem(STORAGE_KEYS.DM_DELAY);
     },
 };

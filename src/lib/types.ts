@@ -29,6 +29,7 @@ export interface Lead {
     followUp3Date?: string; // ISO date string
     dealValue?: number;
     campaignId?: string;
+    campaignName?: string;
 }
 
 // Application state

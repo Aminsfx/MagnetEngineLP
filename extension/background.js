@@ -1,9 +1,9 @@
 // MagnetEngine — Background Service Worker v2
 
-const DAILY_CAP            = 25;
-const PRODUCTION_DELAY_MIN = 15;
-const PRODUCTION_DELAY_MAX = 45;
-const TEST_DELAY           = 0.3;
+const DAILY_CAP        = 25;
+// Fallback delay range (minutes) if the web app didn't send one.
+const DEFAULT_MIN_DELAY = 3;
+const DEFAULT_MAX_DELAY = 8;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
@@ -15,10 +15,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 return;
             }
             const leads = request.payload.leads;
+            // User-chosen random delay range (minutes) between each DM.
+            const minDelay = Number(request.payload.minDelay) || DEFAULT_MIN_DELAY;
+            const maxDelay = Math.max(minDelay, Number(request.payload.maxDelay) || DEFAULT_MAX_DELAY);
             chrome.storage.local.set({
                 campaignQueue: leads,
                 originalTotal: leads.length,
-                campaignMode:  request.payload.mode || 'test',
+                minDelay:      minDelay,
+                maxDelay:      maxDelay,
                 isExecuting:   false,
                 isPaused:      false,
                 failedCount:   0,
@@ -32,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Task completed by content script ──────────────────────────
     if (request.action === 'TASK_COMPLETE') {
-        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'campaignMode', 'isPaused'], (result) => {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'isPaused'], (result) => {
             const today = new Date().toDateString();
             let count = result.dailySentCount || 0;
             if (result.dailyResetDate !== today) count = 0;
@@ -50,10 +54,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }, () => {
                 if (count >= DAILY_CAP || result.isPaused) return;
 
-                const mode         = result.campaignMode || 'test';
-                const delayMinutes = mode === 'production'
-                    ? PRODUCTION_DELAY_MIN + Math.random() * (PRODUCTION_DELAY_MAX - PRODUCTION_DELAY_MIN)
-                    : TEST_DELAY;
+                // Random wait within the user-chosen min–max range (minutes).
+                const min = Number(result.minDelay) || DEFAULT_MIN_DELAY;
+                const max = Math.max(min, Number(result.maxDelay) || DEFAULT_MAX_DELAY);
+                const delayMinutes = min + Math.random() * (max - min);
 
                 const nextAlarmTime = Date.now() + delayMinutes * 60 * 1000;
                 chrome.storage.local.set({ nextAlarmTime }, () => {

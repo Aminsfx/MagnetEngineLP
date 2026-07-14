@@ -165,9 +165,26 @@ const DashboardShell: React.FC = () => {
   }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast]);
 
   const handleDeleteLead = useCallback(async (id: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeads((prev) => {
+      const next = prev.filter((l) => l.id !== id);
+      if (!user) storage.setLeads(next); // dev/localStorage: db.deleteLead no-ops
+      return next;
+    });
     if (user) await db.deleteLead(id);
   }, [user]);
+
+  /** Bulk delete — one state update + one batched DB write */
+  const handleDeleteLeads = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setLeads((prev) => {
+      const next = prev.filter((l) => !idSet.has(l.id));
+      if (!user) storage.setLeads(next); // dev/localStorage: db.deleteLeads no-ops
+      return next;
+    });
+    if (user) await db.deleteLeads(ids);
+    toast.success(`${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted from the queue`);
+  }, [user, toast]);
 
   const handleUpdateLead = useCallback(async (updated: Lead) => {
     let oldLead: Lead | undefined;
@@ -236,11 +253,13 @@ const DashboardShell: React.FC = () => {
     }
     if (allowed.length === 0) return 0;
 
+    const delay = storage.getDmDelay();
     window.postMessage({
       type: 'MAGNET_ENGINE_CAMPAIGN',
       payload: {
         leads: allowed.map((d) => ({ handle: d.lead.handle, message: d.message })),
-        mode: limits.isTestModeOnly ? 'test' : 'production',
+        minDelay: delay.min,
+        maxDelay: delay.max,
       },
     }, '*');
 
@@ -254,7 +273,7 @@ const DashboardShell: React.FC = () => {
     setDailySendCount(newCount);
     toast.success(`${allowed.length} follow-up${allowed.length !== 1 ? 's' : ''} sent to extension.`);
     return allowed.length;
-  }, [user, config.dailySendCap, limits.isTestModeOnly, toast]);
+  }, [user, config.dailySendCap, toast]);
 
   /** Bulk-approve: one state update + one batched DB write */
   const handleApproveLeads = useCallback(async (ids: string[]) => {
@@ -515,6 +534,7 @@ const DashboardShell: React.FC = () => {
                     onGenerateDMs={handleGenerateDMs}
                     isGenerating={isGenerating}
                     onDeleteLead={handleDeleteLead}
+                    onDeleteLeads={handleDeleteLeads}
                     onLeadsSent={handleLeadsSent}
                     onApproveLead={handleApproveLead}
                     onApproveLeads={handleApproveLeads}
