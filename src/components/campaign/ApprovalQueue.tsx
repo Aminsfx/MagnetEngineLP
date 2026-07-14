@@ -167,6 +167,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 leads: approved.map(l => ({ handle: l.handle, message: l.dmContent })),
                 minDelay: safeMin,
                 maxDelay: safeMax,
+                dailyCap: config.dailySendCap ?? 40,
             },
         }, '*');
         onLeadsSent?.(approved.map(l => l.id));

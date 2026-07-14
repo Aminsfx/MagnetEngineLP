@@ -15,6 +15,8 @@ interface SettingsPanelProps {
 type WizardStep = 1 | 2 | 3 | 4;
 
 interface WizardData {
+    founderName: string;
+    founderRole: string;
     businessName: string;
     businessNiche: string;
     targetAudience: string;
@@ -30,32 +32,106 @@ const TONE_OPTIONS: { value: WizardData['dmTone']; label: string; description: s
     { value: 'bold', label: '⚡ Bold', description: 'Confident and punchy — grabs attention immediately' },
 ];
 
-function generateSystemPrompt(data: WizardData): string {
-    const toneMap = {
-        casual: 'casual and conversational, like a friend texting',
-        friendly: 'friendly and warm, personable yet professional',
-        professional: 'polished and professional, concise and to the point',
-        bold: 'confident and bold, direct and attention-grabbing',
-    };
+// Detailed, voice-specific instructions injected into the system prompt.
+const TONE_LIBRARY: Record<WizardData['dmTone'], string> = {
+    casual: `Write like you're texting a friend at 11pm after three coffees.
+- Start sentences with "So," "Wait," "Actually"
+- Use "idk," "tbh," "ngl," "lol" naturally
+- Sentence fragments are fine
+- "haha" at the end of self-deprecating observations
+- Imperfect grammar is okay if it sounds natural`,
+    friendly: `Warm and approachable. Like you met them at a conference and genuinely want to know more.
+- Use their name naturally
+- Show enthusiasm without exclamation point spam
+- "That's really cool" beats "That's impressive"
+- Ask follow-up questions that show you listened`,
+    professional: `Direct and respectful. No fluff, but not stiff.
+- Get to the point in 5 words
+- "What's your current process?" beats "I would love to learn about your workflow"
+- Assume competence, offer insight
+- One piece of jargon max — only if they use it first`,
+    bold: `Confident, slightly provocative. Challenge their assumption gently.
+- "Most people do X, but you're doing Y — what's the story?"
+- Point out the gap: "Everyone says they do this, but few actually do"
+- Make them want to correct you or prove you wrong
+- Not arrogant — curious with an edge`,
+};
 
-    return [
-        `You are writing cold DMs for ${data.businessName || 'our business'} targeting ${data.targetAudience || 'potential clients'} in the ${data.businessNiche || 'online'} space.`,
-        '',
-        `VALUE PROPOSITION: ${data.valueProposition || 'We help businesses grow through intelligent automation.'}`,
-        '',
-        `TONE: Write in a ${toneMap[data.dmTone]} tone.`,
-        '',
-        data.exampleDM
-            ? `EXAMPLE OF A GREAT DM (match this style):\n"${data.exampleDM}"`
-            : '',
-        '',
-        'RULES:',
-        '- 2-3 sentences max. Short and punchy.',
-        '- Reference something specific from their profile (bio, niche, following).',
-        '- End with a soft question or curiosity-hook, NOT a hard pitch.',
-        '- Sound like a real human typed it. No corporate jargon.',
-        '- Output ONLY the raw DM text. No quotes, no labels, no markdown.',
-    ].filter(Boolean).join('\n');
+/**
+ * Builds the DM-generation system prompt (the "universal" high-reply prompt):
+ * personal identity + tone library + the specific recipe that keeps DMs
+ * peer-to-peer instead of salesy. Sent to Claude as the `system` parameter.
+ */
+function generateSystemPrompt(data: WizardData): string {
+    const tone = TONE_LIBRARY[data.dmTone] ?? TONE_LIBRARY.casual;
+    const businessName = data.businessName.trim() || 'our business';
+    const founderName = data.founderName.trim() || businessName;
+    const founderRole = data.founderRole.trim() || 'founder';
+    const audience = data.targetAudience.trim() || 'potential clients';
+    const outcome = data.valueProposition.trim() || 'grow their business';
+    const niche = data.businessNiche.trim() || 'their space';
+
+    const exampleSection = data.exampleDM.trim()
+        ? `## EXAMPLE DM FOR THIS CAMPAIGN\n\n${data.exampleDM.trim()}\n\n`
+        : '';
+
+    return `You are ${founderName}, ${founderRole} at ${businessName}.
+
+You help ${audience} achieve ${outcome}.
+
+You send Instagram DMs to people whose profiles you actually looked at. You write like a real person texting a peer — not a marketer, not a bot, not a LinkedIn influencer.
+
+## YOUR VOICE
+
+${tone}
+
+## WHAT MAKES YOUR DMs WORK
+
+1. FIRST SENTENCE: Specific observation about THEIR world
+   - Reference their bio, niche, follower count, location, or recent content
+   - Show you did homework — not "love your content," but "saw you just hit 10k, what's working?"
+   - Connect their world to yours without mentioning your product
+
+2. SECOND SENTENCE: Question about THEIR process or pain
+   - Ask how they find clients, fill their calendar, or handle outreach
+   - Assume they have a manual or broken process
+   - Make it easy to answer in 5 words or less
+
+3. NEVER IN THE FIRST DM:
+   - Your product name: "${businessName}"
+   - "I help," "I specialize," "We offer," "Our company"
+   - "Quick question," "Just wanted to," "Would love to"
+   - Links, calls to action, demo requests
+   - "Leverage," "synergies," "optimize," "strategize," "solutions"
+   - Perfect parallel structure or corporate speak
+
+4. SOUND LIKE:
+   - A peer who does the same work
+   - Someone who scrolled their profile at 11pm
+   - A human who occasionally says "wait," "so," "actually," "idk," "tbh," "ngl," "lol"
+
+${exampleSection}## BAD EXAMPLES (NEVER WRITE LIKE THIS)
+
+"Hey [name], I help ${audience} get ${outcome}. Want to hop on a quick call?"
+
+"Hi there! Love your content. I specialize in ${niche}. Would you be interested in learning more?"
+
+"Hello! I noticed you're in ${niche}. I offer ${outcome}. Let's connect!"
+
+"Quick question — are you looking for help with ${niche}? I have a proven system. DM me back!"
+
+## THE RECIPE
+
+For every lead:
+1. READ their bio. What's the ONE thing that stands out?
+2. ASK: What do they sell? Who do they sell to? How do they find clients?
+3. CONNECT: How does their world touch yours without mentioning your product?
+4. QUESTION: What's a short question about their process they'd actually answer?
+5. CHECK: Does this sound like a peer, or a pitch?
+
+## OUTPUT
+
+Just the DM text. No quotes. No labels. No preamble. Raw text only.`;
 }
 
 const STEP_LABELS = ['Business', 'Value Prop', 'Tone & Style', 'Review'];
@@ -136,6 +212,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         config.onboardingComplete ? 4 : 1
     );
     const [wizard, setWizard] = useState<WizardData>({
+        founderName: config.founderName ?? '',
+        founderRole: config.founderRole ?? '',
         businessName: config.businessName ?? '',
         businessNiche: config.businessNiche ?? '',
         targetAudience: config.targetAudience ?? '',
@@ -149,6 +227,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
     const handleApplyPreset = (preset: NichePreset) => {
         const p = preset.config;
         const newWizard: WizardData = {
+            founderName: wizard.founderName,   // keep the user's own identity
+            founderRole: wizard.founderRole,
             businessName: wizard.businessName, // keep user's own business name
             businessNiche: p.businessNiche ?? wizard.businessNiche,
             targetAudience: p.targetAudience ?? wizard.targetAudience,
@@ -158,10 +238,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         };
         setWizard(newWizard);
 
-        // Also apply filter + system prompt immediately to config
+        // Regenerate the system prompt from the merged wizard data so presets
+        // benefit from the universal high-reply prompt too.
         const updatedConfig: AppConfig = {
             ...config,
-            systemPrompt: p.systemPrompt ?? config.systemPrompt,
+            systemPrompt: generateSystemPrompt(newWizard),
             businessNiche: newWizard.businessNiche,
             targetAudience: newWizard.targetAudience,
             valueProposition: newWizard.valueProposition,
@@ -182,6 +263,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         const updated: AppConfig = {
             ...config,
             systemPrompt: prompt,
+            founderName: wizard.founderName,
+            founderRole: wizard.founderRole,
             businessName: wizard.businessName,
             businessNiche: wizard.businessNiche,
             targetAudience: wizard.targetAudience,
@@ -263,6 +346,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                     {wizardStep === 1 && (
                         <div className="space-y-4">
                             <h4 className="text-sm font-medium text-white mb-4">Tell us about your business</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-zinc-500 mb-1.5">Your Name</label>
+                                    <input
+                                        type="text"
+                                        value={wizard.founderName}
+                                        onChange={e => updateWizard({ founderName: e.target.value })}
+                                        placeholder="e.g. Marcus"
+                                        className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                    />
+                                    <p className="text-[10px] text-zinc-700 mt-1">The DMs are written as if from you.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-500 mb-1.5">Your Role</label>
+                                    <input
+                                        type="text"
+                                        value={wizard.founderRole}
+                                        onChange={e => updateWizard({ founderRole: e.target.value })}
+                                        placeholder="e.g. founder, coach, consultant"
+                                        className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                    />
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-xs text-zinc-500 mb-1.5">Business / Agency Name</label>
                                 <input

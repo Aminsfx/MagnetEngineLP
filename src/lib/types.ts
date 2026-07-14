@@ -53,10 +53,12 @@ export interface AppConfig {
     apifyTargetKeywords?: string[];
     apifyMaxProfiles?: number;
     // AI Onboarding Wizard
+    founderName?: string;      // who the DM is "from" (e.g. Marcus)
+    founderRole?: string;      // e.g. founder, consultant, coach
     businessName?: string;
     businessNiche?: string;
     targetAudience?: string;
-    valueProposition?: string;
+    valueProposition?: string; // maps to the "core outcome" you deliver
     exampleDM?: string;
     dmTone?: 'casual' | 'professional' | 'friendly' | 'bold';
     // Booking/Calendly link inserted into reply battlecards

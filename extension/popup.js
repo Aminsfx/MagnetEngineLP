@@ -44,6 +44,7 @@ function render(d) {
         nextAlarmTime  = null,
         minDelay       = 3,
         maxDelay       = 8,
+        dailyCap       = 40,
         failedCount    = 0,
         originalTotal  = 0,
     } = d;
@@ -63,10 +64,10 @@ function render(d) {
     document.getElementById('sentNum').textContent    = sent;
     document.getElementById('totalNum').textContent   = total;
     document.getElementById('bar').style.width        = pct + '%';
-    document.getElementById('statToday').textContent  = todayCnt;
+    document.getElementById('statToday').textContent  = `${todayCnt}/${dailyCap}`;
     document.getElementById('statLeft').textContent   = left;
     document.getElementById('statFailed').textContent = failedCount;
-    document.getElementById('modeLabel').textContent  = `Delay: ${minDelay}–${maxDelay} min`;
+    document.getElementById('modeLabel').textContent  = `Delay: ${minDelay}–${maxDelay} min · Cap ${dailyCap}/day`;
 
     const leadEl = document.getElementById('activeLead');
     if (isExecuting && currentTask) {
