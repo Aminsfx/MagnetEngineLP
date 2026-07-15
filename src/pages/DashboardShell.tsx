@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { MetricsGrid } from '../components/dashboard/MetricsGrid';
@@ -129,7 +129,15 @@ const DashboardShell: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [dailySendCount, setDailySendCount] = useState(0);
+  // Real per-day sent count reported by the extension (source of truth for what
+  // actually went out), vs the app's optimistic handoff count.
+  const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
   const [dmUsed, setDmUsed] = useState(0);
+
+  // Live mirror of leads so the extension bridge can reconcile without
+  // re-subscribing on every leads change.
+  const leadsRef = useRef<Lead[]>([]);
+  useEffect(() => { leadsRef.current = leads; }, [leads]);
   const [headerAvatar, setHeaderAvatar] = useState<string | null>(() =>
     user ? localStorage.getItem(`avatar_${user.id}`) : null
   );
@@ -163,6 +171,57 @@ const DashboardShell: React.FC = () => {
     setFilteredLeads(filtered);
     setStats(filterUtils.calculateStats(leads));
   }, [leads, config]);
+
+  // Mark leads as sent for real, based on the handles the extension confirms
+  // it actually sent (idempotent — only flips leads not already sent).
+  const markSentByHandles = useCallback((handles: string[]) => {
+    const wanted = new Set(
+      handles.map((h) => String(h).toLowerCase().replace(/^@/, '')).filter(Boolean),
+    );
+    if (wanted.size === 0) return;
+    const changed = leadsRef.current.filter(
+      (l) => !l.dmSent && wanted.has(l.handle.toLowerCase()),
+    );
+    if (changed.length === 0) return;
+    const now = new Date().toISOString();
+    const updated = changed.map((l) => ({ ...l, dmSent: true, dmDate: l.dmDate ?? now }));
+    const byId = new Map(updated.map((l) => [l.id, l]));
+    setLeads((prev) => {
+      const next = prev.map((l) => byId.get(l.id) ?? l);
+      if (!user) storage.setLeads(next);
+      return next;
+    });
+    if (user) db.upsertLeads(updated, user.id).catch(console.error);
+  }, [user]);
+
+  // ─── Extension bridge ───────────────────────────────────────────────────────
+  // The extension reports what it ACTUALLY sent (real daily count + sent log),
+  // so the header and per-lead "sent" reflect reality, not handoffs.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || typeof d.type !== 'string') return;
+
+      if (d.type === 'MAGNET_ENGINE_STATS') {
+        setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
+        markSentByHandles((d.sentLog ?? []).map((x: { handle?: string }) => x.handle ?? ''));
+      } else if (d.type === 'MAGNET_ENGINE_SENT') {
+        setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
+        if (d.handle) markSentByHandles([d.handle]);
+      }
+    };
+    window.addEventListener('message', onMessage);
+
+    const requestStats = () => window.postMessage({ type: 'MAGNET_ENGINE_GET_STATS' }, '*');
+    requestStats();                                   // on mount
+    window.addEventListener('focus', requestStats);   // and when the tab refocuses
+
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('focus', requestStats);
+    };
+  }, [markSentByHandles]);
 
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
@@ -240,64 +299,22 @@ const DashboardShell: React.FC = () => {
     if (user) await db.upsertLead(updated, user.id);
   }, [user, config]);
 
-  const handleLeadsSent = useCallback(async (ids: string[]) => {
-    const cap = config.dailySendCap ?? 40;
-    const current = storage.getDailySends().count;
-    const remaining = cap - current;
+  // Handoff to the extension is done by ApprovalQueue; a lead is marked "sent"
+  // for real only when the extension confirms it (see the extension bridge), so
+  // capped/skipped DMs no longer count as sent. Nothing to do optimistically.
+  const handleLeadsSent = useCallback(async (_ids: string[]) => {}, []);
 
-    if (remaining <= 0) {
-      toast.error(`Daily send limit reached (${cap} DMs/day). Resets at midnight.`);
-      return;
-    }
-
-    const allowed = ids.slice(0, remaining);
-    if (allowed.length < ids.length) {
-      toast.info(`Daily cap almost reached — sending ${allowed.length} of ${ids.length} DMs. Resets at midnight.`);
-    }
-
-    const updatedLeads: Lead[] = [];
-    setLeads((prev) => {
-      const next = prev.map((l) => {
-        if (allowed.includes(l.id)) {
-          const updated = { ...l, dmSent: true };
-          updatedLeads.push(updated);
-          return updated;
-        }
-        return l;
-      });
-      return next;
-    });
-
-    const newCount = storage.incrementDailySends(allowed.length);
-    setDailySendCount(newCount);
-
-    if (user && updatedLeads.length > 0) {
-      await db.upsertLeads(updatedLeads, user.id);
-    }
-  }, [user, config.dailySendCap, toast]);
-
-  /** Dispatch due follow-ups to the extension via the same channel as initial DMs */
+  /** Dispatch due follow-ups to the extension via the same channel as initial DMs.
+   *  The extension enforces the daily cap on actual sends; here we just hand off
+   *  and stamp the step so the sequencer can schedule the next touch. */
   const handleFollowUpsSent = useCallback(async (due: DueFollowUp[]): Promise<number> => {
-    const cap = config.dailySendCap ?? 40;
-    const current = storage.getDailySends().count;
-    const remaining = cap - current;
-
-    if (remaining <= 0) {
-      toast.error(`Daily send limit reached (${cap} DMs/day). Resets at midnight.`);
-      return 0;
-    }
-
-    const allowed = due.slice(0, remaining);
-    if (allowed.length < due.length) {
-      toast.info(`Daily cap almost reached — sending ${allowed.length} of ${due.length} follow-ups.`);
-    }
-    if (allowed.length === 0) return 0;
+    if (due.length === 0) return 0;
 
     const delay = storage.getDmDelay();
     window.postMessage({
       type: 'MAGNET_ENGINE_CAMPAIGN',
       payload: {
-        leads: allowed.map((d) => ({ handle: d.lead.handle, message: d.message })),
+        leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
         minDelay: delay.min,
         maxDelay: delay.max,
         dailyCap: config.dailySendCap ?? 40,
@@ -305,15 +322,13 @@ const DashboardShell: React.FC = () => {
     }, '*');
 
     const sentAt = new Date().toISOString();
-    const batch = allowed.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
+    const batch = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
     const batchById = new Map(batch.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => batchById.get(l.id) ?? l));
     if (user) await db.upsertLeads(batch, user.id);
 
-    const newCount = storage.incrementDailySends(allowed.length);
-    setDailySendCount(newCount);
-    toast.success(`${allowed.length} follow-up${allowed.length !== 1 ? 's' : ''} sent to extension.`);
-    return allowed.length;
+    toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
+    return due.length;
   }, [user, config.dailySendCap, toast]);
 
   /** Bulk-approve: one state update + one batched DB write */
@@ -461,17 +476,23 @@ const DashboardShell: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            {/* Daily send counter — cap is the lower of the plan's max and the user-configured value */}
+            {/* Daily send counter — real count from the extension (what actually
+                sent today). Falls back to the app's cap when the extension
+                hasn't reported yet. */}
             {(() => {
-              const cap = Math.min(limits.maxDailyCap, config.dailySendCap ?? limits.maxDailyCap);
-              const pct = dailySendCount / cap;
+              const cap = extStats?.cap ?? Math.min(limits.maxDailyCap, config.dailySendCap ?? limits.maxDailyCap);
+              const sent = extStats?.count ?? dailySendCount;
+              const pct = cap > 0 ? sent / cap : 0;
               const color = pct >= 1 ? 'text-red-400 border-red-500/30 bg-red-500/8' : pct >= 0.8 ? 'text-amber-400 border-amber-500/30 bg-amber-500/8' : 'text-zinc-500 border-white/8 bg-white/3';
               return (
-                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}>
+                <div
+                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}
+                  title="DMs actually sent by the extension today"
+                >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  {dailySendCount} / {cap} DMs today
+                  {sent} / {cap} DMs today
                 </div>
               );
             })()}

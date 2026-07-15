@@ -10,8 +10,30 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // production dashboard domain). To support a new domain, add it to
 // "content_scripts.matches" in manifest.json — no change needed here.
 if (!window.location.hostname.includes("instagram.com")) {
+    // Background → page: relay "actually sent" events and stat pushes into the
+    // page so the app can reconcile real sends (not handoffs).
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message && typeof message.type === 'string' && message.type.startsWith('MAGNET_ENGINE_')) {
+            window.postMessage(message, '*');
+        }
+    });
+
     window.addEventListener("message", (event) => {
         if (event.source !== window || !event.data.type) return;
+
+        // Page → background: the app asks for the real sent count + sent log.
+        if (event.data.type === 'MAGNET_ENGINE_GET_STATS') {
+            try {
+                if (!chrome?.runtime?.sendMessage) return;
+                chrome.runtime.sendMessage({ action: 'getStats' }, (stats) => {
+                    if (chrome.runtime.lastError || !stats) return;
+                    window.postMessage({ type: 'MAGNET_ENGINE_STATS', ...stats }, '*');
+                });
+            } catch (e) {
+                console.warn("[MagnetEngine] getStats relay error:", e);
+            }
+            return;
+        }
 
         if (event.data.type === 'MAGNET_ENGINE_CAMPAIGN') {
             console.log("[MagnetEngine] Campaign intercepted. Relaying to background...");

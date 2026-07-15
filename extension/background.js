@@ -39,23 +39,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Task completed by content script ──────────────────────────
     if (request.action === 'TASK_COMPLETE') {
-        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused'], (result) => {
-            const today = new Date().toDateString();
-            let count = result.dailySentCount || 0;
-            if (result.dailyResetDate !== today) count = 0;
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog'], (result) => {
+            const today  = new Date().toDateString();
+            const newDay = result.dailyResetDate !== today;
+            let count    = newDay ? 0  : (result.dailySentCount || 0);
+            let sentLog  = newDay ? [] : (result.sentLog || []);   // handles actually sent today
 
             let failed = result.failedCount || 0;
-            if (request.result === 'success') count++;
-            if (request.result === 'failed')  failed++;
+            if (request.result === 'success') {
+                count++;
+                if (request.handle) {
+                    sentLog.push({ handle: request.handle, at: Date.now() });
+                    if (sentLog.length > 2000) sentLog = sentLog.slice(-2000);
+                }
+            }
+            if (request.result === 'failed') failed++;
+
+            const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
 
             chrome.storage.local.set({
                 dailySentCount: count,
                 dailyResetDate: today,
                 failedCount:    failed,
+                sentLog:        sentLog,
                 isExecuting:    false,
                 currentTask:    null,
             }, () => {
-                const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
+                // Tell any open MagnetEngine tab what actually got sent, so the
+                // app marks the lead sent for real (not on handoff).
+                if (request.result === 'success' && request.handle) {
+                    broadcastToApp({
+                        type: 'MAGNET_ENGINE_SENT',
+                        handle: request.handle,
+                        dailySentCount: count,
+                        dailyCap: cap,
+                    });
+                }
+
                 if (count >= cap || result.isPaused) return;
 
                 // Random wait within the user-chosen min–max range (minutes).
@@ -70,6 +90,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             });
         });
         sendResponse({ status: 'acknowledged' });
+        return true;
+    }
+
+    // ── Stats request from the web app (real sent count + sent log) ────────
+    if (request.action === 'getStats') {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog'], (result) => {
+            const fresh = result.dailyResetDate === new Date().toDateString();
+            sendResponse({
+                dailySentCount: fresh ? (result.dailySentCount || 0) : 0,
+                dailyCap:       Number(result.dailyCap) || DEFAULT_DAILY_CAP,
+                sentLog:        fresh ? (result.sentLog || []) : [],
+            });
+        });
         return true;
     }
 
@@ -135,6 +168,19 @@ chrome.runtime.onStartup?.addListener(() => {
         }
     });
 });
+
+// ── Notify open MagnetEngine dashboard tabs ───────────────────────
+// The content script on those tabs relays the message into the page.
+function broadcastToApp(message) {
+    chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+            if (!tab.id || !tab.url) continue;
+            if (tab.url.includes('magnetengine.xyz') || tab.url.startsWith('http://localhost')) {
+                chrome.tabs.sendMessage(tab.id, message, () => void chrome.runtime.lastError);
+            }
+        }
+    });
+}
 
 // ── Core: open next Instagram tab ─────────────────────────────────
 function processNextLead() {
