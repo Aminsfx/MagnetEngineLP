@@ -8,8 +8,9 @@
 //   RESEND_API_KEY   — required to send anything (re_…)
 //   EMAIL_FROM       — verified sender, e.g. "MagnetEngine <hello@yourdomain.com>"
 //   APP_URL          — public app origin for dashboard links (e.g. https://app.example.com)
-//   SOP_DOC_URL      — Google Doc with the SOPs (onboarding email; omitted if unset)
-//   LOOM_VIDEO_URL   — Loom setup walkthrough (onboarding email; omitted if unset)
+//   ONBOARDING_CALL_URL — booking link for the setup call (defaults to cal.com/magnetengine/30min)
+//   SOP_DOC_URL      — Google Doc: DM Psychology SOP (onboarding email; omitted if unset)
+//   CRM_SHEET_URL    — Google Sheet: CRM tracker template (onboarding email; omitted if unset)
 //
 // The Resend API key lives ONLY here (server-side). The browser never sends
 // email and never sees the key — same rule as every other integration.
@@ -228,29 +229,36 @@ Your receipt and billing details are managed by Whop.`;
 }
 
 /** 4. Onboarding / getting started (scheduled after payment, or on manual
- * activation from /admin). SOP + Loom links render only when configured. */
+ * activation from /admin). SOP + CRM links render only when configured; the
+ * onboarding-call link always renders (env override, cal.com default). */
 export function onboardingEmail(firstName: string | null): EmailContent {
   const dashboard = `${appUrl()}/dashboard`;
+  const callUrl = Deno.env.get("ONBOARDING_CALL_URL") ?? "https://cal.com/magnetengine/30min";
   const sopUrl = Deno.env.get("SOP_DOC_URL") ?? "";
-  const loomUrl = Deno.env.get("LOOM_VIDEO_URL") ?? "";
+  const crmUrl = Deno.env.get("CRM_SHEET_URL") ?? "";
 
   const subject = "Your MagnetEngine setup guide — start here 🚀";
 
   let step = 1;
   const htmlSteps: string[] = [];
   const textSteps: string[] = [];
-  if (loomUrl) {
-    htmlSteps.push(
-      `<p style="${S.li}"><span style="${S.strong}">${step}. Watch the setup video</span> (10 min) — the exact walkthrough, from login to your first approved DM:<br><a href="${loomUrl}" style="${S.a}">${loomUrl}</a></p>`,
-    );
-    textSteps.push(`${step}. Watch the setup video (10 min): ${loomUrl}`);
-    step++;
-  }
+  htmlSteps.push(
+    `<p style="${S.li}"><span style="${S.strong}">${step}. Book your onboarding call</span> (30 min) — we'll set up your first campaign together, live:<br><a href="${callUrl}" style="${S.a}">${callUrl}</a></p>`,
+  );
+  textSteps.push(`${step}. Book your onboarding call (30 min) — we'll set up your first campaign together: ${callUrl}`);
+  step++;
   if (sopUrl) {
     htmlSteps.push(
-      `<p style="${S.li}"><span style="${S.strong}">${step}. Read the SOPs</span> — our playbook for targeting, messaging and follow-ups:<br><a href="${sopUrl}" style="${S.a}">${sopUrl}</a></p>`,
+      `<p style="${S.li}"><span style="${S.strong}">${step}. Read the DM Psychology SOP</span> — the playbook for openers, follow-ups and turning replies into booked calls:<br><a href="${sopUrl}" style="${S.a}">${sopUrl}</a></p>`,
     );
-    textSteps.push(`${step}. Read the SOPs: ${sopUrl}`);
+    textSteps.push(`${step}. Read the DM Psychology SOP: ${sopUrl}`);
+    step++;
+  }
+  if (crmUrl) {
+    htmlSteps.push(
+      `<p style="${S.li}"><span style="${S.strong}">${step}. Make your copy of the CRM tracker</span> — track every lead from replied → booked → cash collected (File → Make a copy):<br><a href="${crmUrl}" style="${S.a}">${crmUrl}</a></p>`,
+    );
+    textSteps.push(`${step}. Make your copy of the CRM tracker (File → Make a copy): ${crmUrl}`);
     step++;
   }
   htmlSteps.push(

@@ -9,7 +9,7 @@ Resend key.
 | 1 | **Welcome + confirm email** | User signs up | `auth-email-hook` (Supabase Send-Email hook) |
 | 2 | **Password reset** | User clicks "Forgot password" | `auth-email-hook` |
 | 3 | **Payment confirmed** | Whop `membership.activated` webhook | `whop-webhook` |
-| 4 | **Onboarding / setup guide** (SOPs + Loom video) | 15 min after payment confirmation — or instantly on manual activation from /admin | `whop-webhook` / `admin-api` |
+| 4 | **Onboarding / setup guide** (onboarding call + SOP doc + CRM tracker) | 15 min after payment confirmation — or instantly on manual activation from /admin | `whop-webhook` / `admin-api` |
 
 Templates live in `supabase/functions/_shared/emails.ts` (dark emerald
 branding matching the app). Emails 3–4 are only sent on the **first**
@@ -37,19 +37,22 @@ supabase secrets set \
   EMAIL_FROM="MagnetEngine <hello@magnetengine.xyz>" \
   APP_URL=https://your-app-domain.com \
   SOP_DOC_URL="https://docs.google.com/document/d/..." \
-  LOOM_VIDEO_URL="https://www.loom.com/share/..."
+  CRM_SHEET_URL="https://docs.google.com/spreadsheets/d/..."
 ```
 
 - `EMAIL_FROM` — must use the domain you verified in step 1.
 - `APP_URL` — your deployed frontend origin; used for the "Open my dashboard"
   buttons in emails.
-- `SOP_DOC_URL` / `LOOM_VIDEO_URL` — the Google Doc SOPs and the Loom setup
-  walkthrough linked from the onboarding email. **Optional**: if unset, that
-  section is simply omitted (set them whenever they're ready — no redeploy
-  needed, secrets are read at send time).
+- `SOP_DOC_URL` / `CRM_SHEET_URL` — the DM Psychology Google Doc and the CRM
+  tracker Google Sheet linked from the onboarding email. The source content
+  lives in `docs/sops/` — see `docs/sops/README.md` for the one-time publish
+  steps. **Optional**: if unset, that step is simply omitted (secrets are read
+  at send time — no redeploy needed).
+- `ONBOARDING_CALL_URL` — the booking link in the onboarding email; defaults
+  to `https://cal.com/magnetengine/30min`, so only set it if that changes.
 
-Make sure the Google Doc is shared as **"Anyone with the link → Viewer"** and
-the Loom is set to link-shareable, or customers will hit permission walls.
+Share the Doc and Sheet as **"Anyone with the link → Viewer"** or customers
+will hit permission walls.
 
 ## 3. Deploy the functions
 
@@ -107,9 +110,10 @@ Supabase dashboard → Edge Functions → Logs.
 3. **Payment confirmed** — plan bought (Monthly $197 / Annual $1,970),
    dashboard button, heads-up that the setup guide is coming; points at Whop
    for invoices.
-4. **Setup guide** — numbered steps: watch the Loom, read the SOPs, configure
-   the AI Prompt Wizard, launch the first campaign; dashboard CTA; reply-for-help
-   footer.
+4. **Setup guide** — numbered steps: book the onboarding call
+   (cal.com/magnetengine/30min), read the DM Psychology SOP, copy the CRM
+   tracker, configure the AI Prompt Wizard, launch the first campaign;
+   dashboard CTA; reply-for-help footer.
 
 Copy lives in `supabase/functions/_shared/emails.ts` — edit and redeploy the
 three functions to change wording.
