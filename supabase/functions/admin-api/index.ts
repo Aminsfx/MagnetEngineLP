@@ -15,6 +15,7 @@
 //              email?, page?, perPage? }
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { onboardingEmail, sendEmail } from "../_shared/emails.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -157,11 +158,32 @@ Deno.serve(async (req) => {
       }
 
       if (action === "activate") {
+        const { data: existing } = await sb
+          .from("subscriptions")
+          .select("status")
+          .eq("user_id", userId)
+          .maybeSingle();
+        const firstActivation = existing?.status !== "active";
+
         const { error } = await sb.from("subscriptions").upsert(
           { user_id: userId, plan: "pro", status: "active", updated_at: new Date().toISOString() },
           { onConflict: "user_id" },
         );
         if (error) throw error;
+
+        // Manually activated customers get the same onboarding email as the
+        // webhook path (best-effort; a send failure never fails the activation).
+        if (firstActivation) {
+          let firstName: string | null = null;
+          try {
+            const { data } = await sb.auth.admin.getUserById(userId);
+            firstName = (data?.user?.user_metadata?.first_name as string | undefined) || null;
+          } catch { /* name is optional */ }
+          await sendEmail(email, onboardingEmail(firstName), {
+            idempotencyKey: `onboarding/${userId}`,
+          });
+        }
+
         return json(200, { ok: true, activated: email });
       }
 

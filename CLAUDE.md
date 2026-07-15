@@ -123,9 +123,19 @@ CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm
 APIFY_API_KEY / APIFY_FOLLOWERS_ACTOR_ID           # start-scrape / poll-scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
 ADMIN_EMAILS                                       # admin-api
+RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
+SEND_EMAIL_HOOK_SECRET                             # auth-email-hook
+SOP_DOC_URL / LOOM_VIDEO_URL                       # onboarding email links (optional)
 ```
 Set via `supabase secrets set KEY=value`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
-Template: `.env.example` (committed, no real values). Edge Functions: `supabase/functions/{generate-dm,start-scrape,poll-scrape,whop-webhook,admin-api}`.
+Template: `.env.example` (committed, no real values). Edge Functions: `supabase/functions/{generate-dm,start-scrape,poll-scrape,whop-webhook,admin-api,auth-email-hook}`.
+
+## Transactional Emails (Resend — docs/EMAIL_SETUP.md)
+Four lifecycle emails, all sent server-side via the Resend API (`RESEND_API_KEY` is a Supabase secret; the browser never sends email):
+1. **Welcome + confirm** (signup) and 2. **Password reset** — `auth-email-hook`, a Supabase Auth Send-Email hook (Standard Webhooks signature via `SEND_EMAIL_HOOK_SECRET`) that replaces Supabase's default auth emails.
+3. **Payment confirmed** — sent by `whop-webhook` on first activation.
+4. **Onboarding / setup guide** (SOP doc + Loom links from secrets) — scheduled +15 min after payment by `whop-webhook`, or sent immediately by `admin-api` on manual activation.
+Templates + Resend client live in `supabase/functions/_shared/emails.ts`. Emails 3–4 fire only on pending/cancelled → active transitions (renewal webhooks don't re-send) and use Resend idempotency keys.
 
 ## Supabase Integration
 - **Package**: `@supabase/supabase-js` v2 (in dependencies)

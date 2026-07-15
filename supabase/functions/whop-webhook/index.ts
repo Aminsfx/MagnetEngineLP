@@ -16,6 +16,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "npm:standardwebhooks@1.0.0";
+import { onboardingEmail, paymentConfirmedEmail, sendEmail } from "../_shared/emails.ts";
 
 // Activation is gated to the canonical "membership became valid" event AND a
 // recognized plan id (see below). payment.succeeded is intentionally NOT an
@@ -24,6 +25,16 @@ import { Webhook } from "npm:standardwebhooks@1.0.0";
 const ACTIVATE_EVENTS = ["membership.activated"];
 const REVOKE_EVENTS = ["membership.deactivated"];
 const HANDLED_EVENTS = [...ACTIVATE_EVENTS, ...REVOKE_EVENTS];
+
+// deno-lint-ignore no-explicit-any
+async function getFirstName(supabase: any, userId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    return (data?.user?.user_metadata?.first_name as string | undefined) || null;
+  } catch {
+    return null;
+  }
+}
 
 function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
@@ -116,6 +127,16 @@ Deno.serve(async (req) => {
       return json(202, { skipped: "unrecognized plan" });
     }
 
+    // Was this account already active? Renewals re-fire membership.activated —
+    // only a pending/cancelled → active transition should trigger the
+    // payment-confirmed + onboarding emails.
+    const { data: existing } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const firstActivation = existing?.status !== "active";
+
     // Single-plan model: 'pro' is the stored value for every activation.
     const { error } = await supabase.from("subscriptions").upsert(
       {
@@ -127,7 +148,25 @@ Deno.serve(async (req) => {
       { onConflict: "user_id" },
     );
     if (error) return json(500, { error: error.message });
-    return json(202, { ok: true, activated: email });
+
+    // Post-payment email sequence (best-effort — never fails the webhook):
+    //   1. payment confirmed, immediately
+    //   2. onboarding / setup guide (SOPs + Loom), 15 minutes later
+    if (firstActivation) {
+      const firstName = await getFirstName(supabase, userId);
+      const planLabel = planId === Deno.env.get("WHOP_PLAN_ID_ANNUAL")
+        ? "Annual ($1,970/yr)"
+        : "Monthly ($197/mo)";
+      await sendEmail(email, paymentConfirmedEmail(firstName, planLabel), {
+        idempotencyKey: `payment-confirmed/${userId}`,
+      });
+      await sendEmail(email, onboardingEmail(firstName), {
+        scheduledAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        idempotencyKey: `onboarding/${userId}`,
+      });
+    }
+
+    return json(202, { ok: true, activated: email, emailed: firstActivation });
   }
 
   // membership.deactivated → revoke access
