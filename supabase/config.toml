@@ -1,0 +1,36 @@
+# Supabase CLI project config.
+#
+# The per-function `verify_jwt` flags below are the important part: they make
+# `supabase functions deploy <name>` do the right thing WITHOUT remembering
+# the --no-verify-jwt flag.
+#
+#   - auth-email-hook  → called by Supabase Auth itself (Send Email hook).
+#                        The request carries a Standard Webhooks signature,
+#                        NOT a user JWT — gateway JWT verification must be OFF
+#                        or Auth gets 401s and signups fail with
+#                        "Failed to reach hook after maximum retries".
+#                        The function verifies the hook signature itself.
+#   - whop-webhook     → called by Whop's servers (no JWT); verifies the
+#                        Whop webhook signature itself.
+#   - everything else  → called from the browser with the user's JWT; keep
+#                        gateway verification ON.
+
+project_id = "MagnetEngineLP"
+
+[functions.auth-email-hook]
+verify_jwt = false
+
+[functions.whop-webhook]
+verify_jwt = false
+
+[functions.admin-api]
+verify_jwt = true
+
+[functions.generate-dm]
+verify_jwt = true
+
+[functions.start-scrape]
+verify_jwt = true
+
+[functions.poll-scrape]
+verify_jwt = true

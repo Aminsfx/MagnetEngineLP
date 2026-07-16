@@ -42,22 +42,26 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(true);
     }
 
+    // Key everything on the user ID, not the user object — Supabase mints a
+    // new object on every token refresh (tab refocus), and re-fetching with a
+    // loading flip would unmount the dashboard for the same signed-in user.
     const fetchSubscription = useCallback(async (): Promise<SubscriptionStatus> => {
-        if (!user) {
+        if (!currentUserId) {
             setTier('starter');
             setStatus('pending');
             setLoading(false);
             return 'pending';
         }
-        const sub = await db.getSubscription(user.id);
+        const sub = await db.getSubscription(currentUserId);
         setTier(sub.tier);
         setStatus(sub.status);
         setLoading(false);
         return sub.status;
-    }, [user]);
+    }, [currentUserId]);
 
     useEffect(() => {
-        setLoading(true);
+        // No setLoading(true) here: the render-time guard above already flips
+        // loading when the user ID actually changes; same-user re-runs stay quiet.
         fetchSubscription();
     }, [fetchSubscription]);
 

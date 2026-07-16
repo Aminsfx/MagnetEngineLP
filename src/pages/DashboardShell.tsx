@@ -148,14 +148,17 @@ const DashboardShell: React.FC = () => {
     return () => window.removeEventListener('avatar-updated', handler);
   }, []);
 
-  // Load data from Supabase (or localStorage fallback) on mount
+  // Load data from Supabase (or localStorage fallback) on mount.
+  // Keyed on the user ID (not the user object) so token refreshes on tab
+  // refocus don't re-trigger a full reload of the pipeline.
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     Promise.all([
-      db.getLeads(user.id),
-      db.getConfig(user.id),
-      db.getDMUsage(user.id),
+      db.getLeads(userId),
+      db.getConfig(userId),
+      db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
       setLeads(savedLeads ?? []);
       setConfig(savedConfig ?? DEFAULT_CONFIG);
@@ -163,7 +166,7 @@ const DashboardShell: React.FC = () => {
       setDmUsed(dmUsage.used);
       setDataLoading(false);
     });
-  }, [user]);
+  }, [userId]);
 
   // Recalculate filtered leads + stats on any leads/config change
   useEffect(() => {

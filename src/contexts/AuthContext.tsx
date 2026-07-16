@@ -24,7 +24,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Listen for auth state changes (covers initial session restore + login/logout events)
     const subscription = onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      setUser(newSession?.user ?? null);
+      // Supabase emits a NEW user object on every token refresh (e.g. when the
+      // tab regains focus). Keep the previous reference when the identity is
+      // unchanged so downstream effects keyed on `user` don't re-run and
+      // re-trigger loading screens/full data refetches on every refocus.
+      setUser((prev) => {
+        const next = newSession?.user ?? null;
+        if (prev && next && prev.id === next.id && prev.updated_at === next.updated_at) {
+          return prev;
+        }
+        return next;
+      });
       setLoading(false);
     });
 

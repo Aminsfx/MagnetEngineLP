@@ -52,10 +52,15 @@ supabase secrets set \
 ## 3. Deploy the functions
 
 ```bash
-supabase functions deploy auth-email-hook --no-verify-jwt  # Supabase calls it with a signed payload, not a user JWT
-supabase functions deploy whop-webhook --no-verify-jwt     # redeploy — now sends emails 3+4
-supabase functions deploy admin-api                        # redeploy — manual activation sends email 4
+supabase functions deploy auth-email-hook
+supabase functions deploy whop-webhook
+supabase functions deploy admin-api
 ```
+
+`supabase/config.toml` pins the right JWT mode per function (`verify_jwt =
+false` for `auth-email-hook` and `whop-webhook` — they're called by Supabase
+Auth / Whop with a signature, not a user JWT), so no `--no-verify-jwt` flag
+is needed. Deploy from the repo root so the CLI picks the config up.
 
 ## 4. Enable the Send-Email hook (emails 1 + 2)
 
@@ -96,6 +101,33 @@ Emails 3–4 need no hook — they ride the existing Whop webhook (see
 
 Delivery logs: [resend.com/emails](https://resend.com/emails). Function logs:
 Supabase dashboard → Edge Functions → Logs.
+
+## Troubleshooting: "Failed to reach hook after maximum retries"
+
+Signup/reset errors with this message when Supabase Auth can't get a 2xx from
+`auth-email-hook`. Check in this order:
+
+1. **Gateway JWT rejection (most common).** The function was deployed with
+   JWT verification on, so Supabase's hook call is rejected before your code
+   runs. Fix: redeploy from the repo root (`supabase functions deploy
+   auth-email-hook`) — `supabase/config.toml` sets `verify_jwt = false` for
+   it. Verify in dashboard → Edge Functions → auth-email-hook → Details:
+   "Verify JWT" must be **off**.
+2. **Function not deployed.** Dashboard → Edge Functions — `auth-email-hook`
+   must be listed. If not: deploy it (step 3 above).
+3. **Hook secret mismatch.** The `SEND_EMAIL_HOOK_SECRET` secret must be the
+   exact `v1,whsec_...` value shown on the hook config page. Regenerating the
+   hook secret in the dashboard requires re-running `supabase secrets set`.
+4. **Missing email secrets.** If `RESEND_API_KEY` or `EMAIL_FROM` is unset,
+   the function deliberately returns 500 (so failures aren't silent).
+   `supabase secrets list` should show both.
+
+Function logs (dashboard → Edge Functions → auth-email-hook → Logs) show
+which case you're in: no log entries at all → case 1 or 2 (the request never
+reached the function); "invalid signature" → case 3; "email skipped" → case 4.
+
+While broken, you can disable the hook (Authentication → Hooks → toggle off)
+to instantly restore Supabase's default emails so signups keep working.
 
 ## What each email says
 
