@@ -11,8 +11,8 @@ Resend key.
 | 3 | **Payment confirmed** | Whop `membership.activated` webhook | `whop-webhook` |
 | 4 | **Onboarding / setup guide** (onboarding call + DM Playbook PDF + CRM tracker) | 15 min after payment confirmation — or instantly on manual activation from /admin | `whop-webhook` / `admin-api` |
 
-Templates live in `supabase/functions/_shared/emails.ts` (dark emerald
-branding matching the app). Emails 3–4 are only sent on the **first**
+Templates live in `supabase/functions/_shared/emails.ts` (plain, professional
+text style — no colors). Emails 3–4 are only sent on the **first**
 activation — renewals and repeat webhook deliveries don't re-send them
 (status check + Resend idempotency keys).
 

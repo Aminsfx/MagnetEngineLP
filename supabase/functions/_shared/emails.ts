@@ -1,4 +1,4 @@
-// Shared transactional email layer — Resend API + branded templates.
+// Shared transactional email layer — Resend API + plain-text-style templates.
 //
 // Used by: auth-email-hook (signup confirm / password reset / magic link…),
 // whop-webhook (payment confirmed + onboarding), admin-api (manual activation
@@ -6,7 +6,7 @@
 //
 // Secrets (supabase secrets set …):
 //   RESEND_API_KEY   — required to send anything (re_…)
-//   EMAIL_FROM       — verified sender, e.g. "MagnetEngine <hello@yourdomain.com>"
+//   EMAIL_FROM       — verified sender, e.g. "MagnetEngine <amine@magnetengine.xyz>"
 //   APP_URL          — public app origin for dashboard links (e.g. https://app.example.com)
 //   ONBOARDING_CALL_URL — booking link for the setup call (defaults to cal.com/magnetengine/30min)
 //   SOP_DOC_URL      — DM Psychology Playbook link (defaults to the bundled PDF at
@@ -16,6 +16,9 @@
 //
 // The Resend API key lives ONLY here (server-side). The browser never sends
 // email and never sees the key — same rule as every other integration.
+//
+// Template style: deliberately plain and professional — black text on white,
+// default link styling, no brand colors, no buttons, no emoji.
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -93,34 +96,22 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** "Hey Amine," or "Hey there," — name is user-supplied, always escaped. */
+/** "Hi Amine," or "Hi," — name is user-supplied, always escaped. */
 function greeting(firstName?: string | null): string {
   const name = (firstName ?? "").trim();
-  return name ? `Hey ${escapeHtml(name)},` : "Hey there,";
+  return name ? `Hi ${escapeHtml(name)},` : "Hi,";
 }
 
 // ── Layout ───────────────────────────────────────────────────────────────────
-// Inline-styled, single-column, 560px — renders in Gmail/Outlook/Apple Mail.
-// Brand: near-black green (#030A06) backdrop, emerald accent, zinc text.
+// Plain and professional: system font, black text on white, default links.
 
+const FONT =
+  "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
 const S = {
-  body: "margin:0;padding:0;background-color:#030A06;",
-  wrap: "width:100%;background-color:#030A06;padding:32px 16px;",
-  card: "max-width:560px;margin:0 auto;background-color:#0B1511;border:1px solid #1E2C24;border-radius:16px;padding:36px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;",
-  logo: "font-size:18px;font-weight:700;color:#ffffff;letter-spacing:-0.02em;margin:0 0 28px;",
-  logoDot: "color:#34D399;",
-  h1: "font-size:22px;line-height:1.3;font-weight:700;color:#ffffff;margin:0 0 16px;",
-  p: "font-size:15px;line-height:1.65;color:#A7B3AC;margin:0 0 16px;",
-  strong: "color:#E4EAE6;font-weight:600;",
-  btnWrap: "margin:28px 0;",
-  btn: "display:inline-block;background-color:#10B981;color:#04140C;font-size:15px;font-weight:700;text-decoration:none;padding:13px 28px;border-radius:10px;",
-  linkFallback: "font-size:12px;line-height:1.6;color:#5E6B63;margin:0 0 16px;word-break:break-all;",
-  hr: "border:none;border-top:1px solid #1E2C24;margin:28px 0;",
-  li: "font-size:15px;line-height:1.65;color:#A7B3AC;margin:0 0 12px;",
-  a: "color:#34D399;text-decoration:underline;",
-  muted: "font-size:13px;line-height:1.6;color:#5E6B63;margin:24px 0 0;",
-  footer: "max-width:560px;margin:0 auto;padding:20px 8px 0;font-size:12px;line-height:1.6;color:#3E4A43;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;",
-  code: "display:inline-block;background-color:#08110D;border:1px solid #1E2C24;border-radius:8px;padding:12px 20px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:22px;font-weight:700;letter-spacing:6px;color:#34D399;",
+  p: `margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1a1a;${FONT}`,
+  li: `margin:0 0 10px;font-size:14px;line-height:1.6;color:#1a1a1a;${FONT}`,
+  small: `margin:0 0 16px;font-size:12px;line-height:1.6;color:#666666;word-break:break-all;${FONT}`,
+  footer: `margin:32px 0 0;padding-top:16px;border-top:1px solid #dddddd;font-size:12px;line-height:1.6;color:#888888;${FONT}`,
 };
 
 function layout(bodyHtml: string, previewText: string): string {
@@ -129,59 +120,55 @@ function layout(bodyHtml: string, previewText: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
 </head>
-<body style="${S.body}">
+<body style="margin:0;padding:0;background-color:#ffffff;">
 <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(previewText)}</div>
-<div style="${S.wrap}">
-  <div style="${S.card}">
-    <p style="${S.logo}">Magnet<span style="${S.logoDot}">Engine</span></p>
-    ${bodyHtml}
-  </div>
-  <div style="${S.footer}">
-    MagnetEngine — AI-powered Instagram lead automation.<br>
-    You're receiving this because you have a MagnetEngine account.
-  </div>
+<div style="max-width:600px;margin:0 auto;padding:32px 20px;">
+${bodyHtml}
+<p style="${S.footer}">MagnetEngine — AI-powered Instagram lead automation<br>
+You're receiving this because you have a MagnetEngine account.</p>
 </div>
 </body>
 </html>`;
 }
 
-function button(url: string, label: string): string {
-  return `<div style="${S.btnWrap}"><a href="${url}" style="${S.btn}">${label}</a></div>
-<p style="${S.linkFallback}">If the button doesn't work, copy this link into your browser:<br>${url}</p>`;
+/** A labeled action link followed by the raw URL as a copy-paste fallback. */
+function link(url: string, label: string): string {
+  return `<p style="${S.p}"><a href="${url}">${label}</a></p>
+<p style="${S.small}">Or copy this link into your browser:<br>${url}</p>`;
 }
 
 // ── Templates ────────────────────────────────────────────────────────────────
 
 /** 1. Signup — welcome + confirm-email (sent by the auth hook on sign-up). */
 export function welcomeEmail(firstName: string | null, confirmUrl: string): EmailContent {
-  const subject = "Welcome to MagnetEngine — confirm your email";
+  const subject = "Confirm your MagnetEngine account";
   const html = layout(
-    `<h1 style="${S.h1}">Welcome to MagnetEngine 👋</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">You're one click away from your new lead machine. Confirm your email to activate your account:</p>
-${button(confirmUrl, "Confirm my email")}
-<hr style="${S.hr}">
-<p style="${S.p}"><span style="${S.strong}">What happens next?</span></p>
-<p style="${S.li}">1&nbsp;&nbsp;Confirm your email (this button ☝️)</p>
-<p style="${S.li}">2&nbsp;&nbsp;Log in and complete your membership checkout</p>
-<p style="${S.li}">3&nbsp;&nbsp;We'll send you the full setup guide — you'll be scraping leads and sending AI-crafted DMs the same day</p>
-<p style="${S.muted}">Didn't create a MagnetEngine account? You can safely ignore this email.</p>`,
-    "Confirm your email to activate your MagnetEngine account.",
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">Thanks for creating a MagnetEngine account. Please confirm your email address to activate it:</p>
+${link(confirmUrl, "Confirm my email")}
+<p style="${S.p}">What happens next:</p>
+<p style="${S.li}">1. Confirm your email</p>
+<p style="${S.li}">2. Log in and complete your membership checkout</p>
+<p style="${S.li}">3. We'll send you the full setup guide so you can launch your first campaign the same day</p>
+<p style="${S.p}">If you didn't create a MagnetEngine account, you can safely ignore this email.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
+    "Please confirm your email address to activate your MagnetEngine account.",
   );
-  const text = `Welcome to MagnetEngine!
+  const text = `${greetingText(firstName)}
 
-Confirm your email to activate your account:
+Thanks for creating a MagnetEngine account. Please confirm your email address to activate it:
+
 ${confirmUrl}
 
-What happens next?
+What happens next:
 1. Confirm your email
 2. Log in and complete your membership checkout
-3. We'll send you the full setup guide
+3. We'll send you the full setup guide so you can launch your first campaign the same day
 
-Didn't create a MagnetEngine account? You can safely ignore this email.`;
+If you didn't create a MagnetEngine account, you can safely ignore this email.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
@@ -189,44 +176,49 @@ Didn't create a MagnetEngine account? You can safely ignore this email.`;
 export function resetPasswordEmail(firstName: string | null, resetUrl: string): EmailContent {
   const subject = "Reset your MagnetEngine password";
   const html = layout(
-    `<h1 style="${S.h1}">Reset your password</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">We received a request to reset the password for your MagnetEngine account. Click below to choose a new one:</p>
-${button(resetUrl, "Reset my password")}
-<p style="${S.muted}">This link expires after a short time for security. If you didn't request a reset, you can safely ignore this email — your password won't change.</p>`,
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">We received a request to reset the password for your MagnetEngine account. Use the link below to choose a new one:</p>
+${link(resetUrl, "Reset my password")}
+<p style="${S.p}">This link expires after a short time for security. If you didn't request a reset, you can safely ignore this email — your password won't change.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
     "Choose a new password for your MagnetEngine account.",
   );
-  const text = `Reset your MagnetEngine password
+  const text = `${greetingText(firstName)}
 
-We received a request to reset your password. Open this link to choose a new one:
+We received a request to reset the password for your MagnetEngine account. Open this link to choose a new one:
+
 ${resetUrl}
 
-If you didn't request a reset, you can safely ignore this email — your password won't change.`;
+This link expires after a short time for security. If you didn't request a reset, you can safely ignore this email — your password won't change.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
 /** 3. Payment confirmed (sent by whop-webhook on membership activation). */
 export function paymentConfirmedEmail(firstName: string | null, planLabel: string): EmailContent {
   const dashboard = `${appUrl()}/dashboard`;
-  const subject = "Payment confirmed — your MagnetEngine access is live 🎉";
+  const subject = "Payment confirmed — your MagnetEngine membership is active";
   const html = layout(
-    `<h1 style="${S.h1}">You're in — payment confirmed 🎉</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">Your payment went through and your <span style="${S.strong}">${escapeHtml(planLabel)}</span> membership is now active. The full dashboard is unlocked.</p>
-${button(dashboard, "Open my dashboard")}
-<p style="${S.p}">In the next few minutes you'll get a second email with your <span style="${S.strong}">setup guide</span> — the SOPs and a step-by-step video to get your first campaign running today.</p>
-<p style="${S.muted}">Your receipt and billing details are managed by Whop — check your Whop account for invoices.</p>`,
-    "Your MagnetEngine membership is active — dashboard unlocked.",
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">Your payment was received and your ${escapeHtml(planLabel)} membership is now active. Your dashboard is unlocked:</p>
+${link(dashboard, "Open my dashboard")}
+<p style="${S.p}">Within the next few minutes you'll receive a second email with your setup guide — everything you need to launch your first campaign.</p>
+<p style="${S.p}">Your receipt and billing details are managed by Whop; check your Whop account for invoices.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
+    "Your MagnetEngine membership is active and your dashboard is unlocked.",
   );
-  const text = `Payment confirmed — you're in!
+  const text = `${greetingText(firstName)}
 
-Your ${planLabel} membership is now active and the full dashboard is unlocked.
+Your payment was received and your ${planLabel} membership is now active. Your dashboard is unlocked:
 
-Open your dashboard: ${dashboard}
+${dashboard}
 
-In the next few minutes you'll get a second email with your setup guide (SOPs + step-by-step video).
+Within the next few minutes you'll receive a second email with your setup guide — everything you need to launch your first campaign.
 
-Your receipt and billing details are managed by Whop.`;
+Your receipt and billing details are managed by Whop; check your Whop account for invoices.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
@@ -242,60 +234,58 @@ export function onboardingEmail(firstName: string | null): EmailContent {
   const sopUrl = Deno.env.get("SOP_DOC_URL") || `${appUrl()}/downloads/MagnetEngine-DM-Playbook.pdf`;
   const crmUrl = Deno.env.get("CRM_SHEET_URL") ?? "";
 
-  const subject = "Your MagnetEngine setup guide — start here 🚀";
+  const subject = "Your MagnetEngine setup guide";
 
   let step = 1;
   const htmlSteps: string[] = [];
   const textSteps: string[] = [];
   htmlSteps.push(
-    `<p style="${S.li}"><span style="${S.strong}">${step}. Book your onboarding call</span> (30 min) — we'll set up your first campaign together, live:<br><a href="${callUrl}" style="${S.a}">${callUrl}</a></p>`,
+    `<p style="${S.li}">${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together:<br><a href="${callUrl}">${callUrl}</a></p>`,
   );
-  textSteps.push(`${step}. Book your onboarding call (30 min) — we'll set up your first campaign together: ${callUrl}`);
+  textSteps.push(`${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together: ${callUrl}`);
   step++;
   htmlSteps.push(
-    `<p style="${S.li}"><span style="${S.strong}">${step}. Read the DM Psychology Playbook</span> (PDF) — the psychology behind openers, follow-ups, and turning replies into booked calls:<br><a href="${sopUrl}" style="${S.a}">${sopUrl}</a></p>`,
+    `<p style="${S.li}">${step}. Read the DM Psychology Playbook (PDF) — how to turn cold DMs into booked calls:<br><a href="${sopUrl}">${sopUrl}</a></p>`,
   );
   textSteps.push(`${step}. Read the DM Psychology Playbook (PDF): ${sopUrl}`);
   step++;
   if (crmUrl) {
     htmlSteps.push(
-      `<p style="${S.li}"><span style="${S.strong}">${step}. Make your copy of the CRM tracker</span> — track every lead from replied → booked → cash collected (File → Make a copy):<br><a href="${crmUrl}" style="${S.a}">${crmUrl}</a></p>`,
+      `<p style="${S.li}">${step}. Make your copy of the CRM tracker (File → Make a copy) — track every lead from replied to booked to cash collected:<br><a href="${crmUrl}">${crmUrl}</a></p>`,
     );
     textSteps.push(`${step}. Make your copy of the CRM tracker (File → Make a copy): ${crmUrl}`);
     step++;
   }
   htmlSteps.push(
-    `<p style="${S.li}"><span style="${S.strong}">${step}. Set up your AI Prompt Wizard</span> — Settings → tell MagnetEngine about your business so every DM sounds like you.</p>`,
+    `<p style="${S.li}">${step}. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business so every DM sounds like you.</p>`,
   );
-  textSteps.push(`${step}. Set up your AI Prompt Wizard (Settings) — tell MagnetEngine about your business.`);
+  textSteps.push(`${step}. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business.`);
   step++;
   htmlSteps.push(
-    `<p style="${S.li}"><span style="${S.strong}">${step}. Launch your first campaign</span> — Campaign → search your niche, scrape leads, generate DMs and approve them in the queue.</p>`,
+    `<p style="${S.li}">${step}. Launch your first campaign — search your niche, scrape leads, generate DMs and approve them in the queue.</p>`,
   );
-  textSteps.push(`${step}. Launch your first campaign — scrape leads, generate DMs, approve them in the queue.`);
+  textSteps.push(`${step}. Launch your first campaign — search your niche, scrape leads, generate DMs and approve them in the queue.`);
 
   const html = layout(
-    `<h1 style="${S.h1}">Let's get you set up 🚀</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">Welcome aboard! Here's everything you need to go from zero to your first booked call. Follow these steps in order:</p>
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">Welcome aboard. Here's everything you need to get started, in order:</p>
 ${htmlSteps.join("\n")}
-${button(dashboard, "Start my setup")}
-<hr style="${S.hr}">
-<p style="${S.p}"><span style="${S.strong}">Pro tip:</span> your first campaign doesn't need to be perfect. Scrape 50 leads in your niche today, approve 10 DMs, and iterate from there.</p>
-<p style="${S.muted}">Stuck on anything? Just reply to this email and we'll help you out.</p>`,
-    "Your setup guide: video walkthrough, SOPs, and your first campaign.",
+<p style="${S.p}">Your dashboard: <a href="${dashboard}">${dashboard}</a></p>
+<p style="${S.p}">If you have any questions, just reply to this email.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
+    "Your setup guide: onboarding call, playbook, and your first campaign.",
   );
-  const text = `Let's get you set up!
+  const text = `${greetingText(firstName)}
 
-Welcome aboard. Follow these steps in order:
+Welcome aboard. Here's everything you need to get started, in order:
 
 ${textSteps.join("\n")}
 
-Start here: ${dashboard}
+Your dashboard: ${dashboard}
 
-Pro tip: your first campaign doesn't need to be perfect. Scrape 50 leads in your niche today, approve 10 DMs, and iterate from there.
+If you have any questions, just reply to this email.
 
-Stuck on anything? Just reply to this email.`;
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
@@ -304,63 +294,88 @@ Stuck on anything? Just reply to this email.`;
 export function magicLinkEmail(firstName: string | null, linkUrl: string): EmailContent {
   const subject = "Your MagnetEngine sign-in link";
   const html = layout(
-    `<h1 style="${S.h1}">Sign in to MagnetEngine</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">Click below to sign in — no password needed:</p>
-${button(linkUrl, "Sign in")}
-<p style="${S.muted}">This link expires after a short time. If you didn't request it, you can safely ignore this email.</p>`,
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">Use the link below to sign in to MagnetEngine — no password needed:</p>
+${link(linkUrl, "Sign in")}
+<p style="${S.p}">This link expires after a short time. If you didn't request it, you can safely ignore this email.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
     "Your one-click sign-in link for MagnetEngine.",
   );
-  const text = `Sign in to MagnetEngine:
+  const text = `${greetingText(firstName)}
+
+Use this link to sign in to MagnetEngine — no password needed:
+
 ${linkUrl}
 
-This link expires after a short time. If you didn't request it, ignore this email.`;
+This link expires after a short time. If you didn't request it, you can safely ignore this email.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
 export function inviteEmail(inviteUrl: string): EmailContent {
   const subject = "You've been invited to MagnetEngine";
   const html = layout(
-    `<h1 style="${S.h1}">You've been invited 🎉</h1>
-<p style="${S.p}">You've been invited to join MagnetEngine — AI-powered Instagram lead automation. Accept the invite to create your account:</p>
-${button(inviteUrl, "Accept invite")}`,
+    `<p style="${S.p}">Hi,</p>
+<p style="${S.p}">You've been invited to join MagnetEngine — AI-powered Instagram lead automation. Use the link below to accept the invite and create your account:</p>
+${link(inviteUrl, "Accept invite")}
+<p style="${S.p}">— The MagnetEngine Team</p>`,
     "Accept your invitation to MagnetEngine.",
   );
-  const text = `You've been invited to MagnetEngine.
+  const text = `Hi,
 
-Accept your invite: ${inviteUrl}`;
+You've been invited to join MagnetEngine — AI-powered Instagram lead automation. Accept your invite:
+
+${inviteUrl}
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
 export function emailChangeEmail(firstName: string | null, confirmUrl: string, newEmail: string): EmailContent {
   const subject = "Confirm your new email address";
   const html = layout(
-    `<h1 style="${S.h1}">Confirm your new email</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">You asked to change your MagnetEngine email to <span style="${S.strong}">${escapeHtml(newEmail)}</span>. Confirm the change below:</p>
-${button(confirmUrl, "Confirm email change")}
-<p style="${S.muted}">If you didn't request this change, ignore this email and consider resetting your password.</p>`,
+    `<p style="${S.p}">${greeting(firstName)}</p>
+<p style="${S.p}">You asked to change your MagnetEngine email to ${escapeHtml(newEmail)}. Confirm the change below:</p>
+${link(confirmUrl, "Confirm email change")}
+<p style="${S.p}">If you didn't request this change, ignore this email and consider resetting your password.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
     "Confirm the email change on your MagnetEngine account.",
   );
-  const text = `Confirm your new MagnetEngine email (${newEmail}):
+  const text = `${greetingText(firstName)}
+
+You asked to change your MagnetEngine email to ${newEmail}. Confirm the change:
+
 ${confirmUrl}
 
-If you didn't request this change, ignore this email and consider resetting your password.`;
+If you didn't request this change, ignore this email and consider resetting your password.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
 }
 
 export function reauthenticationEmail(firstName: string | null, token: string): EmailContent {
   const subject = "Your MagnetEngine verification code";
   const html = layout(
-    `<h1 style="${S.h1}">Your verification code</h1>
-<p style="${S.p}">${greeting(firstName)}</p>
+    `<p style="${S.p}">${greeting(firstName)}</p>
 <p style="${S.p}">Enter this code to confirm it's really you:</p>
-<p style="margin:24px 0;"><span style="${S.code}">${escapeHtml(token)}</span></p>
-<p style="${S.muted}">If you didn't request this code, you can safely ignore this email.</p>`,
+<p style="margin:0 0 16px;font-size:20px;font-weight:bold;letter-spacing:4px;color:#1a1a1a;${FONT}">${escapeHtml(token)}</p>
+<p style="${S.p}">If you didn't request this code, you can safely ignore this email.</p>
+<p style="${S.p}">— The MagnetEngine Team</p>`,
     "Your MagnetEngine verification code.",
   );
-  const text = `Your MagnetEngine verification code: ${token}
+  const text = `${greetingText(firstName)}
 
-If you didn't request this code, you can safely ignore this email.`;
+Enter this code to confirm it's really you: ${token}
+
+If you didn't request this code, you can safely ignore this email.
+
+— The MagnetEngine Team`;
   return { subject, html, text };
+}
+
+/** Plain-text variant of the greeting (no HTML escaping needed). */
+function greetingText(firstName?: string | null): string {
+  const name = (firstName ?? "").trim();
+  return name ? `Hi ${name},` : "Hi,";
 }
