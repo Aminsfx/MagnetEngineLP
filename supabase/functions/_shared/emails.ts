@@ -9,7 +9,9 @@
 //   EMAIL_FROM       — verified sender, e.g. "MagnetEngine <hello@yourdomain.com>"
 //   APP_URL          — public app origin for dashboard links (e.g. https://app.example.com)
 //   ONBOARDING_CALL_URL — booking link for the setup call (defaults to cal.com/magnetengine/30min)
-//   SOP_DOC_URL      — Google Doc: DM Psychology SOP (onboarding email; omitted if unset)
+//   SOP_DOC_URL      — DM Psychology Playbook link (defaults to the bundled PDF at
+//                      public/downloads/MagnetEngine-DM-Playbook.pdf; override to
+//                      point at a Google Doc etc. instead)
 //   CRM_SHEET_URL    — Google Sheet: CRM tracker template (onboarding email; omitted if unset)
 //
 // The Resend API key lives ONLY here (server-side). The browser never sends
@@ -234,7 +236,10 @@ Your receipt and billing details are managed by Whop.`;
 export function onboardingEmail(firstName: string | null): EmailContent {
   const dashboard = `${appUrl()}/dashboard`;
   const callUrl = Deno.env.get("ONBOARDING_CALL_URL") ?? "https://cal.com/magnetengine/30min";
-  const sopUrl = Deno.env.get("SOP_DOC_URL") ?? "";
+  // Bundled with the app (public/downloads/) — always available, no Google Doc
+  // publishing step required. SOP_DOC_URL can still override it (e.g. to point
+  // at a living Google Doc instead) without a redeploy.
+  const sopUrl = Deno.env.get("SOP_DOC_URL") || `${appUrl()}/downloads/MagnetEngine-DM-Playbook.pdf`;
   const crmUrl = Deno.env.get("CRM_SHEET_URL") ?? "";
 
   const subject = "Your MagnetEngine setup guide — start here 🚀";
@@ -247,13 +252,11 @@ export function onboardingEmail(firstName: string | null): EmailContent {
   );
   textSteps.push(`${step}. Book your onboarding call (30 min) — we'll set up your first campaign together: ${callUrl}`);
   step++;
-  if (sopUrl) {
-    htmlSteps.push(
-      `<p style="${S.li}"><span style="${S.strong}">${step}. Read the DM Psychology SOP</span> — the playbook for openers, follow-ups and turning replies into booked calls:<br><a href="${sopUrl}" style="${S.a}">${sopUrl}</a></p>`,
-    );
-    textSteps.push(`${step}. Read the DM Psychology SOP: ${sopUrl}`);
-    step++;
-  }
+  htmlSteps.push(
+    `<p style="${S.li}"><span style="${S.strong}">${step}. Read the DM Psychology Playbook</span> (PDF) — the psychology behind openers, follow-ups, and turning replies into booked calls:<br><a href="${sopUrl}" style="${S.a}">${sopUrl}</a></p>`,
+  );
+  textSteps.push(`${step}. Read the DM Psychology Playbook (PDF): ${sopUrl}`);
+  step++;
   if (crmUrl) {
     htmlSteps.push(
       `<p style="${S.li}"><span style="${S.strong}">${step}. Make your copy of the CRM tracker</span> — track every lead from replied → booked → cash collected (File → Make a copy):<br><a href="${crmUrl}" style="${S.a}">${crmUrl}</a></p>`,

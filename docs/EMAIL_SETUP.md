@@ -9,7 +9,7 @@ Resend key.
 | 1 | **Welcome + confirm email** | User signs up | `auth-email-hook` (Supabase Send-Email hook) |
 | 2 | **Password reset** | User clicks "Forgot password" | `auth-email-hook` |
 | 3 | **Payment confirmed** | Whop `membership.activated` webhook | `whop-webhook` |
-| 4 | **Onboarding / setup guide** (onboarding call + SOP doc + CRM tracker) | 15 min after payment confirmation — or instantly on manual activation from /admin | `whop-webhook` / `admin-api` |
+| 4 | **Onboarding / setup guide** (onboarding call + DM Playbook PDF + CRM tracker) | 15 min after payment confirmation — or instantly on manual activation from /admin | `whop-webhook` / `admin-api` |
 
 Templates live in `supabase/functions/_shared/emails.ts` (dark emerald
 branding matching the app). Emails 3–4 are only sent on the **first**
@@ -36,23 +36,25 @@ supabase secrets set \
   RESEND_API_KEY=re_XXXXXXXX \
   EMAIL_FROM="MagnetEngine <hello@magnetengine.xyz>" \
   APP_URL=https://your-app-domain.com \
-  SOP_DOC_URL="https://docs.google.com/document/d/..." \
   CRM_SHEET_URL="https://docs.google.com/spreadsheets/d/..."
 ```
 
 - `EMAIL_FROM` — must use the domain you verified in step 1.
 - `APP_URL` — your deployed frontend origin; used for the "Open my dashboard"
-  buttons in emails.
-- `SOP_DOC_URL` / `CRM_SHEET_URL` — the DM Psychology Google Doc and the CRM
-  tracker Google Sheet linked from the onboarding email. The source content
-  lives in `docs/sops/` — see `docs/sops/README.md` for the one-time publish
-  steps. **Optional**: if unset, that step is simply omitted (secrets are read
-  at send time — no redeploy needed).
+  buttons in emails, **and** to build the DM Playbook PDF link
+  (`<APP_URL>/downloads/MagnetEngine-DM-Playbook.pdf` — the PDF ships with the
+  frontend at `public/downloads/`, no secret or Google Doc needed). Override
+  with `SOP_DOC_URL` if you'd rather link somewhere else.
+- `CRM_SHEET_URL` — the CRM tracker Google Sheet linked from the onboarding
+  email. Source content in `docs/sops/CRM-TRACKER-TEMPLATE.csv` — see
+  `docs/sops/README.md` for the one-time publish steps. **Optional**: if
+  unset, that step is simply omitted (secrets are read at send time — no
+  redeploy needed).
 - `ONBOARDING_CALL_URL` — the booking link in the onboarding email; defaults
   to `https://cal.com/magnetengine/30min`, so only set it if that changes.
 
-Share the Doc and Sheet as **"Anyone with the link → Viewer"** or customers
-will hit permission walls.
+Share the Sheet as **"Anyone with the link → Viewer"** or customers will hit
+permission walls.
 
 ## 3. Deploy the functions
 
@@ -111,8 +113,8 @@ Supabase dashboard → Edge Functions → Logs.
    dashboard button, heads-up that the setup guide is coming; points at Whop
    for invoices.
 4. **Setup guide** — numbered steps: book the onboarding call
-   (cal.com/magnetengine/30min), read the DM Psychology SOP, copy the CRM
-   tracker, configure the AI Prompt Wizard, launch the first campaign;
+   (cal.com/magnetengine/30min), read the DM Psychology Playbook (bundled PDF),
+   copy the CRM tracker, configure the AI Prompt Wizard, launch the first campaign;
    dashboard CTA; reply-for-help footer.
 
 Copy lives in `supabase/functions/_shared/emails.ts` — edit and redeploy the
