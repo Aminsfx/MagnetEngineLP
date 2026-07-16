@@ -231,7 +231,29 @@ const DashboardShell: React.FC = () => {
   }, [user]);
 
   const handleAddLeads = useCallback(async (newLeads: Lead[]) => {
-    let toAdd = newLeads;
+    // De-dupe by handle against every lead already in the queue (any
+    // campaign) and within this batch itself — the same profile turns up
+    // across overlapping searches, repeat scrapes, and CSV re-imports.
+    const existingHandles = new Set(leadsRef.current.map((l) => l.handle.toLowerCase()));
+    const seenInBatch = new Set<string>();
+    const deduped: Lead[] = [];
+    for (const lead of newLeads) {
+      const handle = lead.handle.toLowerCase();
+      if (existingHandles.has(handle) || seenInBatch.has(handle)) continue;
+      seenInBatch.add(handle);
+      deduped.push(lead);
+    }
+    const duplicateCount = newLeads.length - deduped.length;
+
+    if (deduped.length === 0) {
+      if (duplicateCount > 0) {
+        toast.info(`All ${duplicateCount} lead${duplicateCount !== 1 ? 's' : ''} were already in your queue — nothing new to add.`);
+      }
+      return;
+    }
+
+    let toAdd = deduped;
+    let quotaCapped = 0;
 
     // Monthly quotas (skipped in dev mode without a user)
     if (user) {
@@ -245,8 +267,8 @@ const DashboardShell: React.FC = () => {
         return;
       }
       if (toAdd.length > remaining) {
+        quotaCapped = toAdd.length - remaining;
         toAdd = toAdd.slice(0, remaining);
-        toast.info(`Monthly lead limit: added ${toAdd.length} of ${newLeads.length} (${limits.maxLeadsPerMonth}/month on your plan).`);
       }
     }
 
@@ -260,6 +282,15 @@ const DashboardShell: React.FC = () => {
     if (user) {
       db.incrementMonthlyLeadCount(user.id, added.length);
       db.incrementMonthlyCampaignCount(user.id);
+    }
+
+    // Only worth a toast when something was left out — a clean add is
+    // already confirmed by the calling component (CampaignBuilder / CsvImport).
+    if (duplicateCount > 0 || quotaCapped > 0) {
+      const parts = [`Added ${added.length} lead${added.length !== 1 ? 's' : ''}`];
+      if (duplicateCount > 0) parts.push(`${duplicateCount} already in your queue`);
+      if (quotaCapped > 0) parts.push(`${quotaCapped} over your ${limits.maxLeadsPerMonth}/month limit`);
+      toast.info(`${parts[0]} · skipped ${parts.slice(1).join(' + ')}.`);
     }
   }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast]);
 
