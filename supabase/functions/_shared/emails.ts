@@ -111,7 +111,6 @@ const S = {
   p: `margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1a1a;${FONT}`,
   li: `margin:0 0 10px;font-size:14px;line-height:1.6;color:#1a1a1a;${FONT}`,
   small: `margin:0 0 16px;font-size:12px;line-height:1.6;color:#666666;word-break:break-all;${FONT}`,
-  footer: `margin:32px 0 0;padding-top:16px;border-top:1px solid #dddddd;font-size:12px;line-height:1.6;color:#888888;${FONT}`,
 };
 
 function layout(bodyHtml: string, previewText: string): string {
@@ -125,8 +124,6 @@ function layout(bodyHtml: string, previewText: string): string {
 <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(previewText)}</div>
 <div style="max-width:600px;margin:0 auto;padding:32px 20px;">
 ${bodyHtml}
-<p style="${S.footer}">MagnetEngine — AI-powered Instagram lead automation<br>
-You're receiving this because you have a MagnetEngine account.</p>
 </div>
 </body>
 </html>`;
