@@ -231,45 +231,32 @@ export function onboardingEmail(firstName: string | null): EmailContent {
 
   const subject = "Your MagnetEngine setup guide";
 
-  let step = 1;
-  const htmlSteps: string[] = [];
-  const textSteps: string[] = [];
-  htmlSteps.push(
-    `<p style="${S.li}">${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together:<br><a href="${callUrl}">${callUrl}</a></p>`,
-  );
-  textSteps.push(`${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together: ${callUrl}`);
-  step++;
-  htmlSteps.push(
-    `<p style="${S.li}">${step}. Read the DM Psychology Playbook (PDF) — how to turn cold DMs into booked calls:<br><a href="${sopUrl}">${sopUrl}</a></p>`,
-  );
-  textSteps.push(`${step}. Read the DM Psychology Playbook (PDF): ${sopUrl}`);
-  step++;
-  htmlSteps.push(
-    `<p style="${S.li}">${step}. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business so every DM sounds like you.</p>`,
-  );
-  textSteps.push(`${step}. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business.`);
-  step++;
-  htmlSteps.push(
-    `<p style="${S.li}">${step}. Launch your first campaign — search your niche, scrape leads, generate DMs and approve them in the queue.</p>`,
-  );
-  textSteps.push(`${step}. Launch your first campaign — search your niche, scrape leads, generate DMs and approve them in the queue.`);
-
+  // Same structure as the confirmation email: greeting → one primary action
+  // link (with copy-paste fallback) → "What happens next:" numbered list.
   const html = layout(
     `<p style="${S.p}">${greeting(firstName)}</p>
-<p style="${S.p}">Welcome aboard. Here's everything you need to get started, in order:</p>
-${htmlSteps.join("\n")}
-<p style="${S.p}">Your dashboard: <a href="${dashboard}">${dashboard}</a></p>
+<p style="${S.p}">Welcome aboard. The first step is to book your onboarding call — we'll set up your first campaign together:</p>
+${link(callUrl, "Book my onboarding call")}
+<p style="${S.p}">What happens next:</p>
+<p style="${S.li}">1. Book your onboarding call (30 minutes)</p>
+<p style="${S.li}">2. Read the <a href="${sopUrl}">DM Psychology Playbook</a> — how to turn cold DMs into booked calls</p>
+<p style="${S.li}">3. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business so every DM sounds like you</p>
+<p style="${S.li}">4. Launch your first campaign from your <a href="${dashboard}">dashboard</a> — search your niche, scrape leads, generate DMs and approve them in the queue</p>
 <p style="${S.p}">If you have any questions, just reply to this email.</p>
 <p style="${S.p}">— The MagnetEngine Team</p>`,
-    "Your setup guide: onboarding call, playbook, and your first campaign.",
+    "Book your onboarding call and launch your first campaign.",
   );
   const text = `${greetingText(firstName)}
 
-Welcome aboard. Here's everything you need to get started, in order:
+Welcome aboard. The first step is to book your onboarding call — we'll set up your first campaign together:
 
-${textSteps.join("\n")}
+${callUrl}
 
-Your dashboard: ${dashboard}
+What happens next:
+1. Book your onboarding call (30 minutes)
+2. Read the DM Psychology Playbook: ${sopUrl}
+3. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business so every DM sounds like you
+4. Launch your first campaign from your dashboard: ${dashboard}
 
 If you have any questions, just reply to this email.
 
