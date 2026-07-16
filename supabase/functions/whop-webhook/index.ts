@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
 
     // Post-payment email sequence (best-effort — never fails the webhook):
     //   1. payment confirmed, immediately
-    //   2. onboarding / setup guide (SOPs + Loom), 15 minutes later
+    //   2. onboarding / setup guide, 15 minutes later
     if (firstActivation) {
       const firstName = await getFirstName(supabase, userId);
       const planLabel = planId === Deno.env.get("WHOP_PLAN_ID_ANNUAL")

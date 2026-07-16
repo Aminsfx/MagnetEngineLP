@@ -12,7 +12,6 @@
 //   SOP_DOC_URL      — DM Psychology Playbook link (defaults to the bundled PDF at
 //                      public/downloads/MagnetEngine-DM-Playbook.pdf; override to
 //                      point at a Google Doc etc. instead)
-//   CRM_SHEET_URL    — Google Sheet: CRM tracker template (onboarding email; omitted if unset)
 //
 // The Resend API key lives ONLY here (server-side). The browser never sends
 // email and never sees the key — same rule as every other integration.
@@ -220,8 +219,8 @@ Your receipt and billing details are managed by Whop; check your Whop account fo
 }
 
 /** 4. Onboarding / getting started (scheduled after payment, or on manual
- * activation from /admin). SOP + CRM links render only when configured; the
- * onboarding-call link always renders (env override, cal.com default). */
+ * activation from /admin). The onboarding-call link always renders (env
+ * override, cal.com default). */
 export function onboardingEmail(firstName: string | null): EmailContent {
   const dashboard = `${appUrl()}/dashboard`;
   const callUrl = Deno.env.get("ONBOARDING_CALL_URL") ?? "https://cal.com/magnetengine/30min";
@@ -229,7 +228,6 @@ export function onboardingEmail(firstName: string | null): EmailContent {
   // publishing step required. SOP_DOC_URL can still override it (e.g. to point
   // at a living Google Doc instead) without a redeploy.
   const sopUrl = Deno.env.get("SOP_DOC_URL") || `${appUrl()}/downloads/MagnetEngine-DM-Playbook.pdf`;
-  const crmUrl = Deno.env.get("CRM_SHEET_URL") ?? "";
 
   const subject = "Your MagnetEngine setup guide";
 
@@ -246,13 +244,6 @@ export function onboardingEmail(firstName: string | null): EmailContent {
   );
   textSteps.push(`${step}. Read the DM Psychology Playbook (PDF): ${sopUrl}`);
   step++;
-  if (crmUrl) {
-    htmlSteps.push(
-      `<p style="${S.li}">${step}. Make your copy of the CRM tracker (File → Make a copy) — track every lead from replied to booked to cash collected:<br><a href="${crmUrl}">${crmUrl}</a></p>`,
-    );
-    textSteps.push(`${step}. Make your copy of the CRM tracker (File → Make a copy): ${crmUrl}`);
-    step++;
-  }
   htmlSteps.push(
     `<p style="${S.li}">${step}. Set up your AI Prompt Wizard — in Settings, tell MagnetEngine about your business so every DM sounds like you.</p>`,
   );
