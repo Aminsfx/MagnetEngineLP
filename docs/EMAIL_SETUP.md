@@ -19,8 +19,10 @@ activation — renewals and repeat webhook deliveries don't re-send them
 ## 1. Verify your domain in Resend
 
 **Already done** — `magnetengine.xyz` is verified in this Resend account
-(sending enabled, us-east-1), so `EMAIL_FROM` can be e.g.
-`MagnetEngine <hello@magnetengine.xyz>`.
+(sending enabled, us-east-1). Use `MagnetEngine <amine@magnetengine.xyz>` as
+`EMAIL_FROM` — it's the mailbox that actually exists, so customer replies
+land somewhere (the onboarding email invites replies). Any other
+`@magnetengine.xyz` address would *send* fine but replies to it would bounce.
 
 For a different domain: [resend.com](https://resend.com) → **Domains** →
 **Add Domain**, add the SPF + DKIM records it shows at your DNS provider, and
@@ -34,7 +36,7 @@ wait for **Verified**. Then grab an API key: **API Keys** → **Create API Key**
 ```bash
 supabase secrets set \
   RESEND_API_KEY=re_XXXXXXXX \
-  EMAIL_FROM="MagnetEngine <hello@magnetengine.xyz>" \
+  EMAIL_FROM="MagnetEngine <amine@magnetengine.xyz>" \
   APP_URL=https://your-app-domain.com \
   CRM_SHEET_URL="https://docs.google.com/spreadsheets/d/..."
 ```
