@@ -66,7 +66,7 @@ const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 // The dashboard shell owns these top-level paths (it renders its own nested
 // <Routes> for each). Everything else is an unknown URL.
 const DASHBOARD_PATHS = [
-  '/dashboard', '/campaign', '/queue', '/follow-ups', '/calculator', '/settings', '/profile',
+  '/dashboard', '/campaign', '/queue', '/inbox', '/follow-ups', '/calculator', '/settings', '/profile',
 ];
 
 /**
