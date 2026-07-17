@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Kanban, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock, Shield, Inbox as InboxIcon } from 'lucide-react';
 import { usePlan } from '../contexts/PlanContext';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEmail } from '../lib/plans';
@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
         { icon: Users, label: 'Campaign Builder', path: '/campaign' },
         { icon: Database, label: 'Approval Queue', path: '/queue' },
+        { icon: InboxIcon, label: 'Inbox', path: '/inbox' },
         { icon: CalendarClock, label: 'Follow-ups', path: '/follow-ups' },
         { icon: Calculator, label: 'Calculator', path: '/calculator' },
         { icon: Settings, label: 'Settings', path: '/settings' },

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook } from 'lucide-react';
+import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook, Bot } from 'lucide-react';
 import { AppConfig } from '../../lib/types';
 import { storage } from '../../lib/storage';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
@@ -612,6 +612,48 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                         placeholder="https://calendly.com/yourname/15min"
                         className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                     />
+                </div>
+            </div>
+
+            {/* ── AI Reply Assistant (Inbox) ───────────────────────────────── */}
+            <div className="bg-[#050A08] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/15 flex items-center justify-center">
+                        <Bot className="w-4 h-4 text-violet-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-white">AI Reply Assistant</h3>
+                        <p className="text-[11px] text-zinc-600">How the AI answers inbound DMs in your Inbox and books calls</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs text-zinc-500 mb-1.5">Reply persona &amp; instructions</label>
+                        <textarea
+                            value={config.replySystemPrompt ?? ''}
+                            onChange={e => onUpdateConfig({ ...config, replySystemPrompt: e.target.value })}
+                            rows={8}
+                            placeholder="Describe how the AI should reply to prospects, handle objections, and steer toward booking a call…"
+                            className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-3 text-xs text-zinc-300 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500/50 resize-none leading-relaxed"
+                        />
+                        <p className="text-[10px] text-zinc-700 mt-1">Your booking link (set above) is shared automatically once a prospect shows interest.</p>
+                    </div>
+
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-white/8 bg-white/[0.02] cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={!!config.autopilot}
+                            onChange={e => onUpdateConfig({ ...config, autopilot: e.target.checked })}
+                            className="accent-violet-500 mt-0.5"
+                        />
+                        <div>
+                            <div className="text-sm text-white font-medium">Autopilot — reply automatically</div>
+                            <p className="text-[11px] text-zinc-600 mt-0.5">
+                                When on, the AI answers new inbound DMs on its own (paced by your DM delay and daily cap) while a dashboard tab is open. When off, replies wait for your approval in the Inbox.
+                            </p>
+                        </div>
+                    </label>
                 </div>
             </div>
 

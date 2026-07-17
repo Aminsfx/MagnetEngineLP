@@ -63,6 +63,11 @@ export interface AppConfig {
     dmTone?: 'casual' | 'professional' | 'friendly' | 'bold';
     // Booking/Calendly link inserted into reply battlecards
     calendarLink?: string;
+    // AI reply assistant (inbox) — persona for answering inbound DMs & booking
+    replySystemPrompt?: string;
+    // Autopilot: auto-send AI replies to new inbound DMs while a dashboard tab
+    // is open (paced by the DM delay + dailySendCap). Off = human approval.
+    autopilot?: boolean;
     // Outbound webhook integration (Zapier/Make catch hooks)
     webhookUrl?: string;
     webhookEvents?: { replied: boolean; positiveReply: boolean; booked: boolean };
@@ -98,6 +103,41 @@ export interface ColumnMapping {
     followers?: string;
     bio?: string;
     isPrivate?: string;
+}
+
+// ─── Unified inbox (AI SDR) ──────────────────────────────────────────────────
+// A conversation is one Instagram DM thread (keyed by IG thread_id). Messages
+// are the individual DMs in that thread. Populated by the extension's inbox
+// poller and reconciled into Supabase by DashboardShell.
+export type ConversationIntent =
+    | 'interested'
+    | 'objection'
+    | 'not_interested'
+    | 'neutral'
+    | 'booked';
+
+export interface Conversation {
+    id: string;                 // IG thread_id
+    handle: string;
+    name?: string;
+    avatarUrl?: string;
+    account?: string;           // which of the user's IG accounts owns this thread
+    lastMessageAt?: string;     // ISO
+    lastMessageText?: string;
+    unread: boolean;
+    status: 'open' | 'booked' | 'closed';
+    intent?: ConversationIntent;
+    labels?: string[];          // freeform lead labels/tags (e.g. "hot", "call booked")
+    needsReply: boolean;        // last message is inbound with no outbound after it
+}
+
+export interface Message {
+    id: string;                 // IG item_id (or uuid for local drafts)
+    conversationId: string;     // = Conversation.id (thread_id)
+    direction: 'in' | 'out';
+    text: string;
+    aiDraft?: boolean;
+    createdAt: string;          // ISO
 }
 
 // Follow-up sequencer types

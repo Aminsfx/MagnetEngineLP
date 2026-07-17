@@ -42,13 +42,75 @@
  * create policy "Users see own sequences" on follow_up_sequences
  *   for all using (auth.uid() = user_id);
  *
+ * -- Conversations (AI SDR inbox) — one row per Instagram DM thread
+ * create table if not exists conversations (
+ *   id                text primary key,           -- IG thread_id
+ *   user_id           uuid not null references auth.users(id) on delete cascade,
+ *   handle            text not null,
+ *   name              text,
+ *   avatar_url        text,
+ *   account           text,                       -- which IG account owns the thread
+ *   last_message_at   timestamptz,
+ *   last_message_text text,
+ *   unread            boolean not null default false,
+ *   status            text not null default 'open',
+ *   intent            text,
+ *   labels            text[],                      -- freeform lead labels
+ *   needs_reply       boolean not null default false,
+ *   updated_at        timestamptz default now()
+ * );
+ * alter table conversations enable row level security;
+ * create policy "own conversations" on conversations
+ *   for all using (auth.uid() = user_id);
+ *
+ * -- Messages (AI SDR inbox) — individual DMs within a conversation
+ * create table if not exists messages (
+ *   id              text primary key,             -- IG item_id (uuid for drafts)
+ *   conversation_id text not null references conversations(id) on delete cascade,
+ *   user_id         uuid not null references auth.users(id) on delete cascade,
+ *   direction       text not null,                -- 'in' | 'out'
+ *   text            text not null,
+ *   ai_draft        boolean not null default false,
+ *   created_at      timestamptz not null
+ * );
+ * alter table messages enable row level security;
+ * create policy "own messages" on messages
+ *   for all using (auth.uid() = user_id);
+ * create index if not exists messages_conv_idx on messages (conversation_id, created_at);
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { supabase } from './supabase';
 import { storage } from './storage'; // legacy localStorage fallback
-import type { AppConfig, Lead, FollowUpSequence } from './types';
+import type { AppConfig, Lead, FollowUpSequence, Conversation, Message } from './types';
 import type { PlanTier, Subscription } from './plans';
+
+// ── localStorage fallback keys for the inbox (dev / no-Supabase mode) ──────────
+const LS_CONVOS = 'magnetengine_conversations';
+const LS_MESSAGES = 'magnetengine_messages';
+
+function lsGet<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+function lsSet<T>(key: string, rows: T[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(rows));
+  } catch {
+    /* quota — ignore */
+  }
+}
+/** Merge incoming rows into an existing array by `id` (incoming wins). */
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const map = new Map(existing.map((r) => [r.id, r]));
+  for (const r of incoming) map.set(r.id, r);
+  return Array.from(map.values());
+}
 
 /** True when Supabase env vars are present and client is usable */
 function isSupabaseReady(): boolean {
@@ -227,6 +289,126 @@ export const db = {
       .eq('id', id);
 
     if (error) console.error('[db] deleteSequence error:', error.message);
+  },
+
+  // ─── Conversations + Messages (AI SDR inbox) ──────────────────────────────
+
+  async getConversations(userId: string): Promise<Conversation[]> {
+    if (!isSupabaseReady()) return lsGet<Conversation>(LS_CONVOS);
+
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .order('last_message_at', { ascending: false, nullsFirst: false });
+
+    if (error) {
+      console.error('[db] getConversations error:', error.message);
+      return lsGet<Conversation>(LS_CONVOS);
+    }
+
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      handle: r.handle,
+      name: r.name ?? undefined,
+      avatarUrl: r.avatar_url ?? undefined,
+      account: r.account ?? undefined,
+      lastMessageAt: r.last_message_at ?? undefined,
+      lastMessageText: r.last_message_text ?? undefined,
+      unread: Boolean(r.unread),
+      status: (r.status as Conversation['status']) ?? 'open',
+      intent: (r.intent as Conversation['intent']) ?? undefined,
+      labels: Array.isArray(r.labels) ? r.labels : undefined,
+      needsReply: Boolean(r.needs_reply),
+    }));
+  },
+
+  async upsertConversations(rows: Conversation[], userId: string): Promise<void> {
+    if (rows.length === 0) return;
+    if (!isSupabaseReady()) {
+      lsSet(LS_CONVOS, mergeById(lsGet<Conversation>(LS_CONVOS), rows));
+      return;
+    }
+
+    const payload = rows.map((c) => ({
+      id: c.id,
+      user_id: userId,
+      handle: c.handle,
+      name: c.name ?? null,
+      avatar_url: c.avatarUrl ?? null,
+      account: c.account ?? null,
+      last_message_at: c.lastMessageAt ?? null,
+      last_message_text: c.lastMessageText ?? null,
+      unread: c.unread,
+      status: c.status,
+      intent: c.intent ?? null,
+      labels: c.labels ?? null,
+      needs_reply: c.needsReply,
+      updated_at: new Date().toISOString(),
+    }));
+
+    for (let i = 0; i < payload.length; i += 200) {
+      const batch = payload.slice(i, i + 200);
+      const { error } = await supabase
+        .from('conversations')
+        .upsert(batch, { onConflict: 'id' });
+      if (error) console.error('[db] upsertConversations error:', error.message);
+    }
+  },
+
+  async getMessages(userId: string, conversationId?: string): Promise<Message[]> {
+    if (!isSupabaseReady()) {
+      const all = lsGet<Message>(LS_MESSAGES);
+      return conversationId ? all.filter((m) => m.conversationId === conversationId) : all;
+    }
+
+    let q = supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    if (conversationId) q = q.eq('conversation_id', conversationId);
+
+    const { data, error } = await q;
+    if (error) {
+      console.error('[db] getMessages error:', error.message);
+      return [];
+    }
+
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      conversationId: r.conversation_id,
+      direction: r.direction as Message['direction'],
+      text: r.text,
+      aiDraft: Boolean(r.ai_draft),
+      createdAt: r.created_at,
+    }));
+  },
+
+  async upsertMessages(rows: Message[], userId: string): Promise<void> {
+    if (rows.length === 0) return;
+    if (!isSupabaseReady()) {
+      lsSet(LS_MESSAGES, mergeById(lsGet<Message>(LS_MESSAGES), rows));
+      return;
+    }
+
+    const payload = rows.map((m) => ({
+      id: m.id,
+      conversation_id: m.conversationId,
+      user_id: userId,
+      direction: m.direction,
+      text: m.text,
+      ai_draft: m.aiDraft ?? false,
+      created_at: m.createdAt,
+    }));
+
+    for (let i = 0; i < payload.length; i += 200) {
+      const batch = payload.slice(i, i + 200);
+      const { error } = await supabase
+        .from('messages')
+        .upsert(batch, { onConflict: 'id' });
+      if (error) console.error('[db] upsertMessages error:', error.message);
+    }
   },
 
   // ─── Subscriptions ────────────────────────────────────────────────────────

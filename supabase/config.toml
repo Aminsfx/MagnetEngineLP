@@ -29,6 +29,9 @@ verify_jwt = true
 [functions.generate-dm]
 verify_jwt = true
 
+[functions.generate-reply]
+verify_jwt = true
+
 [functions.start-scrape]
 verify_jwt = true
 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MagnetEngine \u2014 DM Campaign Sender",
-  "version": "1.3.0",
-  "description": "Sends the Instagram DMs you approved in your MagnetEngine dashboard \u2014 one at a time, with human-like pacing and a daily safety cap.",
+  "version": "1.4.0",
+  "description": "Sends the Instagram DMs you approved in your MagnetEngine dashboard, reads replies back into your inbox, and drips follow-ups \u2014 with human-like pacing and a daily safety cap.",
   "permissions": [
     "storage",
     "alarms",

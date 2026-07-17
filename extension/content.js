@@ -35,6 +35,20 @@ if (!window.location.hostname.includes("instagram.com")) {
             return;
         }
 
+        // Page → background: the app asks for the latest inbox snapshot.
+        if (event.data.type === 'MAGNET_ENGINE_GET_INBOX') {
+            try {
+                if (!chrome?.runtime?.sendMessage) return;
+                chrome.runtime.sendMessage({ action: 'getInbox' }, (res) => {
+                    if (chrome.runtime.lastError || !res) return;
+                    window.postMessage({ type: 'MAGNET_ENGINE_INBOX', threads: res.threads ?? [] }, '*');
+                });
+            } catch (e) {
+                console.warn("[MagnetEngine] getInbox relay error:", e);
+            }
+            return;
+        }
+
         if (event.data.type === 'MAGNET_ENGINE_CAMPAIGN') {
             console.log("[MagnetEngine] Campaign intercepted. Relaying to background...");
             try {
@@ -61,6 +75,101 @@ if (!window.location.hostname.includes("instagram.com")) {
             }
         }
     }, false);
+}
+
+// ── Instagram: Inbox poller (read replies into the app) ─────────────
+// Runs from the instagram.com page context so the request is SAME-ORIGIN and
+// the user's session cookie attaches automatically (a background-worker fetch
+// would be cross-origin and IG's SameSite sessionid would NOT be sent). We read
+// IG's own private web JSON API — the same endpoints the website itself calls.
+if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxPoller) {
+    window.__magnetInboxPoller = true;
+
+    const IG_APP_ID = "936619743392459"; // public web app id used by instagram.com
+    const POLL_MS = 100000;              // ~1.6 min — conservative for account health
+
+    const readCookie = (name) => {
+        const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : '';
+    };
+
+    // Normalize one IG thread → { threadId, handle, name, avatarUrl, messages[] }
+    function normalizeThread(thread) {
+        const viewerId = String(thread.viewer_id ?? '');
+        const other = (thread.users && thread.users[0]) || {};
+        const handle = other.username || '';
+        if (!handle) return null;
+
+        const messages = [];
+        for (const item of (thread.items || [])) {
+            // Only capture text-bearing items; skip reactions/media for MVP.
+            const text = typeof item.text === 'string' ? item.text
+                       : (item.link && item.link.text) ? item.link.text
+                       : '';
+            if (!text) continue;
+            const tsMicros = Number(item.timestamp) || 0;
+            messages.push({
+                id: String(item.item_id || `${thread.thread_id}_${tsMicros}`),
+                direction: String(item.user_id ?? '') === viewerId ? 'out' : 'in',
+                text,
+                createdAt: new Date(tsMicros ? tsMicros / 1000 : Date.now()).toISOString(),
+            });
+        }
+        // IG returns items newest-first; store oldest-first.
+        messages.reverse();
+        if (messages.length === 0) return null;
+
+        return {
+            threadId: String(thread.thread_id || thread.thread_v2_id || ''),
+            handle,
+            name: other.full_name || '',
+            avatarUrl: other.profile_pic_url || '',
+            messages,
+        };
+    }
+
+    async function pollInbox() {
+        try {
+            const csrf = readCookie('csrftoken');
+            const res = await fetch(
+                'https://www.instagram.com/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20',
+                {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'X-IG-App-ID': IG_APP_ID,
+                        'X-ASBD-ID': '129477',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrf,
+                    },
+                },
+            );
+            if (!res.ok) {
+                // 401/403 = logged out or challenge; just skip this cycle.
+                console.debug('[MagnetEngine] inbox poll skipped, status', res.status);
+                return;
+            }
+            const data = await res.json();
+            const rawThreads = (data && data.inbox && data.inbox.threads) || [];
+            const threads = rawThreads
+                .map(normalizeThread)
+                .filter((t) => t && t.threadId);
+            if (threads.length === 0) return;
+
+            if (chrome?.runtime?.sendMessage) {
+                chrome.runtime.sendMessage(
+                    { action: 'INBOX_SYNC', threads },
+                    () => void chrome.runtime.lastError,
+                );
+            }
+        } catch (e) {
+            console.debug('[MagnetEngine] inbox poll error:', e && e.message);
+        }
+    }
+
+    // Let the session settle, then poll on an interval for the tab's lifetime.
+    setTimeout(pollInbox, 8000);
+    setInterval(pollInbox, POLL_MS);
 }
 
 // ── Instagram: Execute DM automation ────────────────────────────

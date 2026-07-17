@@ -10,15 +10,17 @@ import { ApprovalQueue } from '../components/campaign/ApprovalQueue';
 import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
 import { RevenueCalculator } from '../components/calculator/RevenueCalculator';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
+import { InboxView } from '../components/inbox/InboxView';
 import ProfilePage from './ProfilePage';
 import { HealthScore } from '../components/dashboard/HealthScore';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
 import { filterUtils } from '../lib/filters';
-import { aiAPI } from '../lib/api';
+import { aiAPI, type ReplyResult } from '../lib/api';
+import { ingestThreads, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
-import { Lead, AppConfig, DashboardStats } from '../lib/types';
+import { Lead, AppConfig, DashboardStats, Conversation, Message, ConversationIntent } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';
@@ -88,6 +90,32 @@ For every lead:
 ## OUTPUT
 
 Just the DM text. No quotes. No labels. No preamble. Raw text only.`,
+  replySystemPrompt: `You are the founder of MagnetEngine, replying to Instagram DMs from people who answered your cold outreach.
+
+Your ONE goal: move interested people toward booking a quick call. You are warm, human, and low-pressure — never a pushy salesperson.
+
+## YOUR VOICE
+- Text like a real person, not a brand. Short messages. Lowercase is fine.
+- Match their energy. If they're casual, be casual.
+- One idea per message. Ask one question at a time.
+- Never send walls of text.
+
+## HOW TO HANDLE THE CONVERSATION
+1. If they show interest ("tell me more", "how does it work", "what do you do") → give a one-sentence answer, then offer the call and share your booking link.
+2. If they raise an objection (price, time, "not sure", "already have X") → acknowledge it honestly, answer briefly, and gently re-offer the call.
+3. If they're clearly not interested or say stop → thank them, wish them well, do not push.
+4. If they ask a direct question → answer it plainly first, then steer back toward the call.
+
+## BOOKING
+When they're interested or agree to talk, share the booking link naturally (e.g. "cool — grab a time that works here: {LINK}"). Only send the link once they've shown interest.
+
+## NEVER
+- Never be robotic, formal, or use corporate speak.
+- Never send more than ~2 short sentences.
+- Never invent facts about their business or make promises about results.
+
+## OUTPUT
+Just the reply text. No quotes, no labels, no preamble. Raw text only.`,
   includeKeywords: ['agency', 'founder', 'coach', 'consultant', 'SMMA', 'freelancer', 'marketing', 'growth', 'entrepreneur', 'CEO'],
   excludeKeywords: ['bot', 'giveaway', 'follow for follow', 'f4f', 'crypto', 'NFT', 'MLM', 'dropship'],
   minFollowers: 1000,
@@ -134,10 +162,22 @@ const DashboardShell: React.FC = () => {
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
   const [dmUsed, setDmUsed] = useState(0);
 
+  // ─── Inbox (AI SDR) ─────────────────────────────────────────────────────────
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
   // Live mirror of leads so the extension bridge can reconcile without
   // re-subscribing on every leads change.
   const leadsRef = useRef<Lead[]>([]);
   useEffect(() => { leadsRef.current = leads; }, [leads]);
+  // Live mirrors for the inbox so the bridge/autopilot read current state
+  // without re-subscribing on every message.
+  const convosRef = useRef<Conversation[]>([]);
+  const messagesRef = useRef<Message[]>([]);
+  const configRef = useRef<AppConfig>(DEFAULT_CONFIG);
+  useEffect(() => { convosRef.current = conversations; }, [conversations]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { configRef.current = config; }, [config]);
   const [headerAvatar, setHeaderAvatar] = useState<string | null>(() =>
     user ? localStorage.getItem(`avatar_${user.id}`) : null
   );
@@ -159,11 +199,15 @@ const DashboardShell: React.FC = () => {
       db.getLeads(userId),
       db.getConfig(userId),
       db.getDMUsage(userId),
-    ]).then(([savedLeads, savedConfig, dmUsage]) => {
+      db.getConversations(userId),
+      db.getMessages(userId),
+    ]).then(([savedLeads, savedConfig, dmUsage, savedConvos, savedMessages]) => {
       setLeads(savedLeads ?? []);
       setConfig(savedConfig ?? DEFAULT_CONFIG);
       setDailySendCount(storage.getDailySends().count);
       setDmUsed(dmUsage.used);
+      setConversations(savedConvos ?? []);
+      setMessages(savedMessages ?? []);
       setDataLoading(false);
     });
   }, [userId]);
@@ -197,9 +241,37 @@ const DashboardShell: React.FC = () => {
     if (user) db.upsertLeads(updated, user.id).catch(console.error);
   }, [user]);
 
+  // Merge a fresh inbox snapshot from the extension into state + persist the
+  // changed rows. Reads live refs so it can stay a stable callback. Returns the
+  // conversations that gained a NEW inbound message (for autopilot).
+  const ingestInbox = useCallback((threads: RawThread[]): Conversation[] => {
+    if (!Array.isArray(threads) || threads.length === 0) return [];
+    const { conversations, messages, changedConversations, newMessages } = ingestThreads(
+      threads, convosRef.current, messagesRef.current,
+    );
+    if (changedConversations.length === 0 && newMessages.length === 0) return [];
+
+    setConversations(conversations);
+    setMessages(messages);
+    if (user) {
+      if (changedConversations.length) db.upsertConversations(changedConversations, user.id).catch(console.error);
+      if (newMessages.length) db.upsertMessages(newMessages, user.id).catch(console.error);
+    }
+    // Conversations whose newest message is a freshly-arrived inbound.
+    const newInboundConvIds = new Set(
+      newMessages.filter((m) => m.direction === 'in').map((m) => m.conversationId),
+    );
+    return changedConversations.filter((c) => c.needsReply && newInboundConvIds.has(c.id));
+  }, [user]);
+
+  // Ref so the bridge effect can call the latest autopilot handler without
+  // re-subscribing (defined further down).
+  const autopilotRef = useRef<(convos: Conversation[]) => void>(() => {});
+
   // ─── Extension bridge ───────────────────────────────────────────────────────
-  // The extension reports what it ACTUALLY sent (real daily count + sent log),
-  // so the header and per-lead "sent" reflect reality, not handoffs.
+  // The extension reports what it ACTUALLY sent (real daily count + sent log)
+  // and pushes inbox snapshots, so the header, per-lead "sent", and the Inbox
+  // all reflect reality, not handoffs.
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== window) return;
@@ -212,19 +284,25 @@ const DashboardShell: React.FC = () => {
       } else if (d.type === 'MAGNET_ENGINE_SENT') {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         if (d.handle) markSentByHandles([d.handle]);
+      } else if (d.type === 'MAGNET_ENGINE_INBOX') {
+        const newInbound = ingestInbox(d.threads ?? []);
+        if (newInbound.length) autopilotRef.current(newInbound);
       }
     };
     window.addEventListener('message', onMessage);
 
-    const requestStats = () => window.postMessage({ type: 'MAGNET_ENGINE_GET_STATS' }, '*');
-    requestStats();                                   // on mount
-    window.addEventListener('focus', requestStats);   // and when the tab refocuses
+    const requestSync = () => {
+      window.postMessage({ type: 'MAGNET_ENGINE_GET_STATS' }, '*');
+      window.postMessage({ type: 'MAGNET_ENGINE_GET_INBOX' }, '*');
+    };
+    requestSync();                                   // on mount
+    window.addEventListener('focus', requestSync);   // and when the tab refocuses
 
     return () => {
       window.removeEventListener('message', onMessage);
-      window.removeEventListener('focus', requestStats);
+      window.removeEventListener('focus', requestSync);
     };
-  }, [markSentByHandles]);
+  }, [markSentByHandles, ingestInbox]);
 
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
@@ -364,6 +442,100 @@ const DashboardShell: React.FC = () => {
     toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
     return due.length;
   }, [user, config.dailySendCap, toast]);
+
+  // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
+
+  /** Mark the lead behind a conversation as booked (fires the booked webhook). */
+  const markLeadBooked = useCallback((handle: string) => {
+    const h = handle.toLowerCase().replace(/^@/, '');
+    const lead = leadsRef.current.find((l) => l.handle.toLowerCase() === h);
+    if (lead && !lead.booked) {
+      handleUpdateLead({ ...lead, booked: true, positiveReply: true, replied: true, status: 'won' });
+    }
+  }, [handleUpdateLead]);
+
+  /** Persist a single conversation to state + DB; if it just became booked,
+   *  reflect that on the underlying lead. */
+  const handleUpdateConversation = useCallback((conv: Conversation) => {
+    const prev = convosRef.current.find((c) => c.id === conv.id);
+    setConversations((list) => list.map((c) => (c.id === conv.id ? conv : c)));
+    if (user) db.upsertConversations([conv], user.id).catch(console.error);
+    if (conv.status === 'booked' && prev?.status !== 'booked') markLeadBooked(conv.handle);
+  }, [user, markLeadBooked]);
+
+  /** Ask the backend for an AI reply draft + intent for a conversation. */
+  const handleGenerateReply = useCallback(async (conv: Conversation): Promise<ReplyResult> => {
+    const history = messagesRef.current
+      .filter((m) => m.conversationId === conv.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((m) => ({ direction: m.direction, text: m.text }));
+    const cfg = configRef.current;
+    const result = await aiAPI.generateReply(cfg.selectedAIProvider, {
+      messages: history,
+      contact: { handle: conv.handle, name: conv.name },
+      systemPrompt: cfg.replySystemPrompt ?? '',
+      calendarLink: cfg.calendarLink,
+    });
+    // Reflect detected intent (drives filters + booking surfacing).
+    const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
+    handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
+    return result;
+  }, [handleUpdateConversation]);
+
+  /** Send a reply: optimistic append + hand off to the extension via the same
+   *  send path as opening DMs (DMing the handle appends to the IG thread). */
+  const handleSendReply = useCallback(async (conv: Conversation, text: string) => {
+    const body = text.trim();
+    if (!body) return;
+    const now = new Date().toISOString();
+    const msg: Message = {
+      id: `local_${conv.id}_${Date.now()}`,
+      conversationId: conv.id,
+      direction: 'out',
+      text: body,
+      createdAt: now,
+    };
+    setMessages((prev) => [...prev, msg]);
+    const updatedConv: Conversation = {
+      ...conv, lastMessageAt: now, lastMessageText: body, needsReply: false, unread: false,
+    };
+    setConversations((list) => list.map((c) => (c.id === conv.id ? updatedConv : c)));
+    if (user) {
+      db.upsertMessages([msg], user.id).catch(console.error);
+      db.upsertConversations([updatedConv], user.id).catch(console.error);
+    }
+
+    const delay = storage.getDmDelay();
+    window.postMessage({
+      type: 'MAGNET_ENGINE_CAMPAIGN',
+      payload: {
+        leads: [{ handle: conv.handle, message: body }],
+        minDelay: delay.min,
+        maxDelay: delay.max,
+        dailyCap: configRef.current.dailySendCap ?? 40,
+      },
+    }, '*');
+    toast.success(`Reply queued to @${conv.handle}`);
+  }, [user, toast]);
+
+  /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
+   *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
+  const handleAutopilot = useCallback(async (newInbound: Conversation[]) => {
+    if (!configRef.current.autopilot) return;
+    for (const conv of newInbound) {
+      const latest = convosRef.current.find((c) => c.id === conv.id) ?? conv;
+      if (!latest.needsReply || latest.status === 'closed') continue;
+      try {
+        const result = await handleGenerateReply(latest);
+        if (result.intent === 'not_interested') continue; // don't chase
+        await handleSendReply(latest, result.reply);
+      } catch (e) {
+        console.error('[autopilot] failed for', conv.handle, e);
+      }
+    }
+  }, [handleGenerateReply, handleSendReply]);
+
+  useEffect(() => { autopilotRef.current = handleAutopilot; }, [handleAutopilot]);
 
   /** Bulk-approve: one state update + one batched DB write */
   const handleApproveLeads = useCallback(async (ids: string[]) => {
@@ -637,6 +809,24 @@ const DashboardShell: React.FC = () => {
                     onRejectLead={handleRejectLead}
                     onUpdateDM={handleUpdateDM}
                     onUpdateLead={handleUpdateLead}
+                  />
+                </div>
+              }
+            />
+
+            {/* Inbox (AI SDR) */}
+            <Route
+              path="/inbox"
+              element={
+                <div className="p-4 sm:p-8 max-w-7xl h-[calc(100vh-3.5rem)]">
+                  <InboxView
+                    conversations={conversations}
+                    messages={messages}
+                    config={config}
+                    onGenerateReply={handleGenerateReply}
+                    onSendReply={handleSendReply}
+                    onUpdateConversation={handleUpdateConversation}
+                    onUpdateConfig={handleUpdateConfig}
                   />
                 </div>
               }

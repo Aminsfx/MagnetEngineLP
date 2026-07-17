@@ -1,5 +1,10 @@
-import { Lead } from './types';
+import { Lead, Message, ConversationIntent } from './types';
 import { invokeFunction } from './functions';
+
+export interface ReplyResult {
+    reply: string;
+    intent: ConversationIntent;
+}
 
 /**
  * AI DM generation.
@@ -27,5 +32,22 @@ export const aiAPI = {
             provider,
         });
         return dm;
+    },
+
+    /**
+     * Generate a conversational reply (+ detected intent) for an inbox thread.
+     * Provider keys stay server-side; the backend builds the prompt from the
+     * message history and returns { reply, intent }.
+     */
+    async generateReply(
+        provider: 'openai' | 'claude' | 'gemini',
+        input: {
+            messages: Array<Pick<Message, 'direction' | 'text'>>;
+            contact: { handle: string; name?: string; bio?: string };
+            systemPrompt: string;
+            calendarLink?: string;
+        },
+    ): Promise<ReplyResult> {
+        return invokeFunction<ReplyResult>('generate-reply', { ...input, provider });
     },
 };

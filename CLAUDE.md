@@ -191,7 +191,48 @@ create table if not exists subscriptions (
 alter table subscriptions enable row level security;
 create policy "Users read own subscription" on subscriptions
   for select using (auth.uid() = user_id);
+
+-- Inbox (AI SDR): conversations + messages synced from the extension's IG
+-- inbox poller. Users read/write only their own rows.
+create table if not exists conversations (
+  id                text primary key,           -- IG thread_id
+  user_id           uuid not null references auth.users(id) on delete cascade,
+  handle            text not null,
+  name              text,
+  avatar_url        text,
+  account           text,
+  last_message_at   timestamptz,
+  last_message_text text,
+  unread            boolean not null default false,
+  status            text not null default 'open',
+  intent            text,
+  labels            text[],
+  needs_reply       boolean not null default false,
+  updated_at        timestamptz default now()
+);
+alter table conversations enable row level security;
+create policy "own conversations" on conversations for all using (auth.uid() = user_id);
+
+create table if not exists messages (
+  id              text primary key,             -- IG item_id (uuid for local drafts)
+  conversation_id text not null references conversations(id) on delete cascade,
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  direction       text not null,                -- 'in' | 'out'
+  text            text not null,
+  ai_draft        boolean not null default false,
+  created_at      timestamptz not null
+);
+alter table messages enable row level security;
+create policy "own messages" on messages for all using (auth.uid() = user_id);
+create index if not exists messages_conv_idx on messages (conversation_id, created_at);
 ```
+
+## AI SDR Inbox (extension inbox poller → generate-reply Edge Function)
+- The extension content script (on instagram.com) polls IG's private web JSON API (`/api/v1/direct_v2/inbox`) SAME-ORIGIN (so the session cookie attaches), normalizes threads, and pushes them to `background.js` (`INBOX_SYNC`). Background stores a snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab.
+- `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).
+- AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
+- Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
+- **Limitation:** polling + autopilot only run while an `instagram.com` tab is open (the background worker can't send IG's SameSite cookie). During active campaigns the extension keeps a pinned inbox tab alive.
 
 ## Security Constraints — MUST NEVER CHANGE
 > "I will personally add the Apify API keys on the backend, so clients should NOT see or manage API keys anywhere in the app."

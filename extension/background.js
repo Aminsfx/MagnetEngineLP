@@ -106,6 +106,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // ── Inbox snapshot from the IG content-script poller ───────────────────
+    // Store the latest snapshot and push it to any open dashboard tab so the
+    // app can persist conversations/messages to Supabase and render the inbox.
+    if (request.action === 'INBOX_SYNC') {
+        const threads = Array.isArray(request.threads) ? request.threads : [];
+        chrome.storage.local.set({ inboxThreads: threads, inboxSyncedAt: Date.now() }, () => {
+            broadcastToApp({ type: 'MAGNET_ENGINE_INBOX', threads });
+        });
+        sendResponse({ status: 'ok', count: threads.length });
+        return true;
+    }
+
+    // ── Inbox request from the web app (latest snapshot) ───────────────────
+    if (request.action === 'getInbox') {
+        chrome.storage.local.get(['inboxThreads'], (result) => {
+            sendResponse({ threads: result.inboxThreads || [] });
+        });
+        return true;
+    }
+
     // ── Pause campaign ─────────────────────────────────────────────
     if (request.action === 'pauseCampaign') {
         chrome.alarms.clear('dripEngine');
@@ -147,12 +167,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// ── Alarm fires → process next lead ───────────────────────────────
+// ── Alarm fires → process next lead / keep an IG tab alive for polling ─────
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'dripEngine') {
         chrome.storage.local.set({ nextAlarmTime: null }, processNextLead);
+    } else if (alarm.name === 'inboxKeepAlive') {
+        ensureInboxTab();
     }
 });
+
+// Periodic heartbeat so the inbox poller has a live instagram.com tab during
+// active outreach (the content-script poller only runs on an IG page).
+chrome.alarms.create('inboxKeepAlive', { periodInMinutes: 3 });
+
+// Ensure a background IG tab exists ONLY while a campaign is active — avoids
+// popping tabs open when the user isn't running outreach.
+function ensureInboxTab() {
+    chrome.storage.local.get(['campaignQueue', 'isExecuting'], (result) => {
+        const active = result.isExecuting || (result.campaignQueue && result.campaignQueue.length > 0);
+        if (!active) return;
+        chrome.tabs.query({}, (tabs) => {
+            const hasIg = tabs.some((t) => t.url && t.url.includes('instagram.com'));
+            if (hasIg) return;
+            chrome.tabs.create(
+                { url: 'https://www.instagram.com/direct/inbox/', active: false, pinned: true },
+                () => void chrome.runtime.lastError,
+            );
+        });
+    });
+}
 
 // ── Recover orphaned task on service worker restart ───────────────
 chrome.runtime.onStartup?.addListener(() => {
