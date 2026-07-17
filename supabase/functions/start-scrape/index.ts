@@ -63,12 +63,18 @@ Deno.serve(async (req) => {
       enhanceUserSearchWithFacebookPage: body.enhanceUserSearchWithFacebookPage ?? false,
     };
   } else if (mode === "followers") {
+    // Actor: thenetaji/instagram-followers-followings-scraper.
+    // Input schema (exact): username (string[]), type ('followers'|'followings'),
+    // enrichProfile (bool), maxItem (int). NOTE the plural 'followings' and the
+    // field name 'enrichProfile' — earlier we sent 'following'/'profileEnriched',
+    // which the actor ignored, yielding empty/foller-only runs.
     actorId = Deno.env.get("APIFY_FOLLOWERS_ACTOR_ID") ?? "asIjo32NQuUHP4Fnc";
+    const type = body.type === "following" || body.type === "followings" ? "followings" : "followers";
     input = {
-      username: body.usernames,
-      type: body.type,
-      maxItem: body.maxItem,
-      profileEnriched: body.profileEnriched ?? false,
+      username: Array.isArray(body.usernames) ? body.usernames : [body.usernames].filter(Boolean),
+      type,
+      maxItem: Math.max(1, Number(body.maxItem) || 100),
+      enrichProfile: body.profileEnriched ?? false,
     };
   } else {
     return json(400, { error: 'invalid mode — expected "keyword" or "followers"' });
