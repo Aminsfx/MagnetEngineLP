@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Calculator, Settings, LogOut, Database, Zap, CalendarClock, UserCircle, Lock, Shield, Inbox as InboxIcon } from 'lucide-react';
-import { usePlan } from '../contexts/PlanContext';
+import { LogOut, Zap, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEmail } from '../lib/plans';
+import { DASHBOARD_ROUTES } from '../lib/routes';
 import Logo from './Logo';
 
 interface SidebarProps {
@@ -16,7 +16,6 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNavigate }) => {
     const location = useLocation();
-    const { limits } = usePlan();
     const { user } = useAuth();
     const [time, setTime] = useState(new Date());
 
@@ -26,15 +25,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
     }, []);
 
     const navItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-        { icon: Users, label: 'Campaign Builder', path: '/campaign' },
-        { icon: Database, label: 'Approval Queue', path: '/queue' },
-        { icon: InboxIcon, label: 'Inbox', path: '/inbox' },
-        { icon: CalendarClock, label: 'Follow-ups', path: '/follow-ups' },
-        { icon: Calculator, label: 'Calculator', path: '/calculator' },
-        { icon: Settings, label: 'Settings', path: '/settings' },
-        { icon: UserCircle, label: 'Profile', path: '/profile' },
-        // Owner-only console — hidden for regular members
+        ...DASHBOARD_ROUTES,
+        // Owner-only console — hidden for regular members. Not a dashboard
+        // route: /admin lives outside the shell and has its own guard.
         ...(isAdminEmail(user?.email) ? [{ icon: Shield, label: 'Admin', path: '/admin' }] : []),
     ];
 
@@ -87,9 +80,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
                                 )}
                                 <item.icon className={`w-4 h-4 relative z-10 transition-transform duration-300 ${isActive ? '' : 'group-hover:scale-110'}`} />
                                 <span className="relative z-10 flex-1">{item.label}</span>
-                                {item.path === '/follow-ups' && !limits.canAccessFollowUps && (
-                                    <Lock className="w-3 h-3 text-zinc-700 relative z-10 flex-shrink-0" />
-                                )}
                             </Link>
                         );
                     })}

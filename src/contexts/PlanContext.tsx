@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { getPlanLimits } from '../lib/plans';
-import type { PlanTier, PlanLimits, SubscriptionStatus } from '../lib/plans';
+import { PLAN_LIMITS } from '../lib/plans';
+import type { PlanLimits, SubscriptionStatus } from '../lib/plans';
 
 interface PlanContextValue {
-    tier: PlanTier;
     limits: PlanLimits;
     /** 'active' unlocks the dashboard; 'pending' keeps the user on /activate */
     status: SubscriptionStatus;
@@ -16,8 +15,7 @@ interface PlanContextValue {
 }
 
 const PlanContext = createContext<PlanContextValue>({
-    tier: 'starter',
-    limits: getPlanLimits('starter'),
+    limits: PLAN_LIMITS,
     status: 'pending',
     loading: true,
     refresh: async () => 'pending',
@@ -27,7 +25,6 @@ export const usePlan = (): PlanContextValue => useContext(PlanContext);
 
 export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
-    const [tier, setTier] = useState<PlanTier>('starter');
     const [status, setStatus] = useState<SubscriptionStatus>('pending');
     const [loading, setLoading] = useState(true);
 
@@ -47,13 +44,11 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // loading flip would unmount the dashboard for the same signed-in user.
     const fetchSubscription = useCallback(async (): Promise<SubscriptionStatus> => {
         if (!currentUserId) {
-            setTier('starter');
             setStatus('pending');
             setLoading(false);
             return 'pending';
         }
         const sub = await db.getSubscription(currentUserId);
-        setTier(sub.tier);
         setStatus(sub.status);
         setLoading(false);
         return sub.status;
@@ -66,7 +61,7 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [fetchSubscription]);
 
     return (
-        <PlanContext.Provider value={{ tier, limits: getPlanLimits(tier), status, loading, refresh: fetchSubscription }}>
+        <PlanContext.Provider value={{ limits: PLAN_LIMITS, status, loading, refresh: fetchSubscription }}>
             {children}
         </PlanContext.Provider>
     );

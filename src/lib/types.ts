@@ -89,13 +89,6 @@ export interface DashboardStats {
     activeCampaigns: number;     // count of distinct campaignIds
 }
 
-// API Key storage — NO Apify (backend-managed). Only AI providers for DM generation.
-export interface APIKeys {
-    openai?: string;
-    claude?: string;
-    gemini?: string;
-}
-
 // Column Mapping for CSV import
 export interface ColumnMapping {
     name?: string;

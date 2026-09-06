@@ -20,6 +20,7 @@ import { aiAPI, type ReplyResult } from '../lib/api';
 import { ingestThreads, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
+import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
 import { Lead, AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
@@ -159,7 +160,6 @@ const DashboardShell: React.FC = () => {
   const stats = useMemo(() => filterUtils.calculateStats(leads), [leads]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
-  const [dailySendCount, setDailySendCount] = useState(0);
   // Real per-day sent count reported by the extension (source of truth for what
   // actually went out), vs the app's optimistic handoff count.
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
@@ -208,7 +208,6 @@ const DashboardShell: React.FC = () => {
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
       setLeads(savedLeads ?? []);
       setConfig(savedConfig ?? DEFAULT_CONFIG);
-      setDailySendCount(storage.getDailySends().count);
       setDmUsed(dmUsage.used);
       setDataLoading(false);
     });
@@ -698,6 +697,115 @@ const DashboardShell: React.FC = () => {
     );
   }
 
+  // Keyed by DashboardPath, so a page declared in the routes manifest without
+  // an element here (or an element with no route) fails to compile instead of
+  // 404ing at runtime.
+  const pages: Record<DashboardPath, React.ReactNode> = {
+    '/dashboard': (
+      <div className="p-8 space-y-6 max-w-7xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">
+              Overview
+            </div>
+            <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">
+              {getGreeting()}{(() => {
+                const first = user?.user_metadata?.first_name;
+                const last = user?.user_metadata?.last_name;
+                const full = [first, last].filter(Boolean).join(' ');
+                return full ? `, ${full}` : user?.email ? `, ${user.email.split('@')[0]}` : '';
+              })()}
+            </h1>
+            <p className="text-zinc-600 text-sm mt-1.5">Your pipeline is live and running.</p>
+          </div>
+        </div>
+        <OnboardingChecklist leads={leads} config={config} />
+        <HealthScore leads={leads} />
+        <MetricsGrid stats={stats} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <ConversionChart leads={leads} />
+          </div>
+          <AIAnalyst stats={stats} />
+        </div>
+      </div>
+    ),
+
+    '/campaign': (
+      <div className="p-8 space-y-6 max-w-7xl">
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Outreach</div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
+          <p className="text-zinc-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
+        </div>
+        <CampaignBuilder onLeadsScraped={handleAddLeads} />
+      </div>
+    ),
+
+    '/queue': (
+      <div className="p-8 space-y-6 max-w-7xl">
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Review</div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Approval Queue</h1>
+          <p className="text-zinc-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
+        </div>
+        <ApprovalQueue
+          leads={leads}
+          config={config}
+          onGenerateDMs={handleGenerateDMs}
+          isGenerating={isGenerating}
+          onDeleteLead={handleDeleteLead}
+          onDeleteLeads={handleDeleteLeads}
+          onLeadsSent={handleLeadsSent}
+          onApproveLead={handleApproveLead}
+          onApproveLeads={handleApproveLeads}
+          onRejectLead={handleRejectLead}
+          onUpdateDM={handleUpdateDM}
+          onUpdateLead={handleUpdateLead}
+        />
+      </div>
+    ),
+
+    '/inbox': (
+      <div className="p-4 sm:p-8 max-w-7xl h-[calc(100vh-3.5rem)]">
+        <InboxView
+          conversations={conversations}
+          messages={messages}
+          config={config}
+          onGenerateReply={handleGenerateReply}
+          onSendReply={handleSendReply}
+          onUpdateConversation={handleUpdateConversation}
+          onUpdateConfig={handleUpdateConfig}
+        />
+      </div>
+    ),
+
+    '/follow-ups': (
+      <div className="p-8 max-w-7xl">
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Automation</div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Follow-Up Sequencer</h1>
+          <p className="text-zinc-600 text-sm mt-1.5">
+            Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
+          </p>
+        </div>
+        <FollowUpSequencer leads={leads} onSendFollowUps={handleFollowUpsSent} />
+      </div>
+    ),
+
+    '/calculator': <div className="p-8 max-w-7xl"><RevenueCalculator /></div>,
+
+    '/settings': (
+      <div className="p-8 max-w-4xl">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Configuration</div>
+        <h1 className="text-2xl font-semibold text-white tracking-tight mb-6">Settings</h1>
+        <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} />
+      </div>
+    ),
+
+    '/profile': <ProfilePage user={user!} onLogout={handleLogout} />,
+  };
+
   return (
     <div className="flex min-h-screen bg-[#030604] relative overflow-hidden">
       {/* Global ambient glow */}
@@ -737,7 +845,7 @@ const DashboardShell: React.FC = () => {
                 hasn't reported yet. */}
             {(() => {
               const cap = extStats?.cap ?? Math.min(limits.maxDailyCap, config.dailySendCap ?? limits.maxDailyCap);
-              const sent = extStats?.count ?? dailySendCount;
+              const sent = extStats?.count ?? 0;
               const pct = cap > 0 ? sent / cap : 0;
               const color = pct >= 1 ? 'text-red-400 border-red-500/30 bg-red-500/8' : pct >= 0.8 ? 'text-amber-400 border-amber-500/30 bg-amber-500/8' : 'text-zinc-500 border-white/8 bg-white/3';
               return (
@@ -787,136 +895,9 @@ const DashboardShell: React.FC = () => {
         {/* Page content */}
         <main className="flex-1 overflow-auto">
           <Routes>
-            {/* Dashboard */}
-            <Route
-              path="/dashboard"
-              element={
-                <div className="p-8 space-y-6 max-w-7xl">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">
-                        Overview
-                      </div>
-                      <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">
-                        {getGreeting()}{(() => {
-                          const first = user?.user_metadata?.first_name;
-                          const last = user?.user_metadata?.last_name;
-                          const full = [first, last].filter(Boolean).join(' ');
-                          return full ? `, ${full}` : user?.email ? `, ${user.email.split('@')[0]}` : '';
-                        })()}
-                      </h1>
-                      <p className="text-zinc-600 text-sm mt-1.5">Your pipeline is live and running.</p>
-                    </div>
-                  </div>
-                  <OnboardingChecklist leads={leads} config={config} />
-                  <HealthScore leads={leads} />
-                  <MetricsGrid stats={stats} />
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    <div className="lg:col-span-2">
-                      <ConversionChart leads={leads} />
-                    </div>
-                    <AIAnalyst stats={stats} />
-                  </div>
-                </div>
-              }
-            />
-
-            {/* Campaign Builder */}
-            <Route
-              path="/campaign"
-              element={
-                <div className="p-8 space-y-6 max-w-7xl">
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Outreach</div>
-                    <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
-                    <p className="text-zinc-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
-                  </div>
-                  <CampaignBuilder onLeadsScraped={handleAddLeads} />
-                </div>
-              }
-            />
-
-            {/* Approval Queue */}
-            <Route
-              path="/queue"
-              element={
-                <div className="p-8 space-y-6 max-w-7xl">
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Review</div>
-                    <h1 className="text-2xl font-semibold text-white tracking-tight">Approval Queue</h1>
-                    <p className="text-zinc-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
-                  </div>
-                  <ApprovalQueue
-                    leads={leads}
-                    config={config}
-                    onGenerateDMs={handleGenerateDMs}
-                    isGenerating={isGenerating}
-                    onDeleteLead={handleDeleteLead}
-                    onDeleteLeads={handleDeleteLeads}
-                    onLeadsSent={handleLeadsSent}
-                    onApproveLead={handleApproveLead}
-                    onApproveLeads={handleApproveLeads}
-                    onRejectLead={handleRejectLead}
-                    onUpdateDM={handleUpdateDM}
-                    onUpdateLead={handleUpdateLead}
-                  />
-                </div>
-              }
-            />
-
-            {/* Inbox (AI SDR) */}
-            <Route
-              path="/inbox"
-              element={
-                <div className="p-4 sm:p-8 max-w-7xl h-[calc(100vh-3.5rem)]">
-                  <InboxView
-                    conversations={conversations}
-                    messages={messages}
-                    config={config}
-                    onGenerateReply={handleGenerateReply}
-                    onSendReply={handleSendReply}
-                    onUpdateConversation={handleUpdateConversation}
-                    onUpdateConfig={handleUpdateConfig}
-                  />
-                </div>
-              }
-            />
-
-            {/* Follow-ups */}
-            <Route
-              path="/follow-ups"
-              element={
-                <div className="p-8 max-w-7xl">
-                  <div className="mb-6">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Automation</div>
-                    <h1 className="text-2xl font-semibold text-white tracking-tight">Follow-Up Sequencer</h1>
-                    <p className="text-zinc-600 text-sm mt-1.5">
-                      Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
-                    </p>
-                  </div>
-                  <FollowUpSequencer leads={leads} onSendFollowUps={handleFollowUpsSent} />
-                </div>
-              }
-            />
-
-            {/* Calculator */}
-            <Route path="/calculator" element={<div className="p-8 max-w-7xl"><RevenueCalculator /></div>} />
-
-            {/* Settings */}
-            <Route
-              path="/settings"
-              element={
-                <div className="p-8 max-w-4xl">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Configuration</div>
-                  <h1 className="text-2xl font-semibold text-white tracking-tight mb-6">Settings</h1>
-                  <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} />
-                </div>
-              }
-            />
-
-            {/* Profile */}
-            <Route path="/profile" element={<ProfilePage user={user!} onLogout={handleLogout} />} />
-
+            {DASHBOARD_ROUTES.map((r) => (
+              <Route key={r.path} path={r.path} element={pages[r.path]} />
+            ))}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>

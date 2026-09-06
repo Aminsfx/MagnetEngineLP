@@ -1,10 +1,8 @@
-import { APIKeys, AppConfig, Lead } from './types';
+import { AppConfig, Lead } from './types';
 
 const STORAGE_KEYS = {
-    API_KEYS: 'magnetengine_api_keys',
     LEADS: 'magnetengine_leads',
     CONFIG: 'magnetengine_config',
-    DAILY_SENDS: 'magnetengine_daily_sends',
     DM_DELAY: 'magnetengine_dm_delay',
 };
 
@@ -12,51 +10,17 @@ const STORAGE_KEYS = {
 export interface DmDelay { min: number; max: number }
 const DEFAULT_DM_DELAY: DmDelay = { min: 3, max: 8 };
 
-// Simple obfuscation (NOT encryption — just prevents casual inspection)
-function obfuscate(text: string): string {
-    return btoa(encodeURIComponent(text));
-}
-
-function deobfuscate(text: string): string {
-    try {
-        return decodeURIComponent(atob(text));
-    } catch {
-        // If deobfuscation fails, the value was stored in plaintext (legacy)
-        return text;
-    }
-}
-
-// Secure API Key Storage
+/**
+ * Browser-local storage for the few things that are genuinely per-browser.
+ *
+ * The API-key half (obfuscated getAPIKeys/setAPIKey) was removed: provider keys
+ * moved to Supabase Edge Function secrets in 6a64518, so the interface was
+ * protecting something the app no longer stores. The daily-send counter went
+ * too — nothing ever called `incrementDailySends`, so `getDailySends` returned
+ * 0 forever and the header was reading a hardcoded zero through three layers of
+ * indirection. Real send counts come from the extension.
+ */
 export const storage = {
-    // API Keys (obfuscated) — AI providers only; Apify is backend-managed
-    getAPIKeys(): APIKeys {
-        const stored = localStorage.getItem(STORAGE_KEYS.API_KEYS);
-        if (!stored) return {};
-
-        try {
-            const parsed = JSON.parse(stored);
-            const keys: APIKeys = {};
-            for (const [provider, value] of Object.entries(parsed)) {
-                const k = provider as keyof APIKeys;
-                keys[k] = deobfuscate(value as string);
-            }
-            return keys;
-        } catch {
-            return {};
-        }
-    },
-
-    setAPIKey(provider: keyof APIKeys, key: string): void {
-        const keys = this.getAPIKeys();
-        keys[provider] = key;
-
-        const obfuscated: Record<string, string> = {};
-        for (const [p, v] of Object.entries(keys) as [string, string | undefined][]) {
-            if (v) obfuscated[p] = obfuscate(v);
-        }
-        localStorage.setItem(STORAGE_KEYS.API_KEYS, JSON.stringify(obfuscated));
-    },
-
     // Leads
     getLeads(): Lead[] {
         const stored = localStorage.getItem(STORAGE_KEYS.LEADS);
@@ -86,27 +50,6 @@ export const storage = {
         localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
     },
 
-    // Daily send counter — resets automatically at midnight
-    getDailySends(): { count: number; date: string } {
-        const today = new Date().toISOString().slice(0, 10);
-        try {
-            const stored = localStorage.getItem(STORAGE_KEYS.DAILY_SENDS);
-            if (!stored) return { count: 0, date: today };
-            const parsed = JSON.parse(stored) as { count: number; date: string };
-            if (parsed.date !== today) return { count: 0, date: today }; // new day, reset
-            return parsed;
-        } catch {
-            return { count: 0, date: today };
-        }
-    },
-
-    incrementDailySends(by = 1): number {
-        const current = this.getDailySends();
-        const updated = { count: current.count + by, date: current.date };
-        localStorage.setItem(STORAGE_KEYS.DAILY_SENDS, JSON.stringify(updated));
-        return updated.count;
-    },
-
     // DM drip delay (minutes) — chosen in the Approval Queue send bar, reused by
     // the follow-up dispatcher, and sent to the extension per campaign.
     getDmDelay(): DmDelay {
@@ -126,13 +69,5 @@ export const storage = {
 
     setDmDelay(delay: DmDelay): void {
         localStorage.setItem(STORAGE_KEYS.DM_DELAY, JSON.stringify(delay));
-    },
-
-    clearAll(): void {
-        localStorage.removeItem(STORAGE_KEYS.API_KEYS);
-        localStorage.removeItem(STORAGE_KEYS.LEADS);
-        localStorage.removeItem(STORAGE_KEYS.CONFIG);
-        localStorage.removeItem(STORAGE_KEYS.DAILY_SENDS);
-        localStorage.removeItem(STORAGE_KEYS.DM_DELAY);
     },
 };

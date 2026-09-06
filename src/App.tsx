@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { usePlan } from './contexts/PlanContext';
 import { isAdminEmail } from './lib/plans';
+import { isDashboardPath } from './lib/routes';
 import { Loader2 } from 'lucide-react';
 
 // Route-level code splitting: visitors hitting the landing page don't download
@@ -63,12 +64,6 @@ const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
-// The dashboard shell owns these top-level paths (it renders its own nested
-// <Routes> for each). Everything else is an unknown URL.
-const DASHBOARD_PATHS = [
-  '/dashboard', '/campaign', '/queue', '/inbox', '/follow-ups', '/calculator', '/settings', '/profile',
-];
-
 /**
  * Catch-all element. Kept under a single `/*` route so the dashboard shell
  * stays mounted (and keeps its in-memory state) across sidebar navigation.
@@ -78,10 +73,7 @@ const DASHBOARD_PATHS = [
  */
 const DashboardOrNotFound: React.FC = () => {
   const { pathname } = useLocation();
-  const isDashboardPath = DASHBOARD_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
-  if (!isDashboardPath) return <NotFound />;
+  if (!isDashboardPath(pathname)) return <NotFound />;
   return (
     <ProtectedRoute>
       <DashboardShell />

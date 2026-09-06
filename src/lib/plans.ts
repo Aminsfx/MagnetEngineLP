@@ -47,42 +47,31 @@ export function isAdminEmail(email?: string | null): boolean {
 }
 
 export interface PlanLimits {
-    maxLeadsPerCampaign: number | null; // null = unlimited
-    allowedAIProviders: Array<'openai' | 'claude' | 'gemini'>;
-    canAdjustDailyCap: boolean;
     maxDailyCap: number;
-    canAccessFollowUps: boolean;
-    canUsePresets: boolean;
-    isTestModeOnly: boolean;
-    maxDMGenerations: number;   // per month, centrally billed
-    maxLeadsPerMonth: number;   // monthly lead-import quota
+    maxDMGenerations: number;     // per month, centrally billed
+    maxLeadsPerMonth: number;     // monthly lead-import quota
     maxCampaignsPerMonth: number; // monthly campaign quota
 }
 
-// Single-plan model: every activated member gets full access. The PlanTier
-// keys are kept only for backward compatibility with existing subscription
-// rows — all three resolve to the same limits.
-const MEMBER_LIMITS: PlanLimits = {
-    maxLeadsPerCampaign: null,
-    allowedAIProviders: ['openai', 'gemini', 'claude'],
-    canAdjustDailyCap: true,
+/**
+ * Single-plan model: every activated member gets the same limits.
+ *
+ * This used to be a `Record<PlanTier, PlanLimits>` whose three keys all
+ * pointed at the same object, read through a `getPlanLimits(tier)` lookup, with
+ * `tier` carried as context state — an interface with nothing behind it. The
+ * `PlanTier` type stays because `subscriptions.plan` is a real column that
+ * whop-webhook and admin-api write; nothing reads it to decide capability.
+ *
+ * Fields that no caller read (maxLeadsPerCampaign, allowedAIProviders,
+ * canAdjustDailyCap, canAccessFollowUps, canUsePresets, isTestModeOnly) are
+ * gone: the Sidebar's lock icon was gated on `!canAccessFollowUps`, which was
+ * unconditionally true, so it could never render.
+ */
+export const PLAN_LIMITS: PlanLimits = {
     maxDailyCap: 200,
-    canAccessFollowUps: true,
-    canUsePresets: true,
-    isTestModeOnly: false,
     maxDMGenerations: 500,
     maxLeadsPerMonth: 500,
     maxCampaignsPerMonth: 3,
 };
-
-const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
-    starter: MEMBER_LIMITS,
-    pro: MEMBER_LIMITS,
-    agency: MEMBER_LIMITS,
-};
-
-export function getPlanLimits(tier: PlanTier): PlanLimits {
-    return PLAN_LIMITS[tier];
-}
 
 export const UPGRADE_CONTACT = 'mailto:support@magnetengine.xyz?subject=Upgrade%20Plan';

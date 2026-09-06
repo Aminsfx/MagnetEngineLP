@@ -39,11 +39,10 @@ vi.mock('../contexts/AuthContext', () => ({
 }));
 
 vi.mock('../contexts/PlanContext', async () => {
-  const { getPlanLimits } = await import('../lib/plans');
+  const { PLAN_LIMITS } = await import('../lib/plans');
   return {
     usePlan: () => ({
-      tier: 'starter' as const,
-      limits: getPlanLimits('starter'),
+      limits: PLAN_LIMITS,
       status: 'active' as const,
       loading: false,
       refresh: async () => 'active' as const,
