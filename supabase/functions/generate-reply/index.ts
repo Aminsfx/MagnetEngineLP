@@ -5,8 +5,8 @@
 // Secrets: CLAUDE_API_KEY (and/or OPENAI_API_KEY, GEMINI_API_KEY) — shared with generate-dm.
 //
 // Auth: like generate-dm, the Supabase gateway requires a valid user JWT (see
-// supabase/config.toml → [functions.generate-reply] verify_jwt = true), and we
-// re-verify in-function. Only signed-in dashboard users can spend AI credits.
+// supabase/config.toml → [functions.generate-reply] verify_jwt = true), and
+// servePost re-verifies in-function.
 //
 // POST JSON: {
 //   messages: [{ direction: 'in'|'out', text }],
@@ -14,25 +14,13 @@
 //   systemPrompt: string,
 //   calendarLink?: string,
 //   provider: 'openai'|'claude'|'gemini'
-// } → { reply: string, intent: 'interested'|'objection'|'not_interested'|'neutral'|'booked' }
+// } → { reply, intent, provider }
 
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { json, servePost } from "../_shared/http.ts";
+import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
 
 const INTENTS = ["interested", "objection", "not_interested", "neutral", "booked"] as const;
 type Intent = (typeof INTENTS)[number];
-
-function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, "Content-Type": "application/json" },
-  });
-}
 
 function sanitize(text: string): string {
   return (text ?? "")
@@ -46,7 +34,6 @@ function cleanReply(text: string): string {
   return c.replace(/\*\*/g, "").replace(/\*/g, "").substring(0, 800).trim();
 }
 
-// deno-lint-ignore no-explicit-any
 function buildSystem(base: string, calendarLink: string | undefined): string {
   const link = calendarLink
     ? `\n\nYour booking link (share ONLY once they're interested): ${calendarLink}`
@@ -74,62 +61,6 @@ function buildTranscript(messages: any[], contact: any): string {
   return `Conversation with ${who}:\n\n${lines.join("\n")}\n\nWrite your next reply now as JSON.`;
 }
 
-async function callClaude(key: string, system: string, userMsg: string): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 400,
-      temperature: 0.5,
-      system,
-      messages: [{ role: "user", content: userMsg }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Claude API error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.content[0].text as string;
-}
-
-async function callOpenAI(key: string, system: string, userMsg: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 400,
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userMsg },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.choices[0].message.content as string;
-}
-
-async function callGemini(key: string, system: string, userMsg: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${system}\n\n${userMsg}` }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
-    },
-  );
-  if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini API");
-  return text as string;
-}
-
 /** Parse the model's JSON output; fall back to treating the whole thing as reply. */
 function parseResult(raw: string, calendarLink: string | undefined): { reply: string; intent: Intent } {
   let reply = "";
@@ -152,59 +83,34 @@ function parseResult(raw: string, calendarLink: string | undefined): { reply: st
   return { reply, intent };
 }
 
-const PROVIDER_ENV: Record<string, string> = {
-  openai: "OPENAI_API_KEY",
-  claude: "CLAUDE_API_KEY",
-  gemini: "GEMINI_API_KEY",
-};
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  if (req.method !== "POST") return json(405, { error: "method not allowed" });
-
-  const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
-  if (!jwt) return json(401, { error: "missing bearer token" });
-  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: { user }, error: authErr } = await sb.auth.getUser(jwt);
-  if (authErr || !user) return json(401, { error: "authentication required" });
-
+interface Body {
   // deno-lint-ignore no-explicit-any
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { error: "invalid JSON body" });
-  }
+  messages?: any[];
+  // deno-lint-ignore no-explicit-any
+  contact?: any;
+  systemPrompt?: string;
+  calendarLink?: string;
+  provider?: string;
+}
 
+servePost<Body>("generate-reply", async ({ body }) => {
   const { messages, contact, systemPrompt, calendarLink, provider } = body ?? {};
-  if (!Array.isArray(messages) || !contact?.handle || !systemPrompt || !["openai", "claude", "gemini"].includes(provider)) {
+  if (!Array.isArray(messages) || !contact?.handle || !systemPrompt || !isProvider(provider)) {
     return json(400, { error: "missing or invalid fields: messages, contact, systemPrompt, provider" });
   }
 
-  let activeProvider: string = provider;
-  let key = Deno.env.get(PROVIDER_ENV[provider]) ?? "";
-  if (!key) {
-    for (const p of ["claude", "openai", "gemini"]) {
-      const k = Deno.env.get(PROVIDER_ENV[p]);
-      if (k) { activeProvider = p; key = k; break; }
-    }
-  }
-  if (!key) {
-    return json(500, { error: "No AI provider key configured on the server. Set CLAUDE_API_KEY (or OPENAI_API_KEY / GEMINI_API_KEY) via supabase secrets set." });
-  }
+  const resolved = resolveProvider(provider);
+  if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
-  const system = buildSystem(systemPrompt, calendarLink);
-  const userMsg = buildTranscript(messages, contact);
+  const raw = await complete({
+    provider: resolved.provider,
+    key: resolved.key,
+    system: buildSystem(systemPrompt, calendarLink),
+    user: buildTranscript(messages, contact),
+    maxTokens: 400,
+    temperature: 0.5,
+    jsonMode: true,
+  });
 
-  try {
-    const raw =
-      activeProvider === "claude" ? await callClaude(key, system, userMsg) :
-      activeProvider === "openai" ? await callOpenAI(key, system, userMsg) :
-      await callGemini(key, system, userMsg);
-    return json(200, parseResult(raw, calendarLink));
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "generation failed";
-    console.error("[generate-reply]", msg);
-    return json(500, { error: msg });
-  }
+  return json(200, { ...parseResult(raw, calendarLink), provider: resolved.provider });
 });
