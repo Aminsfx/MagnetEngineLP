@@ -250,7 +250,7 @@ function processNextLead() {
                 currentTask:   nextLead,
                 isExecuting:   true,
             }, () => {
-                chrome.tabs.create({ url: `https://www.instagram.com/${nextLead.handle}/` }, (tab) => {
+                chrome.tabs.create({ url: `https://www.instagram.com/${nextLead.handle}/` }, (_tab) => {
                     if (chrome.runtime.lastError) {
                         chrome.storage.local.set({ isExecuting: false });
                     }

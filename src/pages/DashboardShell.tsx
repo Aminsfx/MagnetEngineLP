@@ -20,7 +20,7 @@ import { aiAPI, type ReplyResult } from '../lib/api';
 import { ingestThreads, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
-import { Lead, AppConfig, DashboardStats, Conversation, Message, ConversationIntent } from '../lib/types';
+import { Lead, AppConfig, DashboardStats, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';

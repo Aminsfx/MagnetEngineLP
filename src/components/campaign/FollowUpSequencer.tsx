@@ -39,7 +39,8 @@ interface FollowUpSequencerProps {
 
 export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onSendFollowUps }) => {
   const { user } = useAuth();
-  const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
+  // NOTE: write-only state — nothing reads `sequences`; only the setter is used.
+  const [, setSequences] = useState<FollowUpSequence[]>([]);
   const [activeSeq, setActiveSeq] = useState<FollowUpSequence | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ type: 'idle' });
   const [previewHandle, setPreviewHandle] = useState('johndoe');

@@ -1,8 +1,16 @@
+/// <reference types="vitest/config" />
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: false,
+    setupFiles: ['./src/test/setup.ts'],
+    // Only our own tests — never node_modules or the unbundled extension/.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+  },
   server: {
     port: 3000,
     host: '0.0.0.0',

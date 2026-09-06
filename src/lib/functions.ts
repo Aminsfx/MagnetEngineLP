@@ -8,7 +8,7 @@
  */
 import { supabase } from './supabase';
 
-export async function invokeFunction<T>(name: string, body: unknown): Promise<T> {
+export async function invokeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
     const { data, error } = await supabase.functions.invoke(name, { body });
 
     if (error) {
