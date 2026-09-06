@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Mail, Lock, CheckCircle, AlertCircle, Loader2, Copy, Check, Camera } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { CARD_BEZEL, CARD_BEZEL_DANGER } from '../lib/theme';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface ProfilePageProps {
@@ -101,28 +102,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
         <div className="p-8 max-w-2xl space-y-6">
             {/* Page header */}
             <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3">
                     Account
                 </div>
                 <h1 className="text-2xl font-semibold text-white tracking-tight">Profile</h1>
-                <p className="text-zinc-600 text-sm mt-1.5">Manage your account details and security settings.</p>
+                <p className="text-neutral-600 text-sm mt-1.5">Manage your account details and security settings.</p>
             </div>
 
             {/* Identity card */}
-            <div className="rounded-[1.5rem] p-[1px]"
-                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}>
-                <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6"
-                    style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
+                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
                     <div className="flex items-center gap-5">
                         {/* Avatar */}
                         <div className="relative flex-shrink-0 group">
                             <div
-                                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-[0_0_24px_rgba(16,185,129,0.25)] overflow-hidden cursor-pointer"
+                                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-400 to-brand-600 flex items-center justify-center shadow-[0_0_24px] shadow-brand-500/25 overflow-hidden cursor-pointer"
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 {avatarUrl
                                     ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                                    : <span className="text-2xl font-bold text-emerald-950">{initial}</span>
+                                    : <span className="text-2xl font-bold text-brand-950">{initial}</span>
                                 }
                                 <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     {avatarUploading
@@ -143,13 +142,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                             {fullName && (
                                 <p className="text-white font-semibold text-base truncate">{fullName}</p>
                             )}
-                            <p className={`truncate ${fullName ? 'text-zinc-500 text-sm' : 'text-white font-semibold text-base'}`}>{user.email}</p>
+                            <p className={`truncate ${fullName ? 'text-neutral-500 text-sm' : 'text-white font-semibold text-base'}`}>{user.email}</p>
                             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold capitalize">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                {/* Static dot on purpose: this reports the real plan, not a fake live status. */}
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-[11px] font-semibold capitalize">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
                                     Member Plan
                                 </span>
-                                <span className="text-zinc-600 text-xs">Member since {memberSince}</span>
+                                <span className="text-neutral-600 text-xs">Member since {memberSince}</span>
                             </div>
                         </div>
                     </div>
@@ -157,79 +157,77 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                     <div className="mt-6 grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl bg-white/3 border border-white/6">
                             <div className="flex items-center gap-2 mb-1">
-                                <Mail className="w-3.5 h-3.5 text-zinc-600" />
-                                <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">Email</span>
+                                <Mail className="w-3.5 h-3.5 text-neutral-600" />
+                                <span className="text-[10px] text-neutral-600 uppercase tracking-widest font-semibold">Email</span>
                             </div>
-                            <p className="text-sm text-zinc-300 truncate">{user.email}</p>
+                            <p className="text-sm text-neutral-300 truncate">{user.email}</p>
                         </div>
                         <div className="p-4 rounded-xl bg-white/3 border border-white/6">
                             <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2">
-                                    <User className="w-3.5 h-3.5 text-zinc-600" />
-                                    <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">User ID</span>
+                                    <User className="w-3.5 h-3.5 text-neutral-600" />
+                                    <span className="text-[10px] text-neutral-600 uppercase tracking-widest font-semibold">User ID</span>
                                 </div>
                                 <button
                                     onClick={handleCopyId}
                                     title="Copy full ID"
-                                    className="text-zinc-600 hover:text-emerald-400 transition-colors"
+                                    className="text-neutral-600 hover:text-brand-400 transition-colors"
                                 >
                                     {copied
-                                        ? <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        ? <Check className="w-3.5 h-3.5 text-brand-400" />
                                         : <Copy className="w-3.5 h-3.5" />
                                     }
                                 </button>
                             </div>
-                            <p className="text-xs text-zinc-500 font-mono truncate">{user.id.slice(0, 16)}…</p>
-                            {copied && <p className="text-[10px] text-emerald-500 mt-1">Copied to clipboard!</p>}
+                            <p className="text-xs text-neutral-500 font-mono truncate">{user.id.slice(0, 16)}…</p>
+                            {copied && <p className="text-[10px] text-brand-500 mt-1">Copied to clipboard!</p>}
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Change password */}
-            <div className="rounded-[1.5rem] p-[1px]"
-                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}>
-                <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6"
-                    style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
+                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
                     <div className="flex items-center gap-3 mb-5">
-                        <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-white/8 flex items-center justify-center">
-                            <Lock className="w-4 h-4 text-zinc-400" />
+                        <div className="w-8 h-8 rounded-xl bg-neutral-800 border border-white/8 flex items-center justify-center">
+                            <Lock className="w-4 h-4 text-neutral-400" />
                         </div>
                         <div>
                             <h2 className="text-sm font-semibold text-white">Change Password</h2>
-                            <p className="text-[11px] text-zinc-600 mt-0.5">Update your login credentials.</p>
+                            <p className="text-[11px] text-neutral-600 mt-0.5">Update your login credentials.</p>
                         </div>
                     </div>
 
                     <form onSubmit={handleChangePassword} className="space-y-3">
                         <div>
-                            <label className="block text-xs text-zinc-500 mb-1.5">New Password</label>
+                            <label className="block text-xs text-neutral-500 mb-1.5">New Password</label>
                             <input
                                 type="password"
                                 value={newPw}
                                 onChange={e => setNewPw(e.target.value)}
                                 placeholder="Min. 6 characters"
                                 required
-                                className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-zinc-500 mb-1.5">Confirm New Password</label>
+                            <label className="block text-xs text-neutral-500 mb-1.5">Confirm New Password</label>
                             <input
                                 type="password"
                                 value={confirmPw}
                                 onChange={e => setConfirmPw(e.target.value)}
                                 placeholder="Repeat password"
                                 required
-                                className="w-full bg-[#030604] border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
                             />
                         </div>
 
                         {pwMessage && (
                             <div className={`flex items-center gap-2.5 p-3 rounded-xl border text-[11px] ${
                                 pwMessage.type === 'success'
-                                    ? 'bg-emerald-500/8 border-emerald-500/20 text-emerald-400'
-                                    : 'bg-red-500/8 border-red-500/20 text-red-400'
+                                    ? 'bg-positive-500/8 border-positive-500/20 text-positive-400'
+                                    : 'bg-danger-500/8 border-danger-500/20 text-danger-400'
                             }`}>
                                 {pwMessage.type === 'success'
                                     ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -241,7 +239,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                         <button
                             type="submit"
                             disabled={pwLoading}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm font-medium hover:bg-brand-500/20 hover:border-brand-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {pwLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                             Update Password
@@ -251,15 +249,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
             </div>
 
             {/* Danger zone */}
-            <div className="rounded-[1.5rem] p-[1px]"
-                style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(255,255,255,0.02) 100%)' }}>
-                <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6"
-                    style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
-                    <h2 className="text-sm font-semibold text-red-400/80 mb-1">Danger Zone</h2>
-                    <p className="text-[11px] text-zinc-600 mb-4">These actions are irreversible.</p>
+            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL_DANGER.outer}>
+                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL_DANGER.inner}>
+                    <h2 className="text-sm font-semibold text-danger-400/80 mb-1">Danger Zone</h2>
+                    <p className="text-[11px] text-neutral-600 mb-4">These actions are irreversible.</p>
                     <button
                         onClick={onLogout}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/8 transition-all"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/8 transition-all"
                     >
                         Sign out of all sessions
                     </button>
