@@ -18,7 +18,7 @@ import { db } from '../lib/db';
 import { createStore } from '../lib/store';
 import { filterUtils } from '../lib/filters';
 import { aiAPI, type ReplyResult } from '../lib/api';
-import { ingestThreads, type RawThread } from '../lib/inbox';
+import { createInboxLog, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
@@ -115,13 +115,11 @@ const DashboardShell: React.FC = () => {
   // re-subscribing on every leads change.
   const leadsRef = useRef<Lead[]>([]);
   useEffect(() => { leadsRef.current = leads; }, [leads]);
-  // Live mirrors for the inbox so the bridge/autopilot read current state
-  // without re-subscribing on every message.
-  const convosRef = useRef<Conversation[]>([]);
-  const messagesRef = useRef<Message[]>([]);
+  // The inbox log owns the merged Conversations/Messages and the ordering rule
+  // that used to live here as three refs (inboxReady, pendingThreads, and
+  // mirrors of both arrays). React state below is just a rendering copy of it.
+  const inbox = useMemo(() => createInboxLog(), []);
   const configRef = useRef<AppConfig>(DEFAULT_CONFIG);
-  useEffect(() => { convosRef.current = conversations; }, [conversations]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { configRef.current = config; }, [config]);
   const [headerAvatar, setHeaderAvatar] = useState<string | null>(() =>
     user ? localStorage.getItem(`avatar_${user.id}`) : null
@@ -155,36 +153,30 @@ const DashboardShell: React.FC = () => {
     });
   }, [userId, store]);
 
-  // Inbox history loads behind first paint. Until it lands, extension snapshots
-  // are parked rather than ingested: `ingestThreads` dedupes echoed outbound
-  // messages against the messages already in memory, so ingesting against a
-  // half-loaded inbox would duplicate our optimistic sends.
-  const inboxReady = useRef(false);
-  const pendingThreads = useRef<RawThread[] | null>(null);
-  const ingestInboxRef = useRef<(threads: RawThread[]) => Conversation[]>(() => []);
-
+  // Inbox history loads behind first paint. Snapshots arriving before it lands
+  // are parked by the log rather than merged — echo suppression compares against
+  // the Messages already known, so merging into a half-loaded inbox would
+  // duplicate every optimistic send.
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
 
-    store.loadInbox().then(({ conversations: savedConvos, messages: savedMessages }) => {
+    store.loadInbox().then((history) => {
       if (cancelled) return;
-      setConversations(savedConvos);
-      setMessages(savedMessages);
-      convosRef.current = savedConvos;
-      messagesRef.current = savedMessages;
-      inboxReady.current = true;
-
-      const parked = pendingThreads.current;
-      pendingThreads.current = null;
-      if (parked) ingestInboxRef.current(parked);
+      const replayed = inbox.hydrate(history);
+      setConversations(replayed?.conversations ?? history.conversations);
+      setMessages(replayed?.messages ?? history.messages);
+      if (replayed) {
+        store.saveConversations(replayed.changedConversations).catch(console.error);
+        store.saveMessages(replayed.newMessages).catch(console.error);
+      }
     });
 
     return () => {
       cancelled = true;
-      inboxReady.current = false;
+      inbox.reset();
     };
-  }, [userId, store]);
+  }, [userId, store, inbox]);
 
   // Mark leads as sent for real, based on the handles the extension confirms
   // it actually sent (idempotent — only flips leads not already sent).
@@ -211,30 +203,15 @@ const DashboardShell: React.FC = () => {
   // changed rows. Reads live refs so it can stay a stable callback. Returns the
   // conversations that gained a NEW inbound message (for autopilot).
   const ingestInbox = useCallback((threads: RawThread[]): Conversation[] => {
-    if (!Array.isArray(threads) || threads.length === 0) return [];
-    if (!inboxReady.current) {
-      // Keep the newest snapshot; the loader replays it once history is in.
-      pendingThreads.current = threads;
-      return [];
-    }
-    const { conversations, messages, changedConversations, newMessages } = ingestThreads(
-      threads, convosRef.current, messagesRef.current,
-    );
-    if (changedConversations.length === 0 && newMessages.length === 0) return [];
+    const result = inbox.sync(threads);
+    if (!result) return [];   // parked, or nothing changed
 
-    setConversations(conversations);
-    setMessages(messages);
-    store.saveConversations(changedConversations).catch(console.error);
-    store.saveMessages(newMessages).catch(console.error);
-    // Conversations whose newest message is a freshly-arrived inbound.
-    const newInboundConvIds = new Set(
-      newMessages.filter((m) => m.direction === 'in').map((m) => m.conversationId),
-    );
-    return changedConversations.filter((c) => c.needsReply && newInboundConvIds.has(c.id));
-  }, [store]);
-
-  // Let the loader replay a parked snapshot through the current ingest closure.
-  useEffect(() => { ingestInboxRef.current = ingestInbox; }, [ingestInbox]);
+    setConversations(result.conversations);
+    setMessages(result.messages);
+    store.saveConversations(result.changedConversations).catch(console.error);
+    store.saveMessages(result.newMessages).catch(console.error);
+    return result.newInbound;
+  }, [store, inbox]);
 
   // Ref so the bridge effect can call the latest autopilot handler without
   // re-subscribing (defined further down).
@@ -420,15 +397,15 @@ const DashboardShell: React.FC = () => {
   /** Persist a single conversation to state + DB; if it just became booked,
    *  reflect that on the underlying lead. */
   const handleUpdateConversation = useCallback((conv: Conversation) => {
-    const prev = convosRef.current.find((c) => c.id === conv.id);
-    setConversations((list) => list.map((c) => (c.id === conv.id ? conv : c)));
+    const prev = inbox.snapshot().conversations.find((c) => c.id === conv.id);
+    setConversations(inbox.recordConversation(conv).conversations);
     store.saveConversations([conv]).catch(console.error);
     if (conv.status === 'booked' && prev?.status !== 'booked') markLeadBooked(conv.handle);
-  }, [markLeadBooked, store]);
+  }, [markLeadBooked, store, inbox]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
   const handleGenerateReply = useCallback(async (conv: Conversation): Promise<ReplyResult> => {
-    const history = messagesRef.current
+    const history = inbox.snapshot().messages
       .filter((m) => m.conversationId === conv.id)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map((m) => ({ direction: m.direction, text: m.text }));
@@ -443,7 +420,7 @@ const DashboardShell: React.FC = () => {
     const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
     handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
     return result;
-  }, [handleUpdateConversation]);
+  }, [handleUpdateConversation, inbox]);
 
   /** Send a reply: optimistic append + hand off to the extension via the same
    *  send path as opening DMs (DMing the handle appends to the IG thread). */
@@ -458,11 +435,14 @@ const DashboardShell: React.FC = () => {
       text: body,
       createdAt: now,
     };
-    setMessages((prev) => [...prev, msg]);
     const updatedConv: Conversation = {
       ...conv, lastMessageAt: now, lastMessageText: body, needsReply: false, unread: false,
     };
-    setConversations((list) => list.map((c) => (c.id === conv.id ? updatedConv : c)));
+    // recordOutbound also arms echo suppression for exactly this one Message,
+    // so Instagram sending it back under its own id doesn't duplicate it — and
+    // a genuinely repeated "ok" later still comes through.
+    setMessages(inbox.recordOutbound(msg).messages);
+    setConversations(inbox.recordConversation(updatedConv).conversations);
     store.saveMessages([msg]).catch(console.error);
     store.saveConversations([updatedConv]).catch(console.error);
 
@@ -474,14 +454,14 @@ const DashboardShell: React.FC = () => {
       dailyCap: configRef.current.dailySendCap ?? 40,
     });
     toast.success(`Reply queued to @${conv.handle}`);
-  }, [toast, store]);
+  }, [toast, store, inbox]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
   const handleAutopilot = useCallback(async (newInbound: Conversation[]) => {
     if (!configRef.current.autopilot) return;
     for (const conv of newInbound) {
-      const latest = convosRef.current.find((c) => c.id === conv.id) ?? conv;
+      const latest = inbox.snapshot().conversations.find((c) => c.id === conv.id) ?? conv;
       if (!latest.needsReply || latest.status === 'closed') continue;
       try {
         const result = await handleGenerateReply(latest);
@@ -491,7 +471,7 @@ const DashboardShell: React.FC = () => {
         console.error('[autopilot] failed for', conv.handle, e);
       }
     }
-  }, [handleGenerateReply, handleSendReply]);
+  }, [handleGenerateReply, handleSendReply, inbox]);
 
   useEffect(() => { autopilotRef.current = handleAutopilot; }, [handleAutopilot]);
 
