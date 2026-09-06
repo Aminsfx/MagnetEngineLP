@@ -47,15 +47,40 @@ src/
     PlanContext.tsx              # tier + status ('pending'|'active'|'cancelled') + refresh()
   lib/
     types.ts                     # All shared TypeScript interfaces
-    plans.ts                     # PlanTier, PlanLimits, SubscriptionStatus, WHOP_PLAN_IDS, PRICES, isAdminEmail
-    apify.ts                     # Apify API client (scrape + poll)
-    storage.ts                   # localStorage read/write with obfuscation
-    api.ts                       # AI DM generation helpers
-    db.ts                        # Supabase persistence (incl. subscriptions)
+    routes.ts                    # DASHBOARD_ROUTES — the ONE list of dashboard pages
+    useOutreach.ts               # Outreach engine: the whole Lead lifecycle, one interface
+    store.ts                     # WorkspaceStore seam — createStore() picks the adapter
+    db.ts                        # Supabase adapter (row mapping, batching, subscriptions)
+    storage.ts                   # Browser-local bits only (dev fallback, DM delay)
+    intake.ts                    # Lead intake — the only way a Lead is constructed
+    prompt.ts                    # DM + reply prompt construction (pure strings)
+    inbox.ts                     # Inbox log: hydration ordering + snapshot merging
+    extensionProtocol.ts         # App side of the app↔extension seam (typed)
+    plans.ts                     # PLAN_LIMITS, SubscriptionStatus, WHOP_PLAN_IDS, PRICES, isAdminEmail
+    apify.ts                     # Apify client (start + poll, via Edge Functions)
+    api.ts                       # generate-dm / generate-reply callers
     filters.ts                   # filterLeads() + calculateStats()
-extension/                       # Chrome MV3 extension (drip DM execution)
+extension/
+  protocol.js                    # Wire protocol — shared by worker, content script, popup
+  background.js / content.js / popup.js
+supabase/
+  functions/_shared/             # http.ts (servePost), ai.ts (providers), apify.ts, emails.ts
+  migrations/0001_usage.sql      # dm_usage + usage_counters
+CONTEXT.md                       # Domain glossary — read before naming anything
 ```
 Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, root-level `components/` duplicates.
+
+## Seams (don't reach around these)
+- **Persistence** — call `createStore(userId)` and use the `WorkspaceStore`. Never
+  branch on `if (user)` or import `storage`/`db` at a call site; the adapter choice
+  is made once, in `store.ts`.
+- **App ↔ extension** — message names live in `extension/protocol.js`; the app uses
+  `src/lib/extensionProtocol.ts`. A test asserts the two agree, so never write a
+  `MAGNET_ENGINE_*` string literal anywhere else.
+- **Lead construction** — sources hand raw rows to `intake()`. A Handle is lowercase,
+  `@`-less and unique *by construction*; don't re-normalise at call sites.
+- **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
+  endpoints rather than re-copying the CORS/auth preamble.
 
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
@@ -248,11 +273,13 @@ role; users can read their own count but never write it.
 **Enforcement:**
 - Settings page has zero API key management UI
 - `APIKeys` type has no `apify` field
-- Apify key only lives in `.env` / `apify.ts` module constant
-- AI provider keys (OpenAI/Claude/Gemini) can optionally be set by the owner in `localStorage` directly; no UI form
+- Apify key only lives as a Supabase secret, used by `start-scrape` / `poll-scrape`
+- AI provider keys (OpenAI/Claude/Gemini) are Supabase secrets read by `_shared/ai.ts`;
+  the browser has no key storage at all (`storage.getAPIKeys` was deleted)
 
 ## Filter Architecture
-`DashboardShell.tsx` runs `filterUtils.filterLeads(leads, config)` on every state change → `filteredLeads`.  
+`useOutreach` derives `filteredLeads` with `useMemo` (never state — storing it made every
+Lead mutation commit twice).  
 Filters (min/max followers, include/exclude keywords, account type) live in `Settings → Lead Filtering Rules`.  
 `CampaignBuilder` has **no filter UI** — it only exposes what the Apify actor natively accepts.
 
