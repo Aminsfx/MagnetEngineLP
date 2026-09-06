@@ -15,14 +15,11 @@ import ProfilePage from './ProfilePage';
 import { HealthScore } from '../components/dashboard/HealthScore';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
+import { useOutreach } from '../lib/useOutreach';
 import { createStore } from '../lib/store';
-import { filterUtils } from '../lib/filters';
 import { aiAPI, type ReplyResult } from '../lib/api';
 import { createInboxLog, type RawThread } from '../lib/inbox';
-import { stampFollowUp, type DueFollowUp } from '../lib/followups';
-import { fireWebhook, detectTransitions } from '../lib/webhooks';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
-import { dropKnownHandles } from '../lib/intake';
 import {
   EXT_TO_APP,
   onExtensionMessage,
@@ -30,7 +27,7 @@ import {
   sendCampaign,
 } from '../lib/extensionProtocol';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT } from '../lib/prompt';
-import { Lead, AppConfig, Conversation, Message } from '../lib/types';
+import { AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';
@@ -69,11 +66,6 @@ const DEFAULT_CONFIG: AppConfig = {
   dmTone: 'casual',
 };
 
-// DM generation runs sequentially against the AI provider, so one click
-// processes a batch rather than the whole queue. The user is told what's left
-// and clicks again — silently doing 10 of 250 reads as a broken button.
-const GENERATION_BATCH = 10;
-
 // ─── Main dashboard shell ─────────────────────────────────────────────────────
 const DashboardShell: React.FC = () => {
   const { user, signOut } = useAuth();
@@ -88,33 +80,22 @@ const DashboardShell: React.FC = () => {
   // inconsistently.
   const store = useMemo(() => createStore(user?.id ?? null), [user?.id]);
 
-  const [leads, setLeads] = useState<Lead[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
-  // Derived, not stored. Keeping these in state meant every lead mutation
-  // committed twice: once for setLeads, then again when the effect wrote the
-  // recomputed values back — and the second commit re-rendered the whole
-  // Approval Queue table for no visible change.
-  const filteredLeads = useMemo(
-    () => filterUtils.filterLeads(leads, config),
-    [leads, config],
-  );
-  const stats = useMemo(() => filterUtils.calculateStats(leads), [leads]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  // The Lead lifecycle — add, approve, reject, edit, generate, send — behind one
+  // interface with two ports (the store, and the extension protocol). This used
+  // to be seventeen callbacks and six mirror refs inlined here.
+  const outreach = useOutreach({ store, config, limits, toast });
+
   const [dataLoading, setDataLoading] = useState(true);
   // Real per-day sent count reported by the extension (source of truth for what
   // actually went out), vs the app's optimistic handoff count.
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
-  const [dmUsed, setDmUsed] = useState(0);
 
   // ─── Inbox (AI SDR) ─────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // Live mirror of leads so the extension bridge can reconcile without
-  // re-subscribing on every leads change.
-  const leadsRef = useRef<Lead[]>([]);
-  useEffect(() => { leadsRef.current = leads; }, [leads]);
   // The inbox log owns the merged Conversations/Messages and the ordering rule
   // that used to live here as three refs (inboxReady, pendingThreads, and
   // mirrors of both arrays). React state below is just a rendering copy of it.
@@ -146,11 +127,13 @@ const DashboardShell: React.FC = () => {
       store.loadConfig(),
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
-      setLeads(savedLeads ?? []);
+      outreach.hydrate(savedLeads ?? [], dmUsage.used);
       setConfig(savedConfig ?? DEFAULT_CONFIG);
-      setDmUsed(dmUsage.used);
       setDataLoading(false);
     });
+    // `outreach` is intentionally not a dependency: hydrate is stable and
+    // re-running the cold load on every engine render would defeat the point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, store]);
 
   // Inbox history loads behind first paint. Snapshots arriving before it lands
@@ -177,27 +160,6 @@ const DashboardShell: React.FC = () => {
       inbox.reset();
     };
   }, [userId, store, inbox]);
-
-  // Mark leads as sent for real, based on the handles the extension confirms
-  // it actually sent (idempotent — only flips leads not already sent).
-  const markSentByHandles = useCallback((handles: string[]) => {
-    const wanted = new Set(
-      handles.map((h) => String(h).toLowerCase().replace(/^@/, '')).filter(Boolean),
-    );
-    if (wanted.size === 0) return;
-    const changed = leadsRef.current.filter(
-      (l) => !l.dmSent && wanted.has(l.handle.toLowerCase()),
-    );
-    if (changed.length === 0) return;
-    const now = new Date().toISOString();
-    const updated = changed.map((l) => ({ ...l, dmSent: true, dmDate: l.dmDate ?? now }));
-    const byId = new Map(updated.map((l) => [l.id, l]));
-    setLeads((prev) => {
-      const next = prev.map((l) => byId.get(l.id) ?? l);
-      return next;
-    });
-    store.saveLeads(updated).catch(console.error);
-  }, [store]);
 
   // Merge a fresh inbox snapshot from the extension into state + persist the
   // changed rows. Reads live refs so it can stay a stable callback. Returns the
@@ -228,13 +190,13 @@ const DashboardShell: React.FC = () => {
         // Reconcile against both: `sentLog` resets at midnight, `sentHandles`
         // never does, so a dashboard opened the next morning still learns what
         // went out yesterday instead of offering to send it again.
-        markSentByHandles([
+        outreach.markSentByHandles([
           ...(d.sentLog ?? []).map((x) => x.handle ?? ''),
           ...(d.sentHandles ?? []),
         ]);
       } else if (d.type === EXT_TO_APP.SENT) {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
-        if (d.handle) markSentByHandles([d.handle]);
+        if (d.handle) outreach.markSentByHandles([d.handle]);
       } else if (d.type === EXT_TO_APP.INBOX) {
         const newInbound = ingestInbox((d.threads ?? []) as RawThread[]);
         if (newInbound.length) autopilotRef.current(newInbound);
@@ -248,7 +210,7 @@ const DashboardShell: React.FC = () => {
       stopListening();
       window.removeEventListener('focus', requestExtensionSync);
     };
-  }, [markSentByHandles, ingestInbox]);
+  }, [outreach, ingestInbox]);
 
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
@@ -256,143 +218,7 @@ const DashboardShell: React.FC = () => {
     await store.saveConfig(newConfig);
   }, [store]);
 
-  const handleAddLeads = useCallback(async (newLeads: Lead[]) => {
-    // Within-batch dedupe already happened in intake; this is the cross-batch
-    // half — the same profile turns up across overlapping searches, repeat
-    // scrapes, and CSV re-imports.
-    const { fresh: deduped, duplicates: duplicateCount } = dropKnownHandles(
-      newLeads,
-      leadsRef.current.map((l) => l.handle),
-    );
-
-    if (deduped.length === 0) {
-      if (duplicateCount > 0) {
-        toast.info(`All ${duplicateCount} lead${duplicateCount !== 1 ? 's' : ''} were already in your queue — nothing new to add.`);
-      }
-      return;
-    }
-
-    let toAdd = deduped;
-    let quotaCapped = 0;
-
-    // Monthly quotas (skipped in dev mode without a user). Advisory: these bound
-    // the Operator's own workspace, not the Owner's spend, and the client writes
-    // Leads to Postgres directly so there's no server chokepoint to meter at.
-    if (user) {
-      const [campaignsUsed, leadsUsed] = await Promise.all([
-        db.getMonthlyCount('campaigns'),
-        db.getMonthlyCount('leads'),
-      ]);
-      if (campaignsUsed >= limits.maxCampaignsPerMonth) {
-        toast.error(`You've used all ${limits.maxCampaignsPerMonth} campaigns this month. Resets on the 1st.`);
-        return;
-      }
-      const remaining = limits.maxLeadsPerMonth - leadsUsed;
-      if (remaining <= 0) {
-        toast.error(`You've reached your ${limits.maxLeadsPerMonth} leads/month limit. Resets on the 1st.`);
-        return;
-      }
-      if (toAdd.length > remaining) {
-        quotaCapped = toAdd.length - remaining;
-        toAdd = toAdd.slice(0, remaining);
-      }
-    }
-
-    const added = toAdd;
-    setLeads((prev) => {
-      const merged = [...prev, ...added];
-      store.saveLeads(added).catch(console.error);
-      return merged;
-    });
-
-    if (user) {
-      db.incrementMonthlyCount('leads', added.length).catch(console.error);
-      db.incrementMonthlyCount('campaigns', 1).catch(console.error);
-    }
-
-    // Only worth a toast when something was left out — a clean add is
-    // already confirmed by the calling component (CampaignBuilder / CsvImport).
-    if (duplicateCount > 0 || quotaCapped > 0) {
-      const parts = [`Added ${added.length} lead${added.length !== 1 ? 's' : ''}`];
-      if (duplicateCount > 0) parts.push(`${duplicateCount} already in your queue`);
-      if (quotaCapped > 0) parts.push(`${quotaCapped} over your ${limits.maxLeadsPerMonth}/month limit`);
-      toast.info(`${parts[0]} · skipped ${parts.slice(1).join(' + ')}.`);
-    }
-  }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store]);
-
-  const handleDeleteLead = useCallback(async (id: string) => {
-    setLeads((prev) => {
-      const next = prev.filter((l) => l.id !== id);
-      return next;
-    });
-    await store.removeLeads([id]);
-  }, [store]);
-
-  /** Bulk delete — one state update + one batched DB write */
-  const handleDeleteLeads = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
-    setLeads((prev) => {
-      const next = prev.filter((l) => !idSet.has(l.id));
-      return next;
-    });
-    await store.removeLeads(ids);
-    toast.success(`${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted from the queue`);
-  }, [toast, store]);
-
-  const handleUpdateLead = useCallback(async (updated: Lead) => {
-    let oldLead: Lead | undefined;
-    setLeads((prev) => prev.map((l) => {
-      if (l.id === updated.id) { oldLead = l; return updated; }
-      return l;
-    }));
-    if (oldLead) {
-      for (const event of detectTransitions(oldLead, updated)) {
-        fireWebhook(config, event, updated);
-      }
-    }
-    await store.saveLeads([updated]);
-  }, [config, store]);
-
-  // Handoff to the extension is done by ApprovalQueue; a lead is marked "sent"
-  // for real only when the extension confirms it (see the extension bridge), so
-  // capped/skipped DMs no longer count as sent. Nothing to do optimistically.
-  const handleLeadsSent = useCallback(async (_ids: string[]) => {}, []);
-
-  /** Dispatch due follow-ups to the extension via the same channel as initial DMs.
-   *  The extension enforces the daily cap on actual sends; here we just hand off
-   *  and stamp the step so the sequencer can schedule the next touch. */
-  const handleFollowUpsSent = useCallback(async (due: DueFollowUp[]): Promise<number> => {
-    if (due.length === 0) return 0;
-
-    const delay = storage.getDmDelay();
-    sendCampaign({
-      leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
-      minDelay: delay.min,
-      maxDelay: delay.max,
-      dailyCap: config.dailySendCap ?? 40,
-    });
-
-    const sentAt = new Date().toISOString();
-    const batch = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
-    const batchById = new Map(batch.map((l) => [l.id, l]));
-    setLeads((prev) => prev.map((l) => batchById.get(l.id) ?? l));
-    await store.saveLeads(batch);
-
-    toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
-    return due.length;
-  }, [config.dailySendCap, toast, store]);
-
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
-
-  /** Mark the lead behind a conversation as booked (fires the booked webhook). */
-  const markLeadBooked = useCallback((handle: string) => {
-    const h = handle.toLowerCase().replace(/^@/, '');
-    const lead = leadsRef.current.find((l) => l.handle.toLowerCase() === h);
-    if (lead && !lead.booked) {
-      handleUpdateLead({ ...lead, booked: true, positiveReply: true, replied: true, status: 'won' });
-    }
-  }, [handleUpdateLead]);
 
   /** Persist a single conversation to state + DB; if it just became booked,
    *  reflect that on the underlying lead. */
@@ -400,8 +226,8 @@ const DashboardShell: React.FC = () => {
     const prev = inbox.snapshot().conversations.find((c) => c.id === conv.id);
     setConversations(inbox.recordConversation(conv).conversations);
     store.saveConversations([conv]).catch(console.error);
-    if (conv.status === 'booked' && prev?.status !== 'booked') markLeadBooked(conv.handle);
-  }, [markLeadBooked, store, inbox]);
+    if (conv.status === 'booked' && prev?.status !== 'booked') outreach.markBooked(conv.handle);
+  }, [outreach, store, inbox]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
   const handleGenerateReply = useCallback(async (conv: Conversation): Promise<ReplyResult> => {
@@ -475,110 +301,6 @@ const DashboardShell: React.FC = () => {
 
   useEffect(() => { autopilotRef.current = handleAutopilot; }, [handleAutopilot]);
 
-  /** Bulk-approve: one state update + one batched DB write */
-  const handleApproveLeads = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
-    const updatedBatch: Lead[] = [];
-    setLeads((prev) => prev.map((l) => {
-      if (idSet.has(l.id)) {
-        const updated = { ...l, approved: true, rejected: false };
-        updatedBatch.push(updated);
-        return updated;
-      }
-      return l;
-    }));
-    if (updatedBatch.length > 0) await store.saveLeads(updatedBatch);
-    toast.success(`${ids.length} DM${ids.length !== 1 ? 's' : ''} approved`);
-  }, [toast, store]);
-
-  const handleApproveLead = useCallback(async (id: string) => {
-    let updated: Lead | undefined;
-    setLeads((prev) => prev.map((l) => {
-      if (l.id === id) { updated = { ...l, approved: true, rejected: false }; return updated; }
-      return l;
-    }));
-    if (updated) await store.saveLeads([updated]);
-  }, [store]);
-
-  const handleRejectLead = useCallback(async (id: string) => {
-    let updated: Lead | undefined;
-    setLeads((prev) => prev.map((l) => {
-      if (l.id === id) { updated = { ...l, rejected: true, approved: false }; return updated; }
-      return l;
-    }));
-    if (updated) await store.saveLeads([updated]);
-  }, [store]);
-
-  const handleUpdateDM = useCallback(async (id: string, content: string) => {
-    let updated: Lead | undefined;
-    setLeads((prev) => prev.map((l) => {
-      if (l.id === id) { updated = { ...l, dmContent: content }; return updated; }
-      return l;
-    }));
-    if (updated) await store.saveLeads([updated]);
-  }, [store]);
-
-  const handleGenerateDMs = useCallback(async (targetLeads?: Lead[]) => {
-    const remaining = limits.maxDMGenerations - dmUsed;
-    if (remaining <= 0) {
-      toast.error(`You've used all ${limits.maxDMGenerations} DM generations for this month. Upgrade your plan to generate more.`);
-      return;
-    }
-
-    const leadsToProcess = (targetLeads ?? filteredLeads).filter((l) => !l.dmContent).slice(0, remaining);
-    if (leadsToProcess.length === 0) {
-      toast.info('All selected leads already have DMs generated.');
-      return;
-    }
-
-    setIsGenerating(true);
-    const dmDate = new Date().toISOString();
-    const updatedBatch: Lead[] = [];
-    let failure: string | null = null;
-    let usedAfter: number | null = null;
-
-    for (const lead of leadsToProcess.slice(0, GENERATION_BATCH)) {
-      try {
-        // The server meters the quota and returns the authoritative count, so
-        // the client no longer keeps its own (previously localStorage) tally.
-        const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
-        usedAfter = used;
-        updatedBatch.push({ ...lead, dmContent: dm, dmDate });
-      } catch (error: any) {
-        console.error(`Error generating DM for ${lead.name}:`, error);
-        // Stop the batch, but keep what already succeeded. Returning here used
-        // to discard up to nine finished DMs that had already been paid for.
-        failure = error?.message ?? 'Unknown error';
-        break;
-      }
-    }
-
-    const successCount = updatedBatch.length;
-    if (successCount > 0) {
-      setLeads((prev) => prev.map((l) => {
-        const updated = updatedBatch.find((u) => u.id === l.id);
-        return updated ?? l;
-      }));
-      await store.saveLeads(updatedBatch);
-    }
-    if (usedAfter !== null) setDmUsed(usedAfter);
-
-    setIsGenerating(false);
-
-    if (failure) {
-      toast.error(successCount > 0
-        ? `Generated ${successCount} DM${successCount !== 1 ? 's' : ''}, then stopped: ${failure}`
-        : `DM generation failed: ${failure}`);
-      return;
-    }
-
-    const stillPending = leadsToProcess.length - successCount;
-    toast.success(stillPending > 0
-      ? `Generated ${successCount} DMs — ${stillPending} still pending, click again for the next batch.`
-      : `Generated ${successCount} DM${successCount !== 1 ? 's' : ''} — review them in the Approval Queue.`);
-  }, [config, filteredLeads, limits, dmUsed, toast, store]);
-
   const handleLogout = useCallback(async () => {
     await signOut();
     navigate('/login');
@@ -617,14 +339,14 @@ const DashboardShell: React.FC = () => {
             <p className="text-zinc-600 text-sm mt-1.5">Your pipeline is live and running.</p>
           </div>
         </div>
-        <OnboardingChecklist leads={leads} config={config} />
-        <HealthScore leads={leads} />
-        <MetricsGrid stats={stats} />
+        <OnboardingChecklist leads={outreach.leads} config={config} />
+        <HealthScore leads={outreach.leads} />
+        <MetricsGrid stats={outreach.stats} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <ConversionChart leads={leads} />
+            <ConversionChart leads={outreach.leads} />
           </div>
-          <AIAnalyst stats={stats} />
+          <AIAnalyst stats={outreach.stats} />
         </div>
       </div>
     ),
@@ -636,7 +358,7 @@ const DashboardShell: React.FC = () => {
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
           <p className="text-zinc-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
         </div>
-        <CampaignBuilder onLeadsScraped={handleAddLeads} />
+        <CampaignBuilder onLeadsScraped={outreach.addLeads} />
       </div>
     ),
 
@@ -648,18 +370,17 @@ const DashboardShell: React.FC = () => {
           <p className="text-zinc-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
         </div>
         <ApprovalQueue
-          leads={leads}
+          leads={outreach.leads}
           config={config}
-          onGenerateDMs={handleGenerateDMs}
-          isGenerating={isGenerating}
-          onDeleteLead={handleDeleteLead}
-          onDeleteLeads={handleDeleteLeads}
-          onLeadsSent={handleLeadsSent}
-          onApproveLead={handleApproveLead}
-          onApproveLeads={handleApproveLeads}
-          onRejectLead={handleRejectLead}
-          onUpdateDM={handleUpdateDM}
-          onUpdateLead={handleUpdateLead}
+          onGenerateDMs={outreach.generateDMs}
+          isGenerating={outreach.isGenerating}
+          onDeleteLead={outreach.remove}
+          onDeleteLeads={outreach.removeMany}
+          onApproveLead={outreach.approve}
+          onApproveLeads={outreach.approveMany}
+          onRejectLead={outreach.reject}
+          onUpdateDM={outreach.updateDM}
+          onUpdateLead={outreach.update}
         />
       </div>
     ),
@@ -687,7 +408,7 @@ const DashboardShell: React.FC = () => {
             Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
           </p>
         </div>
-        <FollowUpSequencer leads={leads} onSendFollowUps={handleFollowUpsSent} />
+        <FollowUpSequencer leads={outreach.leads} onSendFollowUps={outreach.sendFollowUps} />
       </div>
     ),
 
@@ -761,12 +482,12 @@ const DashboardShell: React.FC = () => {
             {/* DM generation credits */}
             {(() => {
               const limit = limits.maxDMGenerations;
-              const pct = dmUsed / limit;
+              const pct = outreach.dmUsed / limit;
               const color = pct >= 1 ? 'text-red-400 border-red-500/30 bg-red-500/8' : pct >= 0.8 ? 'text-amber-400 border-amber-500/30 bg-amber-500/8' : 'text-zinc-500 border-white/8 bg-white/3';
               return (
                 <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}>
                   <Sparkles className="w-3 h-3" />
-                  {dmUsed} / {limit} DM credits
+                  {outreach.dmUsed} / {limit} DM credits
                 </div>
               );
             })()}

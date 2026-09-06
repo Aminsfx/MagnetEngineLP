@@ -19,7 +19,6 @@ interface ApprovalQueueProps {
     onDeleteLead?: (id: string) => void;
     /** Bulk delete — one state update + one batched DB write */
     onDeleteLeads?: (ids: string[]) => void;
-    onLeadsSent?: (ids: string[]) => void;
     onApproveLead?: (id: string) => void;
     /** Bulk approve — one state update + one batched DB write */
     onApproveLeads?: (ids: string[]) => void;
@@ -91,7 +90,6 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     isGenerating,
     onDeleteLead,
     onDeleteLeads,
-    onLeadsSent,
     onApproveLead,
     onApproveLeads,
     onRejectLead,
@@ -228,7 +226,6 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
             maxDelay: safeMax,
             dailyCap: config.dailySendCap ?? 40,
         });
-        onLeadsSent?.(approved.map(l => l.id));
         toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent — DMs will drip every ${safeMin}–${safeMax} min.`);
     };
 
