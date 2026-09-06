@@ -12,6 +12,27 @@ function formatFollowers(n: number): string {
     return String(n);
 }
 
+/**
+ * The Actions cell's icon buttons, one entry per role.
+ *
+ * Written out rather than built from a role name because Tailwind's content
+ * scanner only sees literal class strings — an interpolated
+ * `hover:text-${role}-400` compiles to nothing. Spelling them once instead of
+ * nine times is what makes the role map auditable: `info` is cyan, and cyan
+ * means the AI made it (docs/DESIGN-TOKENS.md), so anything not in that row
+ * must not reach for it.
+ */
+const ICON_BTN = {
+    neutral: 'p-1.5 rounded-lg text-neutral-600 hover:text-neutral-400 hover:bg-neutral-500/10 transition-all',
+    brand: 'p-1.5 rounded-lg text-neutral-600 hover:text-brand-400 hover:bg-brand-500/10 transition-all',
+    danger: 'p-1.5 rounded-lg text-neutral-600 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
+    /** Delete only: it rests one step dimmer than Reject, since it is the
+        irreversible one and should not be what the eye lands on first. */
+    dangerQuiet: 'p-1.5 rounded-lg text-neutral-700 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
+    /** AI generation only. */
+    info: 'p-1.5 rounded-lg text-neutral-600 hover:text-info-400 hover:bg-info-500/10 transition-all',
+} as const;
+
 export interface QueueRowProps {
     lead: Lead;
     isSelected: boolean;
@@ -103,7 +124,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                         ) : (
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-info-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-brand-800 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                                 {(lead.name || lead.handle)[0]?.toUpperCase()}
                             </div>
                         )}
@@ -205,7 +226,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onStartEdit(lead)}
                                 title="Edit DM"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-info-400 hover:bg-info-500/10 transition-all"
+                                className={ICON_BTN.neutral}
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -216,7 +237,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onApprove(lead.id)}
                                 title="Approve"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-brand-400 hover:bg-brand-500/10 transition-all"
+                                className={ICON_BTN.brand}
                             >
                                 <Check className="w-3.5 h-3.5" />
                             </button>
@@ -227,7 +248,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onReject(lead.id)}
                                 title="Reject"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-danger-400 hover:bg-danger-500/10 transition-all"
+                                className={ICON_BTN.danger}
                             >
                                 <X className="w-3.5 h-3.5" />
                             </button>
@@ -243,7 +264,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                     if (!showBattlecards) onToggleBattlecards(lead.id);
                                 }}
                                 title="Mark as Replied"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-neutral-300 hover:bg-neutral-500/10 transition-all"
+                                className={ICON_BTN.neutral}
                             >
                                 <MessageCircle className="w-3.5 h-3.5" />
                             </button>
@@ -253,9 +274,9 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onUpdateLead({ ...lead, positiveReply: true })}
                                 title="Mark as Positive Reply"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-brand-400 hover:bg-brand-500/10 transition-all"
+                                className={ICON_BTN.brand}
                             >
-                                <MessageCircle className="w-3.5 h-3.5 text-neutral-400" />
+                                <MessageCircle className="w-3.5 h-3.5" />
                             </button>
                         )}
                         {/* Mark booked */}
@@ -263,7 +284,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onUpdateLead({ ...lead, booked: true })}
                                 title="Mark as Booked"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-brand-400 hover:bg-brand-500/10 transition-all"
+                                className={ICON_BTN.brand}
                             >
                                 <CalendarCheck className="w-3.5 h-3.5" />
                             </button>
@@ -273,7 +294,9 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onToggleBattlecards(lead.id)}
                                 title="Reply battlecards"
-                                className={`p-1.5 rounded-lg transition-all ${showBattlecards ? 'text-info-400 bg-info-500/10' : 'text-neutral-600 hover:text-info-400 hover:bg-info-500/10'}`}
+                                className={showBattlecards
+                                    ? 'p-1.5 rounded-lg transition-all text-neutral-300 bg-neutral-500/10'
+                                    : ICON_BTN.neutral}
                             >
                                 <MessagesSquare className="w-3.5 h-3.5" />
                             </button>
@@ -285,7 +308,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onClick={() => onGenerateDM(lead)}
                                 disabled={isGenerating}
                                 title="Generate DM"
-                                className="p-1.5 rounded-lg text-neutral-600 hover:text-info-400 hover:bg-info-500/10 transition-all disabled:opacity-40"
+                                className={`${ICON_BTN.info} disabled:opacity-40`}
                             >
                                 <Sparkles className="w-3.5 h-3.5" />
                             </button>
@@ -296,7 +319,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <button
                                 onClick={() => onDelete(lead)}
                                 title="Delete"
-                                className="p-1.5 rounded-lg text-neutral-700 hover:text-danger-400 hover:bg-danger-500/10 transition-all"
+                                className={ICON_BTN.dangerQuiet}
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>
