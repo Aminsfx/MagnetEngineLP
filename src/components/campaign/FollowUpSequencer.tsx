@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Save, Play, Pause, CalendarClock, ChevronDown, Info, CheckCircle2, AlertCircle, Send } from 'lucide-react';
 import { FollowUpStep, FollowUpSequence, Lead } from '../../lib/types';
 import { db } from '../../lib/db';
+import { CARD_BEZEL } from '../../lib/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { computeDueFollowUps, type DueFollowUp } from '../../lib/followups';
 
@@ -141,8 +142,8 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48 text-zinc-600 text-sm">
-        <div className="animate-spin w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full mr-3" />
+      <div className="flex items-center justify-center h-48 text-neutral-600 text-sm">
+        <div className="animate-spin w-4 h-4 border-2 border-brand-500/30 border-t-brand-500 rounded-full mr-3" />
         Loading sequences…
       </div>
     );
@@ -153,16 +154,16 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
       {/* ── Due follow-ups panel ─────────────────────────────────────── */}
       <div
         className="rounded-[1.5rem] p-[1px]"
-        style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+        style={CARD_BEZEL.outer}
       >
-        <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6" style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+        <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-                <CalendarClock className="w-4 h-4 text-violet-400" />
+              <div className="w-8 h-8 rounded-xl bg-neutral-500/10 border border-neutral-500/20 flex items-center justify-center">
+                <CalendarClock className="w-4 h-4 text-neutral-400" />
               </div>
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">Due follow-ups</p>
+                <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">Due follow-ups</p>
                 <p className="text-sm text-white font-semibold leading-none mt-1">
                   {activeSeq?.active
                     ? `${due.length} lead${due.length !== 1 ? 's' : ''} ${due.length === 1 ? 'is' : 'are'} due a follow-up step`
@@ -174,10 +175,10 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
               id="send-due-followups-btn"
               onClick={handleSendDue}
               disabled={due.length === 0 || sending || !activeSeq?.active}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-500 hover:bg-brand-400 text-brand-950 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending
-                ? <div className="w-3.5 h-3.5 border-2 border-emerald-900/40 border-t-emerald-900 rounded-full animate-spin" />
+                ? <div className="w-3.5 h-3.5 border-2 border-brand-900/40 border-t-brand-900 rounded-full animate-spin" />
                 : <Send className="w-3.5 h-3.5" />}
               Send due follow-ups ({due.length})
             </button>
@@ -186,7 +187,7 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
           {activeSeq?.active && due.length > 0 && (
             <div className="mt-4 space-y-1.5">
               {due.slice(0, 3).map(d => (
-                <p key={d.lead.id} className="text-[11px] text-zinc-500 font-mono truncate">
+                <p key={d.lead.id} className="text-[11px] text-neutral-500 font-mono truncate">
                   @{d.lead.handle} → Day {activeSeq.steps[d.stepIndex]?.delayDays}: {d.message.slice(0, 60)}{d.message.length > 60 ? '…' : ''}
                 </p>
               ))}
@@ -201,16 +202,16 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
         {/* Header */}
         <div
           className="rounded-[1.5rem] p-[1px]"
-          style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+          style={CARD_BEZEL.outer}
         >
-          <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6" style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+          <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-                  <CalendarClock className="w-4 h-4 text-violet-400" />
+                <div className="w-8 h-8 rounded-xl bg-neutral-500/10 border border-neutral-500/20 flex items-center justify-center">
+                  <CalendarClock className="w-4 h-4 text-neutral-400" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">Follow-Up Engine</p>
+                  <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">Follow-Up Engine</p>
                   <h3 className="text-sm font-semibold text-white leading-none">Default Sequence</h3>
                 </div>
               </div>
@@ -222,8 +223,8 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                   onClick={handleToggleActive}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all duration-300 ${
                     activeSeq?.active
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                      : 'bg-white/4 border-white/10 text-zinc-500'
+                      ? 'bg-brand-500/10 border-brand-500/20 text-brand-400'
+                      : 'bg-white/4 border-white/10 text-neutral-500'
                   }`}
                 >
                   {activeSeq?.active ? (
@@ -238,10 +239,10 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                   id="sequence-save-btn"
                   onClick={handleSave}
                   disabled={saveState.type === 'saving'}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-all disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold bg-brand-500 hover:bg-brand-400 text-brand-950 transition-all disabled:opacity-60"
                 >
                   {saveState.type === 'saving' ? (
-                    <div className="w-3 h-3 border-2 border-emerald-900/40 border-t-emerald-900 rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-brand-900/40 border-t-brand-900 rounded-full animate-spin" />
                   ) : (
                     <Save className="w-3 h-3" />
                   )}
@@ -252,23 +253,23 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
 
             {/* Save status */}
             {saveState.type === 'saved' && (
-              <div className="flex items-center gap-2 mt-3 text-emerald-400 text-xs">
+              <div className="flex items-center gap-2 mt-3 text-brand-400 text-xs">
                 <CheckCircle2 className="w-3.5 h-3.5" />{saveState.message}
               </div>
             )}
             {saveState.type === 'error' && (
-              <div className="flex items-center gap-2 mt-3 text-red-400 text-xs">
+              <div className="flex items-center gap-2 mt-3 text-danger-400 text-xs">
                 <AlertCircle className="w-3.5 h-3.5" />{saveState.message}
               </div>
             )}
 
             {/* Info note */}
-            <div className="flex items-start gap-2 mt-4 p-3 rounded-xl bg-violet-500/6 border border-violet-500/12">
-              <Info className="w-3.5 h-3.5 text-violet-400 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-zinc-500 leading-relaxed">
+            <div className="flex items-start gap-2 mt-4 p-3 rounded-xl bg-neutral-500/6 border border-neutral-500/12">
+              <Info className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-neutral-500 leading-relaxed">
                 The Chrome extension will send these follow-ups automatically. Use{' '}
-                <code className="text-violet-400 bg-violet-500/10 px-1 rounded">{'{{handle}}'}</code> and{' '}
-                <code className="text-violet-400 bg-violet-500/10 px-1 rounded">{'{{name}}'}</code> for personalisation tokens.
+                <code className="text-neutral-300 bg-neutral-500/10 px-1 rounded">{'{{handle}}'}</code> and{' '}
+                <code className="text-neutral-300 bg-neutral-500/10 px-1 rounded">{'{{name}}'}</code> for personalisation tokens.
               </p>
             </div>
           </div>
@@ -280,20 +281,20 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
             <div
               key={step.id}
               className="rounded-[1.5rem] p-[1px]"
-              style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+              style={CARD_BEZEL.outer}
             >
-              <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-5" style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+              <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-5" style={CARD_BEZEL.inner}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-violet-400">{index + 1}</span>
+                    <div className="w-6 h-6 rounded-full bg-neutral-500/15 border border-neutral-500/25 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-neutral-400">{index + 1}</span>
                     </div>
                     <span className="text-sm font-semibold text-white">Follow-up {index + 1}</span>
                   </div>
                   <button
                     id={`remove-step-${index}-btn`}
                     onClick={() => handleRemoveStep(step.id)}
-                    className="w-6 h-6 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-400/8 transition-all"
+                    className="w-6 h-6 rounded-lg flex items-center justify-center text-neutral-700 hover:text-danger-400 hover:bg-danger-400/8 transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -302,7 +303,7 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {/* Delay */}
                   <div>
-                    <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-1.5">
+                    <label className="block text-[10px] font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
                       Send after
                     </label>
                     <div className="relative">
@@ -310,21 +311,21 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                         id={`step-delay-${index}`}
                         value={step.delayDays}
                         onChange={(e) => handleUpdateStep(step.id, 'delayDays', Number(e.target.value))}
-                        className="w-full bg-[#0D1F14] border border-white/8 rounded-xl py-2.5 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500/50 focus:border-violet-500/30 transition-all appearance-none"
+                        className="w-full bg-surface-overlay border border-white/8 rounded-xl py-2.5 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all appearance-none"
                       >
                         {DELAY_OPTIONS.map((d) => (
-                          <option key={d} value={d} className="bg-zinc-900">
+                          <option key={d} value={d} className="bg-neutral-900">
                             Day {d}
                           </option>
                         ))}
                       </select>
-                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
                     </div>
                   </div>
 
                   {/* Condition */}
                   <div>
-                    <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-1.5">
+                    <label className="block text-[10px] font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
                       Condition
                     </label>
                     <div className="relative">
@@ -332,20 +333,20 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                         id={`step-condition-${index}`}
                         value={step.condition}
                         onChange={(e) => handleUpdateStep(step.id, 'condition', e.target.value as FollowUpStep['condition'])}
-                        className="w-full bg-[#0D1F14] border border-white/8 rounded-xl py-2.5 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500/50 focus:border-violet-500/30 transition-all appearance-none"
+                        className="w-full bg-surface-overlay border border-white/8 rounded-xl py-2.5 pl-3 pr-8 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all appearance-none"
                       >
                         {Object.entries(CONDITION_LABELS).map(([val, label]) => (
-                          <option key={val} value={val} className="bg-zinc-900">{label}</option>
+                          <option key={val} value={val} className="bg-neutral-900">{label}</option>
                         ))}
                       </select>
-                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
                     </div>
                   </div>
                 </div>
 
                 {/* Message template */}
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[10px] font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
                     Message Template
                   </label>
                   <textarea
@@ -354,10 +355,10 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
                     onChange={(e) => handleUpdateStep(step.id, 'messageTemplate', e.target.value)}
                     placeholder="Write your follow-up message… use {{handle}} and {{name}} for personalisation"
                     rows={3}
-                    className="w-full bg-[#0D1F14] border border-white/8 rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-zinc-700 focus:outline-none focus:ring-1 focus:ring-violet-500/50 focus:border-violet-500/30 transition-all resize-none leading-relaxed"
+                    className="w-full bg-surface-overlay border border-white/8 rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all resize-none leading-relaxed"
                   />
                   <div className="flex justify-end mt-1">
-                    <span className={`text-[10px] font-mono ${step.messageTemplate.length > 280 ? 'text-amber-400' : 'text-zinc-700'}`}>
+                    <span className={`text-[10px] font-mono ${step.messageTemplate.length > 280 ? 'text-caution-400' : 'text-neutral-700'}`}>
                       {step.messageTemplate.length} / 280 chars
                     </span>
                   </div>
@@ -371,7 +372,7 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
             <button
               id="add-followup-step-btn"
               onClick={handleAddStep}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-dashed border-white/10 text-sm text-zinc-600 hover:text-white hover:border-white/20 transition-all duration-300 group"
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-dashed border-white/10 text-sm text-neutral-600 hover:text-white hover:border-white/20 transition-all duration-300 group"
             >
               <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
               Add follow-up step ({(activeSeq?.steps.length ?? 0)}/3 used)
@@ -384,27 +385,27 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
       <div className="space-y-4">
         <div
           className="rounded-[1.5rem] p-[1px] sticky top-6"
-          style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+          style={CARD_BEZEL.outer}
         >
-          <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-5" style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
-            <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase mb-4">Preview</p>
+          <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-5" style={CARD_BEZEL.inner}>
+            <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase mb-4">Preview</p>
 
             {/* Preview inputs */}
             <div className="space-y-3 mb-5">
               <div>
-                <label className="block text-[10px] text-zinc-600 mb-1">Test handle</label>
+                <label className="block text-[10px] text-neutral-600 mb-1">Test handle</label>
                 <input
                   value={previewHandle}
                   onChange={(e) => setPreviewHandle(e.target.value)}
-                  className="w-full bg-[#0D1F14] border border-white/8 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500/40 transition-all"
+                  className="w-full bg-surface-overlay border border-white/8 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-zinc-600 mb-1">Test name</label>
+                <label className="block text-[10px] text-neutral-600 mb-1">Test name</label>
                 <input
                   value={previewName}
                   onChange={(e) => setPreviewName(e.target.value)}
-                  className="w-full bg-[#0D1F14] border border-white/8 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500/40 transition-all"
+                  className="w-full bg-surface-overlay border border-white/8 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all"
                 />
               </div>
             </div>
@@ -414,15 +415,15 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
               {/* Day 0 — Initial DM */}
               <div className="flex gap-3">
                 <div className="flex flex-col items-center">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[8px] font-bold text-emerald-400">0</span>
+                  <div className="w-5 h-5 rounded-full bg-info-500/15 border border-info-500/30 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[8px] font-bold text-info-400">0</span>
                   </div>
                   <div className="w-px flex-1 bg-white/5 mt-1" />
                 </div>
                 <div className="flex-1 pb-3">
-                  <p className="text-[10px] font-semibold text-emerald-400 mb-1">Day 0 — Initial DM</p>
+                  <p className="text-[10px] font-semibold text-info-400 mb-1">Day 0 — Initial DM</p>
                   <div className="bg-white/3 rounded-lg p-2">
-                    <p className="text-[10px] text-zinc-500 italic">Your AI-generated personalised opener</p>
+                    <p className="text-[10px] text-neutral-500 italic">Your AI-generated personalised opener</p>
                   </div>
                 </div>
               </div>
@@ -431,19 +432,19 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
               {activeSeq?.steps.map((step, i) => (
                 <div key={step.id} className="flex gap-3">
                   <div className="flex flex-col items-center">
-                    <div className="w-5 h-5 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[8px] font-bold text-violet-400">{step.delayDays}</span>
+                    <div className="w-5 h-5 rounded-full bg-neutral-500/15 border border-neutral-500/30 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[8px] font-bold text-neutral-400">{step.delayDays}</span>
                     </div>
                     {i < (activeSeq.steps.length - 1) && <div className="w-px flex-1 bg-white/5 mt-1" />}
                   </div>
                   <div className="flex-1 pb-3">
-                    <p className="text-[10px] font-semibold text-violet-400 mb-1">
+                    <p className="text-[10px] font-semibold text-neutral-400 mb-1">
                       Day {step.delayDays} — Follow-up {i + 1}
-                      <span className="text-zinc-700 font-normal ml-1">({CONDITION_LABELS[step.condition]})</span>
+                      <span className="text-neutral-700 font-normal ml-1">({CONDITION_LABELS[step.condition]})</span>
                     </p>
                     <div className="bg-white/3 rounded-lg p-2">
-                      <p className="text-[10px] text-zinc-400 leading-relaxed whitespace-pre-wrap">
-                        {step.messageTemplate ? renderPreview(step.messageTemplate) : <em className="text-zinc-700">Enter a message template…</em>}
+                      <p className="text-[10px] text-neutral-400 leading-relaxed whitespace-pre-wrap">
+                        {step.messageTemplate ? renderPreview(step.messageTemplate) : <em className="text-neutral-700">Enter a message template…</em>}
                       </p>
                     </div>
                   </div>
@@ -451,7 +452,7 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, onS
               ))}
 
               {(activeSeq?.steps.length ?? 0) === 0 && (
-                <p className="text-[11px] text-zinc-700 text-center py-4">Add steps to preview the sequence timeline</p>
+                <p className="text-[11px] text-neutral-700 text-center py-4">Add steps to preview the sequence timeline</p>
               )}
             </div>
           </div>
