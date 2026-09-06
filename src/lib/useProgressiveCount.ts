@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
  * How many of `total` items to mount right now, growing by `chunk` a frame
  * until everything is on screen.
  *
- * The Approval Queue mounts a page of 50 rows, and a row is ~40 elements with
- * six icons — so navigating to /queue used to be a single ~140 ms commit that
- * inserted ~2,000 nodes. Nothing painted until all of it landed, which is what
+ * The Approval Queue mounts a page of rows — 25 by default, up to 100 — and a
+ * row is ~40 elements with six icons, so navigating to /queue used to be a
+ * single ~140 ms commit that inserted ~2,000 nodes. Nothing painted until all of it landed, which is what
  * "clicking Approval Queue lags" actually was. Growing in chunks puts the
  * toolbar, filters and first rows on screen in the first commit and lets the
  * browser paint (and accept input) between the rest.

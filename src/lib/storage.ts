@@ -4,11 +4,24 @@ const STORAGE_KEYS = {
     LEADS: 'magnetengine_leads',
     CONFIG: 'magnetengine_config',
     DM_DELAY: 'magnetengine_dm_delay',
+    QUEUE_PAGE_SIZE: 'magnetengine_queue_page_size',
 };
 
 /** Random delay (in minutes) the extension waits between each DM. */
 export interface DmDelay { min: number; max: number }
 const DEFAULT_DM_DELAY: DmDelay = { min: 3, max: 8 };
+
+/** Rows per page offered by the Approval Queue's pager. */
+export const QUEUE_PAGE_SIZES = [10, 25, 50, 100] as const;
+export type QueuePageSize = (typeof QUEUE_PAGE_SIZES)[number];
+
+/**
+ * 25, not 50. A queue row is ~110px tall, so a 50-row page ran six screens deep
+ * and the pager sat below all of it — Operators reached the bottom of page 1 and
+ * concluded that was every Lead. A page you can scan without losing the pager is
+ * what makes the queue read as paged at all.
+ */
+const DEFAULT_QUEUE_PAGE_SIZE: QueuePageSize = 25;
 
 /**
  * Browser-local storage for the few things that are genuinely per-browser.
@@ -69,5 +82,24 @@ export const storage = {
 
     setDmDelay(delay: DmDelay): void {
         localStorage.setItem(STORAGE_KEYS.DM_DELAY, JSON.stringify(delay));
+    },
+
+    // Approval Queue rows-per-page — a per-browser reading preference, like the
+    // delay range above, so it never belongs in the synced AppConfig.
+    getQueuePageSize(): QueuePageSize {
+        try {
+            const stored = Number(localStorage.getItem(STORAGE_KEYS.QUEUE_PAGE_SIZE));
+            // Only accept a value the pager still offers: a stale or hand-edited
+            // number would page the table at a size the select can't display.
+            return (QUEUE_PAGE_SIZES as readonly number[]).includes(stored)
+                ? (stored as QueuePageSize)
+                : DEFAULT_QUEUE_PAGE_SIZE;
+        } catch {
+            return DEFAULT_QUEUE_PAGE_SIZE;
+        }
+    },
+
+    setQueuePageSize(size: QueuePageSize): void {
+        localStorage.setItem(STORAGE_KEYS.QUEUE_PAGE_SIZE, String(size));
     },
 };

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
-import { storage } from '../../lib/storage';
+import { storage, QUEUE_PAGE_SIZES, type QueuePageSize } from '../../lib/storage';
 import { sendCampaign } from '../../lib/extensionProtocol';
 import { useStable } from '../../lib/useStable';
 import { useProgressiveCount } from '../../lib/useProgressiveCount';
@@ -30,8 +30,12 @@ interface ApprovalQueueProps {
 
 type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
 
-/** Rows mounted at once. Keeps the table's DOM flat as the lead count grows. */
-const PAGE_SIZE = 50;
+/**
+ * Shared by every header cell. An inset shadow stands in for `border-b`:
+ * Tailwind preflight collapses table borders, and a collapsed border is painted
+ * by the table rather than the cell, so it stays put while a sticky <th> moves.
+ */
+const STICKY_TH = 'sticky top-0 z-10 bg-[#050A08] shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]';
 
 /** Rows added per frame while a page mounts — see `useProgressiveCount`. */
 const ROW_CHUNK = 12;
@@ -52,6 +56,93 @@ function pageWindow(current: number, total: number): (number | null)[] {
     }
     return out;
 }
+
+/**
+ * Everything both pager bars render, derived once per render of the queue.
+ *
+ * One object rather than seven loose props is what makes "the bars can never
+ * disagree" structural instead of a promise: there is a single value to hand to
+ * both, so no call site can pass a stale `pageCount` next to a fresh `page`.
+ */
+interface PageView {
+    page: number;
+    pageCount: number;
+    pageNumbers: (number | null)[];
+    rangeStart: number;
+    rangeEnd: number;
+    total: number;
+}
+
+interface QueuePagerProps {
+    view: PageView;
+    onPage: (page: number) => void;
+    /** Distinguishes the two nav landmarks — screen readers list both. */
+    label: string;
+    /** The rows-per-page select. Top bar only, so the queue offers exactly one. */
+    rowsPerPageControl?: React.ReactNode;
+}
+
+/**
+ * One pagination bar, rendered both above and below the table so the paging
+ * model is visible without scrolling to find it.
+ *
+ * The summary line is deliberately NOT gated on `pageCount > 1`. The controls
+ * used to exist only at the bottom of the card and only when there was more
+ * than one page, so an Operator scrolled a long page, hit the end and
+ * reasonably concluded they had seen every Lead — the queue read as an
+ * un-paged list. "Page 1 of 1 · showing 1–18 of 18 leads" costs one line and
+ * removes that reading entirely.
+ */
+const QueuePager: React.FC<QueuePagerProps> = ({
+    view: { page, pageCount, pageNumbers, rangeStart, rangeEnd, total },
+    onPage, label, rowsPerPageControl,
+}) => (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
+        <span className="text-[11px] text-zinc-500 tabular-nums">
+            Page {page} of {pageCount} · showing {rangeStart}–{rangeEnd} of {total} leads
+        </span>
+
+        <div className="flex items-center gap-3">
+            {pageCount > 1 && (
+                <nav aria-label={label} className="flex items-center gap-1">
+                    <button
+                        onClick={() => onPage(Math.max(1, page - 1))}
+                        disabled={page <= 1}
+                        className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                    >
+                        ‹ Prev
+                    </button>
+                    {pageNumbers.map((p, i) =>
+                        p === null ? (
+                            <span key={`gap-${i}`} className="px-1 text-xs text-zinc-700">…</span>
+                        ) : (
+                            <button
+                                key={p}
+                                onClick={() => onPage(p)}
+                                aria-current={p === page ? 'page' : undefined}
+                                className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                                    p === page
+                                        ? 'bg-emerald-500/15 text-emerald-400'
+                                        : 'text-zinc-600 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        ),
+                    )}
+                    <button
+                        onClick={() => onPage(Math.min(pageCount, page + 1))}
+                        disabled={page >= pageCount}
+                        className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                    >
+                        Next ›
+                    </button>
+                </nav>
+            )}
+            {rowsPerPageControl}
+        </div>
+    </div>
+);
 
 function exportToCSV(leads: Lead[]) {
     const headers = ['Handle', 'Name', 'Followers', 'Bio', 'DM', 'Status', 'Approved', 'Rejected'];
@@ -146,6 +237,8 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     // ~1.5k svg icons in the DOM at once. Bulk actions below deliberately still
     // operate on the whole `filtered` set, not just the visible page.
     const [page, setPage] = useState(1);
+    // Lazy initialiser — a localStorage read, not something to redo per render.
+    const [pageSize, setPageSize] = useState<QueuePageSize>(() => storage.getQueuePageSize());
 
     // Changing what's being filtered should start over at page 1 — adjusted
     // during render (React's sanctioned pattern) rather than in an effect.
@@ -156,26 +249,47 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         setPage(1);
     }
 
-    const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
     // Clamp during render rather than in an effect, so filtering down to fewer
     // pages never shows an empty table for a frame.
     const safePage = Math.min(page, pageCount);
     if (safePage !== page) setPage(safePage);
 
     const visible = useMemo(
-        () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-        [filtered, safePage],
+        () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+        [filtered, safePage, pageSize],
     );
     // A page is mounted a chunk at a time so the first commit stays small — the
     // toolbar and the first rows paint immediately instead of the browser
-    // freezing until all 50 rows exist. Bulk actions below still act on the
+    // freezing until the whole page exists. Bulk actions below still act on the
     // whole `filtered` set, and pagination still reports the full page range:
     // this bounds what React commits per frame, not what the page contains.
-    const mounted = useProgressiveCount(visible.length, `${filterKey}|${safePage}`, ROW_CHUNK);
+    // The key carries `pageSize` too — resizing the page changes how many rows
+    // there are to mount, so it has to re-chunk rather than sit on a stale count.
+    const mounted = useProgressiveCount(visible.length, `${filterKey}|${safePage}|${pageSize}`, ROW_CHUNK);
 
-    const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-    const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
     const pageNumbers = useMemo(() => pageWindow(safePage, pageCount), [safePage, pageCount]);
+    const pageView: PageView = {
+        page: safePage,
+        pageCount,
+        pageNumbers,
+        // 0 when a filter matches nothing — the queue still shows a bar there,
+        // because "0 of 250" is exactly when the Operator needs the totals.
+        rangeStart: filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1,
+        rangeEnd: Math.min(safePage * pageSize, filtered.length),
+        total: filtered.length,
+    };
+
+    const changePageSize = (next: QueuePageSize) => {
+        // Land on the page still holding the row you were looking at instead of
+        // snapping to the top: at 250 leads, going 25 → 100 from page 7 would
+        // otherwise drop you 150 leads back with no explanation. The render-time
+        // clamp above handles the case where the computed page no longer exists.
+        const firstVisibleIndex = (safePage - 1) * pageSize;
+        setPageSize(next);
+        setPage(Math.floor(firstVisibleIndex / next) + 1);
+        storage.setQueuePageSize(next);
+    };
 
     const counts = useMemo(() => ({
         all: leads.length,
@@ -470,11 +584,49 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
             {/* ── Table ───────────────────────────────────────────────────── */}
             <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto">
+                {leads.length > 0 && (
+                    <div className="border-b border-white/5">
+                        <QueuePager
+                            view={pageView}
+                            onPage={setPage}
+                            label="Approval queue pages"
+                            rowsPerPageControl={
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-zinc-600">Rows</span>
+                                    <select
+                                        aria-label="Rows per page"
+                                        value={pageSize}
+                                        onChange={e => changePageSize(Number(e.target.value) as QueuePageSize)}
+                                        className="bg-white/3 border border-white/8 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all"
+                                    >
+                                        {QUEUE_PAGE_SIZES.map(n => (
+                                            <option key={n} value={n}>{n}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            }
+                        />
+                    </div>
+                )}
+
+                {/*
+                  A bounded scrollport, not the page. `overflow-x-auto` already
+                  made this element a scroll container on both axes, so a sticky
+                  <thead> could only ever stick to *it* — capping the height is
+                  what turns that into a header that survives the scroll, and it
+                  keeps both pager bars on screen while the Operator reads down a
+                  page.
+
+                  A fraction of the viewport, not `calc(100vh - <toolbar>)`: the
+                  toolbar above wraps to two or three rows on narrow widths, so
+                  any fixed subtraction is wrong exactly where it matters and
+                  shrinks the table to a three-row porthole on a short screen.
+                */}
+                <div className="overflow-auto max-h-[75vh]">
                     <table className="w-full text-left text-sm">
-                        <thead className="border-b border-white/5">
+                        <thead>
                             <tr>
-                                <th className="pl-5 pr-2 py-3.5 w-10">
+                                <th className={`${STICKY_TH} pl-5 pr-2 py-3.5 w-10`}>
                                     <input
                                         type="checkbox"
                                         checked={allFilteredSelected}
@@ -483,11 +635,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                         className="w-4 h-4 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
                                     />
                                 </th>
-                                <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Prospect</th>
-                                <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]">Profile</th>
-                                <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]">AI Generated DM</th>
-                                <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Status</th>
-                                <th className="px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Actions</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Prospect</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]`}>Profile</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]`}>AI Generated DM</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Status</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04]">
@@ -534,46 +686,15 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     </table>
                 </div>
 
-                {/* ── Pagination ──────────────────────────────────────────── */}
-                {pageCount > 1 && (
-                    <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/5">
-                        <span className="text-[10px] text-zinc-700 font-mono">
-                            {rangeStart}–{rangeEnd} of {filtered.length}
-                        </span>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page <= 1}
-                                className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
-                            >
-                                ‹ Prev
-                            </button>
-                            {pageNumbers.map((p, i) =>
-                                p === null ? (
-                                    <span key={`gap-${i}`} className="px-1 text-xs text-zinc-700">…</span>
-                                ) : (
-                                    <button
-                                        key={p}
-                                        onClick={() => setPage(p)}
-                                        aria-current={p === page ? 'page' : undefined}
-                                        className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
-                                            p === page
-                                                ? 'bg-emerald-500/15 text-emerald-400'
-                                                : 'text-zinc-600 hover:text-white hover:bg-white/5'
-                                        }`}
-                                    >
-                                        {p}
-                                    </button>
-                                ),
-                            )}
-                            <button
-                                onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-                                disabled={page >= pageCount}
-                                className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
-                            >
-                                Next ›
-                            </button>
-                        </div>
+                {/* Mirrors the bar above the table — same component, so the two
+                    can never drift apart. */}
+                {leads.length > 0 && (
+                    <div className="border-t border-white/5">
+                        <QueuePager
+                            view={pageView}
+                            onPage={setPage}
+                            label="Approval queue pages (bottom)"
+                        />
                     </div>
                 )}
             </div>

@@ -96,6 +96,13 @@ import { filterUtils } from '../lib/filters';
 /** Mirrors ROW_CHUNK in ApprovalQueue — reported, not asserted. */
 const ROW_CHUNK_EXPECTED = 12;
 
+/**
+ * The queue's default rows-per-page (`storage.getQueuePageSize`). These tests
+ * clear localStorage, so they always measure the default page — not one of the
+ * larger sizes the Operator can pick from the pager.
+ */
+const QUEUE_PAGE_DEFAULT = 25;
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 function makeLeads(n: number): Lead[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -193,7 +200,7 @@ describe('perf harness', () => {
     // The page mounts a chunk of rows per frame; measure a settled table, or
     // the approve below is credited with the rest of the mount.
     await waitFor(() => {
-      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+      expect(document.querySelectorAll('tbody tr').length).toBe(QUEUE_PAGE_DEFAULT);
     });
 
     const mountCommits = commits.length;
@@ -353,7 +360,7 @@ describe('perf harness', () => {
       h.dbCalls = [];
       const { view } = await mountAt('/queue');
       await screen.findByRole('heading', { name: /Approval Queue/i });
-      const settled = Math.min(n, 50);
+      const settled = Math.min(n, QUEUE_PAGE_DEFAULT);
       await waitFor(() => {
         expect(document.querySelectorAll('tbody tr').length).toBe(settled);
       });
@@ -373,8 +380,10 @@ describe('perf harness', () => {
 
       // ── Budget ────────────────────────────────────────────────────────────
       // The queue must not mount an unbounded table. Whatever the lead count,
-      // only a page/window of rows should be in the DOM.
-      expect.soft(rows, `rendered rows for ${n} leads`).toBeLessThanOrEqual(60);
+      // only a page/window of rows should be in the DOM. The ceiling tracks the
+      // default page (was 60 against a 50-row page); the queue's own tests cover
+      // the larger sizes the pager offers.
+      expect.soft(rows, `rendered rows for ${n} leads`).toBeLessThanOrEqual(QUEUE_PAGE_DEFAULT + 5);
 
       view.unmount();
     }
@@ -402,7 +411,7 @@ describe('perf harness', () => {
     });
     await screen.findByRole('heading', { name: /Approval Queue/i });
     await waitFor(() => {
-      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+      expect(document.querySelectorAll('tbody tr').length).toBe(QUEUE_PAGE_DEFAULT);
     });
     const elapsed = performance.now() - t0;
     mutationProbe.current = null;
@@ -439,7 +448,7 @@ describe('perf harness', () => {
     await mountAt('/queue');
     await screen.findByRole('heading', { name: /Approval Queue/i });
     await waitFor(() => {
-      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+      expect(document.querySelectorAll('tbody tr').length).toBe(QUEUE_PAGE_DEFAULT);
     });
 
     let calls = 0;

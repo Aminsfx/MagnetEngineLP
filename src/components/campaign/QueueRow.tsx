@@ -89,10 +89,10 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                 {/* Prospect */}
                 <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                        {/* A page is 50 rows of Instagram CDN avatars, so the img is lazy:
-                            eager loading fired 50 cross-origin requests the moment the queue
-                            mounted, and the scraped URLs are signed and expire, so most of
-                            them are 403s. */}
+                        {/* A page is a screenful of Instagram CDN avatars — up to 100 — so the
+                            img is lazy: eager loading fired every cross-origin request the
+                            moment the queue mounted, and the scraped URLs are signed and
+                            expire, so most of them are 403s. */}
                         {lead.profilePicUrl ? (
                             <img src={lead.profilePicUrl} alt={lead.name}
                                 loading="lazy"
