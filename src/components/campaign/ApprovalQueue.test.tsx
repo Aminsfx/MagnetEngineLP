@@ -59,21 +59,47 @@ const handlesOnPage = () =>
         return n === undefined ? '' : `founder_${n}`;
     });
 
+// The pager renders above AND below the table, so every control exists twice.
+// Driving the top copy is enough — they are the same component.
+const nextButton = () => screen.getAllByRole('button', { name: /Next/ })[0];
+
+// Both summaries, in DOM order. The `span` selector keeps the pager's wrapper
+// <div>s out of the match: with only one page they hold no buttons, so their
+// textContent is identical to the span's and they match the text too.
+const summaries = () =>
+    screen
+        .getAllByText(/^Page \d+ of \d+ · showing/, { selector: 'span' })
+        .map(el => el.textContent);
+
+/** Asserts the summary AND that the two bars agree — they must never drift. */
+const expectSummary = (text: string) => expect(summaries()).toEqual([text, text]);
+
 describe('ApprovalQueue pagination', () => {
     beforeEach(() => localStorage.clear());
 
     it('mounts only one page of rows, however many leads there are', async () => {
         renderQueue(makeLeads(250));
 
-        await rowsSettle(50);
-        expect(screen.getByText('1–50 of 250')).toBeInTheDocument();
+        await rowsSettle(25);
+        expectSummary('Page 1 of 10 · showing 1–25 of 250 leads');
     });
 
     it('shows no pagination controls when everything fits on one page', async () => {
-        renderQueue(makeLeads(30));
+        renderQueue(makeLeads(20));
 
-        await rowsSettle(30);
+        await rowsSettle(20);
         expect(screen.queryByRole('button', { name: /Next/ })).not.toBeInTheDocument();
+    });
+
+    // The bug this whole pager exists for: the controls used to appear only
+    // below a six-screen table and only when there was more than one page, so
+    // the queue read as a plain list. The summary has to state the model even
+    // when there is nowhere to page to.
+    it('still states the paging model when there is only one page', async () => {
+        renderQueue(makeLeads(18));
+
+        await rowsSettle(18);
+        expectSummary('Page 1 of 1 · showing 1–18 of 18 leads');
     });
 
     it('advances to the next slice of leads', async () => {
@@ -82,16 +108,17 @@ describe('ApprovalQueue pagination', () => {
 
         expect(handlesOnPage()[0]).toBe('founder_0');
 
-        await user.click(screen.getByRole('button', { name: /Next/ }));
+        await user.click(nextButton());
 
-        expect(handlesOnPage()[0]).toBe('founder_50');
-        await rowsSettle(50);
-        expect(screen.getByText('51–100 of 120')).toBeInTheDocument();
+        expect(handlesOnPage()[0]).toBe('founder_25');
+        await rowsSettle(25);
+        expectSummary('Page 2 of 5 · showing 26–50 of 120 leads');
 
-        await user.click(screen.getByRole('button', { name: /Next/ }));
+        await user.click(screen.getAllByRole('button', { name: '5' })[0]);
 
         expect(handlesOnPage()[0]).toBe('founder_100');
         await rowsSettle(20); // last page is partial
+        expectSummary('Page 5 of 5 · showing 101–120 of 120 leads');
     });
 
     it('acts on the lead in the row that was clicked, not the first one', async () => {
@@ -99,11 +126,11 @@ describe('ApprovalQueue pagination', () => {
         const onApproveLead = vi.fn();
         renderQueue(makeLeads(120), { onApproveLead });
 
-        await user.click(screen.getByRole('button', { name: /Next/ }));
+        await user.click(nextButton());
         const secondRow = document.querySelectorAll('tbody tr')[1];
         await user.click(within(secondRow as HTMLElement).getByTitle('Approve'));
 
-        expect(onApproveLead).toHaveBeenCalledWith('lead-51');
+        expect(onApproveLead).toHaveBeenCalledWith('lead-26');
     });
 
     it('select-all covers every filtered lead, not just the visible page', async () => {
@@ -119,13 +146,45 @@ describe('ApprovalQueue pagination', () => {
         const user = userEvent.setup();
         renderQueue(makeLeads(250));
 
-        await user.click(screen.getByRole('button', { name: /Next/ }));
-        expect(screen.getByText('51–100 of 250')).toBeInTheDocument();
+        await user.click(nextButton());
+        expectSummary('Page 2 of 10 · showing 26–50 of 250 leads');
 
         await user.type(screen.getByPlaceholderText(/search/i), 'founder_1');
 
-        expect(screen.getByText(/^1–/)).toBeInTheDocument();
+        expect(summaries()[0]).toMatch(/^Page 1 of \d+ · showing 1–/);
         expect(handlesOnPage()[0]).toBe('founder_1');
+    });
+
+    it('re-pages the table when rows-per-page changes, and persists the choice', async () => {
+        const user = userEvent.setup();
+        const { unmount } = renderQueue(makeLeads(250));
+
+        await rowsSettle(25);
+        await user.selectOptions(screen.getByLabelText('Rows per page'), '10');
+
+        await rowsSettle(10);
+        expectSummary('Page 1 of 25 · showing 1–10 of 250 leads');
+
+        // A fresh visit reads the choice back rather than snapping to 25.
+        unmount();
+        renderQueue(makeLeads(250));
+        await rowsSettle(10);
+        expectSummary('Page 1 of 25 · showing 1–10 of 250 leads');
+    });
+
+    it('keeps the row you were looking at when the page size changes', async () => {
+        const user = userEvent.setup();
+        renderQueue(makeLeads(250));
+
+        await user.click(nextButton());
+        await user.click(nextButton()); // page 3 of 25-row pages — leads 51–75
+        expectSummary('Page 3 of 10 · showing 51–75 of 250 leads');
+
+        await user.selectOptions(screen.getByLabelText('Rows per page'), '50');
+
+        // Lead 51 is still the first row, now on page 2 of the wider pages.
+        expectSummary('Page 2 of 5 · showing 51–100 of 250 leads');
+        expect(handlesOnPage()[0]).toBe('founder_50');
     });
 
     it('never re-sends a lead the extension already confirmed', async () => {
@@ -168,8 +227,8 @@ describe('ApprovalQueue pagination', () => {
         const user = userEvent.setup();
         const { rerender } = renderQueue(makeLeads(250));
 
-        await user.click(screen.getByRole('button', { name: /Next/ }));
-        expect(screen.getByText('51–100 of 250')).toBeInTheDocument();
+        await user.click(nextButton());
+        expectSummary('Page 2 of 10 · showing 26–50 of 250 leads');
 
         rerender(
             <ToastProvider>
