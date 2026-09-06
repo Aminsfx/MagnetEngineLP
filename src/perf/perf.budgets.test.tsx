@@ -27,8 +27,17 @@ const h = vi.hoisted(() => ({
   /** Calls that have actually RESOLVED, in order — distinguishes a query that
    *  blocks first paint from one merely started before it. */
   dbResolved: [] as string[],
-  /** Latency given to the inbox queries so blocking is observable. */
-  inboxLatencyMs: 0,
+  /**
+   * Held inbox queries. While this is set, getConversations/getMessages do not
+   * resolve until the test releases it, so "did first paint wait for the
+   * inbox?" is answered by control flow rather than by a stopwatch.
+   *
+   * This replaced a `setTimeout(200ms)` + `elapsed < 200` assertion, which was
+   * really measuring the machine: on a host ~4x slower the mount alone took
+   * longer than the injected latency and all three M2 budgets went red
+   * together, on code that was structurally fine.
+   */
+  inboxGate: null as null | { promise: Promise<void>; release: () => void },
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -59,10 +68,7 @@ vi.mock('../lib/db', () => {
     h.dbResolved.push(name);
     return value;
   };
-  const slow = () =>
-    h.inboxLatencyMs > 0
-      ? new Promise((r) => setTimeout(r, h.inboxLatencyMs))
-      : Promise.resolve();
+  const slow = () => h.inboxGate?.promise ?? Promise.resolve();
   return {
     db: {
       getLeads: async (...a: unknown[]) => { log('getLeads', a); return done('getLeads', h.leads as Lead[]); },
@@ -172,7 +178,7 @@ describe('perf harness', () => {
     h.messages = [];
     h.dbCalls = [];
     h.dbResolved = [];
-    h.inboxLatencyMs = 0;
+    h.inboxGate = null;
     localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -287,35 +293,53 @@ describe('perf harness', () => {
       needsReply: false,
     }));
     h.messages = makeMessages(5_000);
-    // Inbox queries take 200 ms. If first paint waits on them, it shows here.
-    h.inboxLatencyMs = 200;
+
+    // Hold the inbox queries open. If first paint needs them, mountAt can never
+    // resolve — no timing involved, so the verdict is the same on any machine.
+    let release!: () => void;
+    h.inboxGate = {
+      promise: new Promise<void>((r) => { release = r; }),
+      release: () => release(),
+    };
 
     const t0 = performance.now();
-    const { commits } = await mountAt('/dashboard');
+    const { commits } = await Promise.race([
+      mountAt('/dashboard'),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('first paint never happened while the inbox queries were held open')),
+          5_000,
+        ),
+      ),
+    ]);
     const elapsed = performance.now() - t0;
     const resolvedAtPaint = [...h.dbResolved];
+
+    // Let the held queries finish so the component isn't torn down mid-flight.
+    h.inboxGate.release();
+    await waitFor(() => expect(h.dbResolved).toContain('getMessages'));
 
     const rowsAtPaint =
       (resolvedAtPaint.includes('getLeads') ? h.leads.length : 0) +
       (resolvedAtPaint.includes('getConversations') ? h.convos.length : 0) +
       (resolvedAtPaint.includes('getMessages') ? h.messages.length : 0);
 
-    report('M2 — dashboard cold load (inbox queries at 200 ms)', {
+    report('M2 — dashboard cold load (inbox queries held open)', {
       'db round-trips started': h.dbCalls.length,
       'calls started': h.dbCalls.map((c) => c.name).join(', '),
       'resolved before first paint': resolvedAtPaint.join(', ') || '(none)',
       'rows pulled before first paint': rowsAtPaint,
       'rows pulled in total': h.leads.length + h.convos.length + h.messages.length,
       'commits to first paint': commits.length,
-      'time to first paint (ms)': elapsed.toFixed(0),
+      'time to first paint (ms)': elapsed.toFixed(0), // reported, never asserted
     });
 
     // ── Budgets ──────────────────────────────────────────────────────────────
-    // The dashboard must not block first paint on the user's entire inbox
+    // The dashboard must not block first paint on the Operator's entire inbox
     // history. Starting the query early is fine; awaiting it is not.
     expect.soft(resolvedAtPaint, 'awaited before first paint').not.toContain('getMessages');
+    expect.soft(resolvedAtPaint, 'awaited before first paint').not.toContain('getConversations');
     expect.soft(rowsAtPaint, 'rows awaited before first paint').toBeLessThanOrEqual(500);
-    expect.soft(elapsed, 'time to first paint (ms)').toBeLessThan(h.inboxLatencyMs);
   });
 
   it('M3: DOM nodes mounted by the Approval Queue', async () => {

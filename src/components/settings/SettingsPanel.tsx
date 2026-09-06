@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook, Bot } from 'lucide-react';
 import { AppConfig } from '../../lib/types';
-import { storage } from '../../lib/storage';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
 import { usePlan } from '../../contexts/PlanContext';
+import { useToast } from '../common/Toast';
+import {
+    buildSystemPrompt,
+    buildReplySystemPrompt,
+    DEFAULT_REPLY_SYSTEM_PROMPT,
+    TONE_OPTIONS,
+    type PromptIdentity,
+} from '../../lib/prompt';
 
 interface SettingsPanelProps {
     config: AppConfig;
@@ -14,125 +21,8 @@ interface SettingsPanelProps {
 
 type WizardStep = 1 | 2 | 3 | 4;
 
-interface WizardData {
-    founderName: string;
-    founderRole: string;
-    businessName: string;
-    businessNiche: string;
-    targetAudience: string;
-    valueProposition: string;
-    exampleDM: string;
-    dmTone: 'casual' | 'professional' | 'friendly' | 'bold';
-}
-
-const TONE_OPTIONS: { value: WizardData['dmTone']; label: string; description: string }[] = [
-    { value: 'casual', label: '😎 Casual', description: 'Relaxed, conversational — feels like a friend reaching out' },
-    { value: 'friendly', label: '🤝 Friendly', description: 'Warm and personable — professional yet approachable' },
-    { value: 'professional', label: '💼 Professional', description: 'Polished and direct — best for B2B or high-ticket offers' },
-    { value: 'bold', label: '⚡ Bold', description: 'Confident and punchy — grabs attention immediately' },
-];
-
-// Detailed, voice-specific instructions injected into the system prompt.
-const TONE_LIBRARY: Record<WizardData['dmTone'], string> = {
-    casual: `Write like you're texting a friend at 11pm after three coffees.
-- Start sentences with "So," "Wait," "Actually"
-- Use "idk," "tbh," "ngl," "lol" naturally
-- Sentence fragments are fine
-- "haha" at the end of self-deprecating observations
-- Imperfect grammar is okay if it sounds natural`,
-    friendly: `Warm and approachable. Like you met them at a conference and genuinely want to know more.
-- Use their name naturally
-- Show enthusiasm without exclamation point spam
-- "That's really cool" beats "That's impressive"
-- Ask follow-up questions that show you listened`,
-    professional: `Direct and respectful. No fluff, but not stiff.
-- Get to the point in 5 words
-- "What's your current process?" beats "I would love to learn about your workflow"
-- Assume competence, offer insight
-- One piece of jargon max — only if they use it first`,
-    bold: `Confident, slightly provocative. Challenge their assumption gently.
-- "Most people do X, but you're doing Y — what's the story?"
-- Point out the gap: "Everyone says they do this, but few actually do"
-- Make them want to correct you or prove you wrong
-- Not arrogant — curious with an edge`,
-};
-
-/**
- * Builds the DM-generation system prompt (the "universal" high-reply prompt):
- * personal identity + tone library + the specific recipe that keeps DMs
- * peer-to-peer instead of salesy. Sent to Claude as the `system` parameter.
- */
-function generateSystemPrompt(data: WizardData): string {
-    const tone = TONE_LIBRARY[data.dmTone] ?? TONE_LIBRARY.casual;
-    const businessName = data.businessName.trim() || 'our business';
-    const founderName = data.founderName.trim() || businessName;
-    const founderRole = data.founderRole.trim() || 'founder';
-    const audience = data.targetAudience.trim() || 'potential clients';
-    const outcome = data.valueProposition.trim() || 'grow their business';
-    const niche = data.businessNiche.trim() || 'their space';
-
-    const exampleSection = data.exampleDM.trim()
-        ? `## EXAMPLE DM FOR THIS CAMPAIGN\n\n${data.exampleDM.trim()}\n\n`
-        : '';
-
-    return `You are ${founderName}, ${founderRole} at ${businessName}.
-
-You help ${audience} achieve ${outcome}.
-
-You send Instagram DMs to people whose profiles you actually looked at. You write like a real person texting a peer — not a marketer, not a bot, not a LinkedIn influencer.
-
-## YOUR VOICE
-
-${tone}
-
-## WHAT MAKES YOUR DMs WORK
-
-1. FIRST SENTENCE: Specific observation about THEIR world
-   - Reference their bio, niche, follower count, location, or recent content
-   - Show you did homework — not "love your content," but "saw you just hit 10k, what's working?"
-   - Connect their world to yours without mentioning your product
-
-2. SECOND SENTENCE: Question about THEIR process or pain
-   - Ask how they find clients, fill their calendar, or handle outreach
-   - Assume they have a manual or broken process
-   - Make it easy to answer in 5 words or less
-
-3. NEVER IN THE FIRST DM:
-   - Your product name: "${businessName}"
-   - "I help," "I specialize," "We offer," "Our company"
-   - "Quick question," "Just wanted to," "Would love to"
-   - Links, calls to action, demo requests
-   - "Leverage," "synergies," "optimize," "strategize," "solutions"
-   - Perfect parallel structure or corporate speak
-
-4. SOUND LIKE:
-   - A peer who does the same work
-   - Someone who scrolled their profile at 11pm
-   - A human who occasionally says "wait," "so," "actually," "idk," "tbh," "ngl," "lol"
-
-${exampleSection}## BAD EXAMPLES (NEVER WRITE LIKE THIS)
-
-"Hey [name], I help ${audience} get ${outcome}. Want to hop on a quick call?"
-
-"Hi there! Love your content. I specialize in ${niche}. Would you be interested in learning more?"
-
-"Hello! I noticed you're in ${niche}. I offer ${outcome}. Let's connect!"
-
-"Quick question — are you looking for help with ${niche}? I have a proven system. DM me back!"
-
-## THE RECIPE
-
-For every lead:
-1. READ their bio. What's the ONE thing that stands out?
-2. ASK: What do they sell? Who do they sell to? How do they find clients?
-3. CONNECT: How does their world touch yours without mentioning your product?
-4. QUESTION: What's a short question about their process they'd actually answer?
-5. CHECK: Does this sound like a peer, or a pitch?
-
-## OUTPUT
-
-Just the DM text. No quotes. No labels. No preamble. Raw text only.`;
-}
+/** The wizard collects exactly what the prompt module needs. */
+type WizardData = PromptIdentity;
 
 const STEP_LABELS = ['Business', 'Value Prop', 'Tone & Style', 'Review'];
 
@@ -208,6 +98,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ onApply }) => {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig }) => {
     const { limits } = usePlan();
+    const toast = useToast();
     const [wizardStep, setWizardStep] = useState<WizardStep>(
         config.onboardingComplete ? 4 : 1
     );
@@ -223,6 +114,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
     });
 
     const updateWizard = (patch: Partial<WizardData>) => setWizard(prev => ({ ...prev, ...patch }));
+
+    /**
+     * The AI SDR's persona used to stay "You are the founder of MagnetEngine"
+     * for every Operator, because nothing regenerated it when the wizard ran.
+     * Regenerate it from the new identity — unless the Operator has written
+     * their own, which we detect by checking whether the stored value is still
+     * one this module would have produced.
+     */
+    const regeneratedReplyPrompt = (data: PromptIdentity): string | undefined => {
+        const current = config.replySystemPrompt ?? '';
+        const machineWritten =
+            current === '' ||
+            current === DEFAULT_REPLY_SYSTEM_PROMPT ||
+            current === buildReplySystemPrompt({
+                founderName: config.founderName ?? '',
+                founderRole: config.founderRole ?? '',
+                businessName: config.businessName ?? '',
+                businessNiche: config.businessNiche ?? '',
+                targetAudience: config.targetAudience ?? '',
+                valueProposition: config.valueProposition ?? '',
+                exampleDM: '',
+                dmTone: config.dmTone ?? 'casual',
+            });
+        return machineWritten ? buildReplySystemPrompt(data) : config.replySystemPrompt;
+    };
 
     const handleApplyPreset = (preset: NichePreset) => {
         const p = preset.config;
@@ -242,7 +158,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         // benefit from the universal high-reply prompt too.
         const updatedConfig: AppConfig = {
             ...config,
-            systemPrompt: generateSystemPrompt(newWizard),
+            systemPrompt: buildSystemPrompt(newWizard),
+            replySystemPrompt: regeneratedReplyPrompt(newWizard),
             businessNiche: newWizard.businessNiche,
             targetAudience: newWizard.targetAudience,
             valueProposition: newWizard.valueProposition,
@@ -254,15 +171,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
             onboardingComplete: true,
         };
         onUpdateConfig(updatedConfig);
-        storage.setConfig(updatedConfig);
         setWizardStep(4); // jump to review so user sees what was generated
     };
 
     const handleGeneratePrompt = () => {
-        const prompt = generateSystemPrompt(wizard);
         const updated: AppConfig = {
             ...config,
-            systemPrompt: prompt,
+            systemPrompt: buildSystemPrompt(wizard),
+            replySystemPrompt: regeneratedReplyPrompt(wizard),
             founderName: wizard.founderName,
             founderRole: wizard.founderRole,
             businessName: wizard.businessName,
@@ -274,18 +190,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
             onboardingComplete: true,
         };
         onUpdateConfig(updated);
-        storage.setConfig(updated);
         setWizardStep(4);
     };
 
     const handleUpdateKeywords = (type: 'includeKeywords' | 'excludeKeywords', value: string) => {
         const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
         onUpdateConfig({ ...config, [type]: keywords });
-    };
-
-    const handleSaveAll = () => {
-        storage.setConfig(config);
-        alert('Settings saved!');
     };
 
     return (
@@ -717,8 +627,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
             </div>
 
             {/* ── Save button ─────────────────────────────────────────────── */}
+            {/* Every control above already persists through onUpdateConfig, so
+                this re-writes the current config and confirms. It used to call
+                storage.setConfig directly — writing a second, diverging copy to
+                localStorage — and then browser alert(). */}
             <button
-                onClick={handleSaveAll}
+                onClick={() => {
+                    onUpdateConfig(config);
+                    toast.success('Settings saved.');
+                }}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 rounded-xl transition-all font-semibold text-sm"
             >
                 <Save className="w-4 h-4" />
