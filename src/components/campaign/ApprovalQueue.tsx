@@ -30,6 +30,13 @@ interface ApprovalQueueProps {
 
 type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
 
+/**
+ * Shared by every header cell. An inset shadow stands in for `border-b`:
+ * Tailwind preflight collapses table borders, and a collapsed border is painted
+ * by the table rather than the cell, so it stays put while a sticky <th> moves.
+ */
+const STICKY_TH = 'sticky top-0 z-10 bg-[#050A08] shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]';
+
 /** Rows added per frame while a page mounts — see `useProgressiveCount`. */
 const ROW_CHUNK = 12;
 
@@ -50,16 +57,29 @@ function pageWindow(current: number, total: number): (number | null)[] {
     return out;
 }
 
-interface QueuePagerProps {
+/**
+ * Everything both pager bars render, derived once per render of the queue.
+ *
+ * One object rather than seven loose props is what makes "the bars can never
+ * disagree" structural instead of a promise: there is a single value to hand to
+ * both, so no call site can pass a stale `pageCount` next to a fresh `page`.
+ */
+interface PageView {
     page: number;
     pageCount: number;
     pageNumbers: (number | null)[];
     rangeStart: number;
     rangeEnd: number;
     total: number;
+}
+
+interface QueuePagerProps {
+    view: PageView;
     onPage: (page: number) => void;
-    /** Rows-per-page select — passed to the top bar only, so the queue has one. */
-    trailing?: React.ReactNode;
+    /** Distinguishes the two nav landmarks — screen readers list both. */
+    label: string;
+    /** The rows-per-page select. Top bar only, so the queue offers exactly one. */
+    rowsPerPageControl?: React.ReactNode;
 }
 
 /**
@@ -74,7 +94,8 @@ interface QueuePagerProps {
  * removes that reading entirely.
  */
 const QueuePager: React.FC<QueuePagerProps> = ({
-    page, pageCount, pageNumbers, rangeStart, rangeEnd, total, onPage, trailing,
+    view: { page, pageCount, pageNumbers, rangeStart, rangeEnd, total },
+    onPage, label, rowsPerPageControl,
 }) => (
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
         <span className="text-[11px] text-zinc-500 tabular-nums">
@@ -83,7 +104,7 @@ const QueuePager: React.FC<QueuePagerProps> = ({
 
         <div className="flex items-center gap-3">
             {pageCount > 1 && (
-                <nav aria-label="Approval queue pages" className="flex items-center gap-1">
+                <nav aria-label={label} className="flex items-center gap-1">
                     <button
                         onClick={() => onPage(Math.max(1, page - 1))}
                         disabled={page <= 1}
@@ -118,7 +139,7 @@ const QueuePager: React.FC<QueuePagerProps> = ({
                     </button>
                 </nav>
             )}
-            {trailing}
+            {rowsPerPageControl}
         </div>
     </div>
 );
@@ -247,18 +268,26 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     // there are to mount, so it has to re-chunk rather than sit on a stale count.
     const mounted = useProgressiveCount(visible.length, `${filterKey}|${safePage}|${pageSize}`, ROW_CHUNK);
 
-    const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
-    const rangeEnd = Math.min(safePage * pageSize, filtered.length);
     const pageNumbers = useMemo(() => pageWindow(safePage, pageCount), [safePage, pageCount]);
+    const pageView: PageView = {
+        page: safePage,
+        pageCount,
+        pageNumbers,
+        // 0 when a filter matches nothing — the queue still shows a bar there,
+        // because "0 of 250" is exactly when the Operator needs the totals.
+        rangeStart: filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1,
+        rangeEnd: Math.min(safePage * pageSize, filtered.length),
+        total: filtered.length,
+    };
 
     const changePageSize = (next: QueuePageSize) => {
         // Land on the page still holding the row you were looking at instead of
         // snapping to the top: at 250 leads, going 25 → 100 from page 7 would
         // otherwise drop you 150 leads back with no explanation. The render-time
         // clamp above handles the case where the computed page no longer exists.
-        const firstVisible = (safePage - 1) * pageSize;
+        const firstVisibleIndex = (safePage - 1) * pageSize;
         setPageSize(next);
-        setPage(Math.floor(firstVisible / next) + 1);
+        setPage(Math.floor(firstVisibleIndex / next) + 1);
         storage.setQueuePageSize(next);
     };
 
@@ -555,17 +584,13 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
             {/* ── Table ───────────────────────────────────────────────────── */}
             <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
-                {filtered.length > 0 && (
+                {leads.length > 0 && (
                     <div className="border-b border-white/5">
                         <QueuePager
-                            page={safePage}
-                            pageCount={pageCount}
-                            pageNumbers={pageNumbers}
-                            rangeStart={rangeStart}
-                            rangeEnd={rangeEnd}
-                            total={filtered.length}
+                            view={pageView}
                             onPage={setPage}
-                            trailing={
+                            label="Approval queue pages"
+                            rowsPerPageControl={
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-[11px] text-zinc-600">Rows</span>
                                     <select
@@ -586,17 +611,22 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                 {/*
                   A bounded scrollport, not the page. `overflow-x-auto` already
-                  makes this element a scroll container on both axes, so a
-                  sticky <thead> can only ever stick to *it* — capping the
-                  height is what turns that into a header that actually survives
-                  the scroll, and it keeps both pager bars on screen while the
-                  Operator reads down a page.
+                  made this element a scroll container on both axes, so a sticky
+                  <thead> could only ever stick to *it* — capping the height is
+                  what turns that into a header that survives the scroll, and it
+                  keeps both pager bars on screen while the Operator reads down a
+                  page.
+
+                  A fraction of the viewport, not `calc(100vh - <toolbar>)`: the
+                  toolbar above wraps to two or three rows on narrow widths, so
+                  any fixed subtraction is wrong exactly where it matters and
+                  shrinks the table to a three-row porthole on a short screen.
                 */}
-                <div className="overflow-auto max-h-[calc(100vh-22rem)]">
+                <div className="overflow-auto max-h-[75vh]">
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 pl-5 pr-2 py-3.5 w-10">
+                                <th className={`${STICKY_TH} pl-5 pr-2 py-3.5 w-10`}>
                                     <input
                                         type="checkbox"
                                         checked={allFilteredSelected}
@@ -605,11 +635,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                         className="w-4 h-4 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
                                     />
                                 </th>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Prospect</th>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]">Profile</th>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]">AI Generated DM</th>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Status</th>
-                                <th className="sticky top-0 z-10 bg-[#050A08] border-b border-white/5 px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Actions</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Prospect</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]`}>Profile</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]`}>AI Generated DM</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Status</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04]">
@@ -658,16 +688,12 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                 {/* Mirrors the bar above the table — same component, so the two
                     can never drift apart. */}
-                {filtered.length > 0 && (
+                {leads.length > 0 && (
                     <div className="border-t border-white/5">
                         <QueuePager
-                            page={safePage}
-                            pageCount={pageCount}
-                            pageNumbers={pageNumbers}
-                            rangeStart={rangeStart}
-                            rangeEnd={rangeEnd}
-                            total={filtered.length}
+                            view={pageView}
                             onPage={setPage}
+                            label="Approval queue pages (bottom)"
                         />
                     </div>
                 )}

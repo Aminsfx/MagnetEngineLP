@@ -102,6 +102,19 @@ describe('ApprovalQueue pagination', () => {
         expectSummary('Page 1 of 1 · showing 1–18 of 18 leads');
     });
 
+    // "0 of 250" is the reading the totals exist for, so a filter that matches
+    // nothing keeps its bar — only a genuinely empty workspace loses it, where
+    // the empty state's "go scrape some prospects" is the whole message.
+    it('keeps the summary when a filter matches nothing', async () => {
+        const user = userEvent.setup();
+        renderQueue(makeLeads(250));
+
+        await user.type(screen.getByPlaceholderText(/search/i), 'nobody_here');
+
+        expectSummary('Page 1 of 1 · showing 0–0 of 0 leads');
+        expect(screen.getByText(/No leads match this filter/)).toBeInTheDocument();
+    });
+
     it('advances to the next slice of leads', async () => {
         const user = userEvent.setup();
         renderQueue(makeLeads(120));
@@ -184,6 +197,7 @@ describe('ApprovalQueue pagination', () => {
 
         // Lead 51 is still the first row, now on page 2 of the wider pages.
         expectSummary('Page 2 of 5 · showing 51–100 of 250 leads');
+        await rowsSettle(50);
         expect(handlesOnPage()[0]).toBe('founder_50');
     });
 

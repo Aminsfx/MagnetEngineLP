@@ -51,7 +51,7 @@ src/
     useOutreach.ts               # Outreach engine: the whole Lead lifecycle, one interface
     store.ts                     # WorkspaceStore seam — createStore() picks the adapter
     db.ts                        # Supabase adapter (row mapping, batching, subscriptions)
-    storage.ts                   # Browser-local bits only (dev fallback, DM delay)
+    storage.ts                   # Browser-local bits only (dev fallback, DM delay, queue page size)
     intake.ts                    # Lead intake — the only way a Lead is constructed
     prompt.ts                    # DM + reply prompt construction (pure strings)
     inbox.ts                     # Inbox log: hydration ordering + snapshot merging
