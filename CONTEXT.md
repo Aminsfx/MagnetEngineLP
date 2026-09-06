@@ -80,6 +80,15 @@ _Avoid_: sync, import, intake (reserved for Leads)
 The mode in which the AI answers new inbound Messages without waiting for the
 operator to approve each reply.
 
+**Outcome**:
+What a Conversation reveals about the Lead behind it — that they replied, and
+whether they booked. The one path from the Inbox back into the Lead lifecycle.
+An Outcome is evidence that something happened, never that it didn't, so it only
+ever moves a Lead forwards. Interest as read by the AI is a judgement, not an
+Outcome: it colours the Inbox but does not move the funnel. Nor does an Outcome
+make a Lead Sent — that stays the extension's word alone.
+_Avoid_: result, status, signal
+
 ### Access
 
 **Operator**:

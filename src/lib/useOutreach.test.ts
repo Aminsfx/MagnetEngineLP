@@ -4,6 +4,7 @@ import { useOutreach } from './useOutreach';
 import { PLAN_LIMITS } from './plans';
 import type { WorkspaceStore } from './store';
 import type { AppConfig, Lead } from './types';
+import type { Outcome } from './outcome';
 
 /**
  * These tests are the point of the extraction. Before it, every rule below
@@ -31,9 +32,17 @@ vi.mock('./db', () => ({
   },
 }));
 
+// detectTransitions stays real — the point is that recordOutcome routes through
+// the same update() path an Operator's edit does, so webhooks fire once.
+vi.mock('./webhooks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./webhooks')>()),
+  fireWebhook: vi.fn(),
+}));
+
 import { aiAPI } from './api';
 import { sendCampaign } from './extensionProtocol';
 import { db } from './db';
+import { fireWebhook } from './webhooks';
 
 const lead = (id: string, over: Partial<Lead> = {}): Lead => ({
   id, campaignId: 'c1', handle: id, name: id, followers: 1000,
@@ -262,5 +271,123 @@ describe('sendFollowUps', () => {
     await act(() => result.current.sendFollowUps([]));
 
     expect(sendCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordOutcomes', () => {
+  const outcome = (over: Partial<Outcome> = {}): Outcome => ({
+    handle: 'founder_one', replied: false, booked: false, ...over,
+  });
+
+  it('reflects an Inbox reply on the Lead behind the handle', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([
+      lead('a', { handle: 'founder_one', dmSent: true }),
+      lead('b', { handle: 'founder_two', dmSent: true }),
+    ], 0));
+
+    act(() => result.current.recordOutcomes(
+      [outcome({ replied: true, repliedAt: '2026-09-03T11:00:00.000Z' })],
+    ));
+
+    await waitFor(() => expect(result.current.leads[0].replied).toBe(true));
+    expect(result.current.leads[0].replyDate).toBe('2026-09-03T11:00:00.000Z');
+    expect(result.current.leads[1].replied).toBe(false);
+    expect(saved[0].map((l) => l.id)).toEqual(['a']);
+  });
+
+  it('fires the replied webhook, the same as an Operator marking it by hand', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', dmSent: true })], 0));
+
+    act(() => result.current.recordOutcomes([outcome({ replied: true, repliedAt: 'now' })]));
+
+    await waitFor(() => expect(fireWebhook).toHaveBeenCalledWith(
+      config, 'replied', expect.objectContaining({ handle: 'founder_one' }),
+    ));
+  });
+
+  it('is silent when the Lead already reflects the Outcome', async () => {
+    // Ingestion re-reads every Conversation on each poll, so this is the case
+    // that runs constantly. A write here would re-fire webhooks every few seconds.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([
+      lead('a', { handle: 'founder_one', dmSent: true, replied: true, replyDate: 'earlier' }),
+    ], 0));
+
+    act(() => result.current.recordOutcomes([outcome({ replied: true, repliedAt: 'now' })]));
+
+    await waitFor(() => expect(saved).toEqual([]));
+    expect(fireWebhook).not.toHaveBeenCalled();
+  });
+
+  it('ignores a Conversation with no Lead behind it', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'someone_else' })], 0));
+
+    act(() => result.current.recordOutcomes([outcome({ replied: true, booked: true })]));
+
+    await waitFor(() => expect(saved).toEqual([]));
+  });
+
+  it('matches the handle case-insensitively and past a leading @', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', dmSent: true })], 0));
+
+    act(() => result.current.recordOutcomes([outcome({ handle: '@Founder_One', booked: true })]));
+
+    await waitFor(() => expect(result.current.leads[0]).toMatchObject({
+      booked: true, positiveReply: true, replied: true, status: 'won',
+    }));
+  });
+
+  it('folds two Conversations for one handle into a single write and one webhook', async () => {
+    // Instagram can hand back more than one thread for the same person (a
+    // message request alongside the primary thread). Both arrive in one
+    // Ingestion batch, and leadsRef only refreshes in an effect — so reading
+    // it per Outcome would diff both against the same pre-batch Lead, fire
+    // `replied` twice, and let the second write drop the first's fields.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', dmSent: true })], 0));
+
+    act(() => result.current.recordOutcomes([
+      outcome({ replied: true, repliedAt: '2026-09-03T11:00:00.000Z' }),
+      outcome({ replied: true, repliedAt: '2026-09-04T11:00:00.000Z', booked: true }),
+    ]));
+
+    await waitFor(() => expect(result.current.leads[0].booked).toBe(true));
+    // The booking did not discard the earlier reply date.
+    expect(result.current.leads[0]).toMatchObject({
+      replied: true, replyDate: '2026-09-03T11:00:00.000Z', positiveReply: true, status: 'won',
+    });
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toHaveLength(1);
+    expect(vi.mocked(fireWebhook).mock.calls.filter(([, e]) => e === 'replied')).toHaveLength(1);
+  });
+
+  it('writes once for a batch spanning several Leads', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([
+      lead('a', { handle: 'founder_one', dmSent: true }),
+      lead('b', { handle: 'founder_two', dmSent: true }),
+    ], 0));
+
+    act(() => result.current.recordOutcomes([
+      outcome({ handle: 'founder_one', replied: true, repliedAt: 'now' }),
+      outcome({ handle: 'founder_two', replied: true, repliedAt: 'now' }),
+    ]));
+
+    await waitFor(() => expect(result.current.leads[1].replied).toBe(true));
+    expect(saved).toHaveLength(1);
+    expect(saved[0].map((l) => l.id)).toEqual(['a', 'b']);
+  });
+
+  it('is silent for an empty batch', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one' })], 0));
+
+    act(() => result.current.recordOutcomes([]));
+
+    await waitFor(() => expect(saved).toEqual([]));
   });
 });

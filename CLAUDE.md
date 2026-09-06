@@ -55,6 +55,7 @@ src/
     intake.ts                    # Lead intake — the only way a Lead is constructed
     prompt.ts                    # DM + reply prompt construction (pure strings)
     inbox.ts                     # Inbox log: hydration ordering + snapshot merging
+    outcome.ts                   # What a Conversation reveals about its Lead
     extensionProtocol.ts         # App side of the app↔extension seam (typed)
     plans.ts                     # PLAN_LIMITS, SubscriptionStatus, WHOP_PLAN_IDS, PRICES, isAdminEmail
     apify.ts                     # Apify client (start + poll, via Edge Functions)
@@ -79,6 +80,15 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   `MAGNET_ENGINE_*` string literal anywhere else.
 - **Lead construction** — sources hand raw rows to `intake()`. A Handle is lowercase,
   `@`-less and unique *by construction*; don't re-normalise at call sites.
+- **Inbox → Lead** — a Conversation reaches the Lead behind it only as an
+  `Outcome` (`src/lib/outcome.ts` → `outreach.recordOutcomes`). Never write
+  `replied`/`booked` onto a Lead from inbox code directly: `recordOutcomes` is
+  what fires the outbound webhooks, and it is silent when a Lead already
+  reflects its Outcome — which matters because Ingestion re-reads every
+  Conversation on every poll. Pass the whole batch; it folds several threads
+  for one handle together (Instagram serves a message request as a second
+  thread) and writes once. An Outcome never sets `dmSent` — only the extension
+  confirms a send.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.
 
@@ -263,6 +273,8 @@ role; users can read their own count but never write it.
 - `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).
 - AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
 - Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
+- **Inbox → funnel:** every changed Conversation is read as an `Outcome` (`src/lib/outcome.ts`) and the batch handed to `outreach.recordOutcomes`, which stamps the Leads behind the handles. An inbound Message sets `replied` + `replyDate`; booking — the Operator's "Booked" click or the AI's `booked` intent — sets `booked`/`positiveReply`/`replied`/`status: 'won'`. The AI's `interested` intent deliberately does **not** move the funnel: it colours the Inbox only, so a misread never inflates metrics or fires a webhook the Operator can't unsend. Reply rate, the conversion chart, AI Analyst, Health Score and the `replied`/`positive_reply`/`booked` webhooks all depend on this path.
+- **Known gap:** an Outcome never infers `dmSent` — CONTEXT.md reserves Sent for extension confirmation. So a Lead that replies without a confirmed send (DM'd outside the app, or a lost confirmation) counts in `replied` but not `dmsSent`, and `filters.ts`'s `replyRate` (`replied/dmsSent`) can read above 100%. Closing it means either relaxing the Sent rule or only counting a reply on threads with a recorded outbound Message — an open decision, not an oversight.
 - **Limitation:** polling + autopilot only run while an `instagram.com` tab is open (the background worker can't send IG's SameSite cookie). During active campaigns the extension keeps a pinned inbox tab alive.
 
 ## Security Constraints — MUST NEVER CHANGE

@@ -6,9 +6,10 @@ import type { DueFollowUp } from './followups';
 import { db } from './db';
 import { aiAPI } from './api';
 import { filterUtils } from './filters';
-import { dropKnownHandles } from './intake';
+import { canonicalHandle, dropKnownHandles } from './intake';
 import { stampFollowUp } from './followups';
-import { detectTransitions, fireWebhook } from './webhooks';
+import { applyOutcome, type Outcome } from './outcome';
+import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
 import { sendCampaign } from './extensionProtocol';
 import { storage } from './storage';
 
@@ -57,8 +58,15 @@ export interface OutreachEngine {
 
   /** Flip Leads to Sent from the handles the extension confirms it sent. */
   markSentByHandles(handles: string[]): void;
-  /** Reflect a booked Conversation on the Lead behind it. */
-  markBooked(handle: string): void;
+  /**
+   * Reflect what Conversations revealed on the Leads behind them — the Inbox's
+   * one way into the Lead lifecycle. Fires the same webhooks an Operator's own
+   * mark would, and is silent for Leads that already reflect their Outcome,
+   * which is the common case: Ingestion re-reads every Conversation on every
+   * poll. Takes a batch because that is how Ingestion produces them, and
+   * because two threads can share one handle.
+   */
+  recordOutcomes(outcomes: Outcome[]): void;
 }
 
 export interface OutreachDeps {
@@ -329,12 +337,41 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     store.saveLeads(updated).catch(console.error);
   }, [store]);
 
-  const markBooked = useCallback((handle: string) => {
-    const target = handle.toLowerCase().replace(/^@/, '');
-    const lead = leadsRef.current.find((l) => l.handle.toLowerCase() === target);
-    if (!lead || lead.booked) return;
-    update({ ...lead, booked: true, positiveReply: true, replied: true, status: 'won' });
-  }, [update]);
+  const recordOutcomes = useCallback((outcomes: Outcome[]) => {
+    if (outcomes.length === 0) return;
+
+    // Folded over a working copy rather than one `update` call per Outcome.
+    // `leadsRef` only refreshes in an effect, so it does not move between
+    // iterations of a synchronous loop: reading it per Outcome would diff every
+    // Outcome for the same Lead against the same pre-batch row — firing that
+    // Lead's `replied` webhook once per thread, and letting the last write drop
+    // fields an earlier one had set. Instagram really does hand back two
+    // threads for one person (a message request beside the primary thread).
+    const changed = new Map<string, Lead>();
+    const events: Array<[WebhookEvent, Lead]> = [];
+
+    for (const outcome of outcomes) {
+      const target = canonicalHandle(outcome.handle);
+      if (!target) continue;
+
+      const matches = (l: Lead) => l.handle.toLowerCase() === target;
+      const base =
+        [...changed.values()].find(matches) ?? leadsRef.current.find(matches);
+      if (!base) continue;
+
+      const updated = applyOutcome(base, outcome);
+      if (!updated) continue;
+
+      for (const event of detectTransitions(base, updated)) events.push([event, updated]);
+      changed.set(updated.id, updated);
+    }
+
+    if (changed.size === 0) return;
+
+    setLeads((prev) => prev.map((l) => changed.get(l.id) ?? l));
+    store.saveLeads([...changed.values()]).catch(console.error);
+    for (const [event, lead] of events) fireWebhook(config, event, lead);
+  }, [config, store]);
 
   return {
     leads,
@@ -354,6 +391,6 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     generateDMs,
     sendFollowUps,
     markSentByHandles,
-    markBooked,
+    recordOutcomes,
   };
 }

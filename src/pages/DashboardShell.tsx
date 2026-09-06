@@ -19,6 +19,7 @@ import { useOutreach } from '../lib/useOutreach';
 import { createStore } from '../lib/store';
 import { aiAPI, type ReplyResult } from '../lib/api';
 import { createInboxLog, type RawThread } from '../lib/inbox';
+import { readOutcome } from '../lib/outcome';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
 import {
   EXT_TO_APP,
@@ -102,6 +103,10 @@ const DashboardShell: React.FC = () => {
   const inbox = useMemo(() => createInboxLog(), []);
   const configRef = useRef<AppConfig>(DEFAULT_CONFIG);
   useEffect(() => { configRef.current = config; }, [config]);
+  // Same reason as configRef: the engine is a fresh object every render, and
+  // ingestInbox has to stay a stable callback for the extension bridge.
+  const outreachRef = useRef(outreach);
+  useEffect(() => { outreachRef.current = outreach; }, [outreach]);
   const [headerAvatar, setHeaderAvatar] = useState<string | null>(() =>
     user ? localStorage.getItem(`avatar_${user.id}`) : null
   );
@@ -172,6 +177,16 @@ const DashboardShell: React.FC = () => {
     setMessages(result.messages);
     store.saveConversations(result.changedConversations).catch(console.error);
     store.saveMessages(result.newMessages).catch(console.error);
+
+    // Carry what each Conversation revealed back to the Lead behind it, so a
+    // reply in the Inbox shows up in reply rate, the conversion chart and the
+    // `replied` webhook without the Operator re-marking it by hand. Handed over
+    // as one batch: the engine folds several threads for the same handle
+    // together, and writes once. Silent for Leads that already reflect their
+    // Outcome, which is most of them on most polls.
+    outreachRef.current.recordOutcomes(
+      result.changedConversations.map((c) => readOutcome(c, result.messages)),
+    );
     return result.newInbound;
   }, [store, inbox]);
 
@@ -220,13 +235,13 @@ const DashboardShell: React.FC = () => {
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
 
-  /** Persist a single conversation to state + DB; if it just became booked,
-   *  reflect that on the underlying lead. */
+  /** Persist a single conversation to state + DB, and carry whatever it now
+   *  reveals — a booking, an intent the AI just read — onto the Lead. */
   const handleUpdateConversation = useCallback((conv: Conversation) => {
-    const prev = inbox.snapshot().conversations.find((c) => c.id === conv.id);
-    setConversations(inbox.recordConversation(conv).conversations);
+    const next = inbox.recordConversation(conv);
+    setConversations(next.conversations);
     store.saveConversations([conv]).catch(console.error);
-    if (conv.status === 'booked' && prev?.status !== 'booked') outreach.markBooked(conv.handle);
+    outreach.recordOutcomes([readOutcome(conv, next.messages)]);
   }, [outreach, store, inbox]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
