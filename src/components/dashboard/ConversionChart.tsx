@@ -80,20 +80,9 @@ export const ConversionChart: React.FC<ConversionChartProps> = ({ leads }) => {
                 <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-emerald-500/5 to-transparent pointer-events-none" />
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase mb-1">Last 7 Days</p>
-                        <h3 className="text-base font-semibold text-white tracking-tight">Outreach Activity</h3>
-                    </div>
-                    {hasActivity && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-[11px] text-zinc-500">
-                            <span className="relative flex h-1.5 w-1.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-                            </span>
-                            Live
-                        </div>
-                    )}
+                <div className="mb-6">
+                    <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase mb-1">Last 7 Days</p>
+                    <h3 className="text-base font-semibold text-white tracking-tight">Outreach Activity</h3>
                 </div>
 
                 {hasActivity ? (
