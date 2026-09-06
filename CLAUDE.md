@@ -119,7 +119,8 @@ VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin 
 ```
 **Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
 ```
-CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm
+CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-reply
+MONTHLY_DM_LIMIT                                   # generate-dm quota (default 500)
 APIFY_API_KEY / APIFY_FOLLOWERS_ACTOR_ID           # start-scrape / poll-scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
 ADMIN_EMAILS                                       # admin-api
@@ -226,6 +227,11 @@ alter table messages enable row level security;
 create policy "own messages" on messages for all using (auth.uid() = user_id);
 create index if not exists messages_conv_idx on messages (conversation_id, created_at);
 ```
+
+Usage accounting (`dm_usage`, `usage_counters`, and their increment functions)
+lives in `supabase/migrations/0001_usage.sql` — run that file too. The DM quota
+is metered by the `generate-dm` function against `dm_usage` using the service
+role; users can read their own count but never write it.
 
 ## AI SDR Inbox (extension inbox poller → generate-reply Edge Function)
 - The extension content script (on instagram.com) polls IG's private web JSON API (`/api/v1/direct_v2/inbox`) SAME-ORIGIN (so the session cookie attaches), normalizes threads, and pushes them to `background.js` (`INBOX_SYNC`). Background stores a snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab.

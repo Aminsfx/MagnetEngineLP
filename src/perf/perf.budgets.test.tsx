@@ -83,11 +83,8 @@ vi.mock('../lib/db', () => {
       setConfig: async (...a: unknown[]) => { log('setConfig', a); },
       upsertConversations: async (...a: unknown[]) => { log('upsertConversations', a); },
       upsertMessages: async (...a: unknown[]) => { log('upsertMessages', a); },
-      incrementDMUsage: async () => 0,
-      getMonthlyLeadCount: () => 0,
-      incrementMonthlyLeadCount: () => 0,
-      getMonthlyCampaignCount: () => 0,
-      incrementMonthlyCampaignCount: () => 0,
+      getMonthlyCount: async () => 0,
+      incrementMonthlyCount: async () => 0,
     },
   };
 });

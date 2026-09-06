@@ -4,6 +4,16 @@ import { invokeFunction } from './functions';
 export interface ReplyResult {
     reply: string;
     intent: ConversationIntent;
+    /** The provider that actually ran — not necessarily the one requested. */
+    provider?: string;
+}
+
+export interface DmResult {
+    dm: string;
+    /** DM generations used this month, counted server-side after the call. */
+    used: number;
+    limit: number;
+    provider?: string;
 }
 
 /**
@@ -16,22 +26,21 @@ export interface ReplyResult {
  */
 export const aiAPI = {
     /**
-     * Generate a DM for a lead via the backend. Signature is unchanged from the
-     * previous client-side implementation, so call sites don't change.
-     * The `provider` is a preference; the server falls back to any configured
-     * key if the requested provider isn't set up.
+     * Generate a DM for a Lead via the backend.
+     *
+     * The `provider` is a preference: the server falls back to any configured
+     * key if the requested one isn't set up, and reports which actually ran.
+     *
+     * The monthly quota is enforced server-side — this rejects with a 429 once
+     * the allowance is spent, and returns the authoritative `used` count so the
+     * caller never has to keep its own tally.
      */
     async generateDM(
         provider: 'openai' | 'claude' | 'gemini',
         lead: Lead,
         systemPrompt: string,
-    ): Promise<string> {
-        const { dm } = await invokeFunction<{ dm: string }>('generate-dm', {
-            lead,
-            systemPrompt,
-            provider,
-        });
-        return dm;
+    ): Promise<DmResult> {
+        return invokeFunction<DmResult>('generate-dm', { lead, systemPrompt, provider });
     },
 
     /**

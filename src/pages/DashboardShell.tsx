@@ -300,13 +300,19 @@ const DashboardShell: React.FC = () => {
     let toAdd = deduped;
     let quotaCapped = 0;
 
-    // Monthly quotas (skipped in dev mode without a user)
+    // Monthly quotas (skipped in dev mode without a user). Advisory: these bound
+    // the Operator's own workspace, not the Owner's spend, and the client writes
+    // Leads to Postgres directly so there's no server chokepoint to meter at.
     if (user) {
-      if (db.getMonthlyCampaignCount(user.id) >= limits.maxCampaignsPerMonth) {
+      const [campaignsUsed, leadsUsed] = await Promise.all([
+        db.getMonthlyCount('campaigns'),
+        db.getMonthlyCount('leads'),
+      ]);
+      if (campaignsUsed >= limits.maxCampaignsPerMonth) {
         toast.error(`You've used all ${limits.maxCampaignsPerMonth} campaigns this month. Resets on the 1st.`);
         return;
       }
-      const remaining = limits.maxLeadsPerMonth - db.getMonthlyLeadCount(user.id);
+      const remaining = limits.maxLeadsPerMonth - leadsUsed;
       if (remaining <= 0) {
         toast.error(`You've reached your ${limits.maxLeadsPerMonth} leads/month limit. Resets on the 1st.`);
         return;
@@ -325,8 +331,8 @@ const DashboardShell: React.FC = () => {
     });
 
     if (user) {
-      db.incrementMonthlyLeadCount(user.id, added.length);
-      db.incrementMonthlyCampaignCount(user.id);
+      db.incrementMonthlyCount('leads', added.length).catch(console.error);
+      db.incrementMonthlyCount('campaigns', 1).catch(console.error);
     }
 
     // Only worth a toast when something was left out — a clean add is
@@ -562,10 +568,14 @@ const DashboardShell: React.FC = () => {
     const dmDate = new Date().toISOString();
     const updatedBatch: Lead[] = [];
     let failure: string | null = null;
+    let usedAfter: number | null = null;
 
     for (const lead of leadsToProcess.slice(0, GENERATION_BATCH)) {
       try {
-        const dm = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
+        // The server meters the quota and returns the authoritative count, so
+        // the client no longer keeps its own (previously localStorage) tally.
+        const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
+        usedAfter = used;
         updatedBatch.push({ ...lead, dmContent: dm, dmDate });
       } catch (error: any) {
         console.error(`Error generating DM for ${lead.name}:`, error);
@@ -582,12 +592,9 @@ const DashboardShell: React.FC = () => {
         const updated = updatedBatch.find((u) => u.id === l.id);
         return updated ?? l;
       }));
-      if (user) {
-        await db.upsertLeads(updatedBatch, user.id);
-        const newUsed = await db.incrementDMUsage(user.id, successCount);
-        setDmUsed(newUsed);
-      }
+      if (user) await db.upsertLeads(updatedBatch, user.id);
     }
+    if (usedAfter !== null) setDmUsed(usedAfter);
 
     setIsGenerating(false);
 

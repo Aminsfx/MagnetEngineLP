@@ -113,6 +113,11 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
 }
 
 /** True when Supabase env vars are present and client is usable */
+/** 'YYYY-MM' — the bucket every monthly counter is keyed by. */
+function monthKey(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function isSupabaseReady(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL as string;
   return Boolean(url && url !== 'https://placeholder.supabase.co');
@@ -458,54 +463,76 @@ export const db = {
     };
   },
 
-  // ─── DM Generation Usage (localStorage-first, always reliable) ──────────
+  // ─── Usage accounting ───────────────────────────────────────────────────
+  //
+  // These used to be localStorage keys wearing async signatures inside a module
+  // documented as "cloud persistence", so the paid DM allowance reset with a
+  // devtools click and the admin console's "DMs this month" always read 0.
+  //
+  // DM usage is now metered by the generate-dm Edge Function against the
+  // dm_usage table (service-role writes only — an Operator can read their count
+  // but not change it). The client only reads it. Lead and campaign counters
+  // are Operator-owned and advisory: the client writes Leads to Postgres
+  // directly, so there is no server chokepoint to meter them at.
+  //
+  // Schema: supabase/migrations/0001_usage.sql
 
-  getDMUsageLocal(userId: string): { used: number; resetAt: Date } {
-    const monthKey = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-    const key = `dm_used_${userId}_${monthKey}`;
-    const used = parseInt(localStorage.getItem(key) ?? '0', 10);
-    const resetAt = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
-    return { used, resetAt };
+  /** First of next month, when every monthly counter rolls over. */
+  monthlyResetAt(): Date {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
   },
 
   async getDMUsage(userId: string): Promise<{ used: number; resetAt: Date }> {
-    return this.getDMUsageLocal(userId);
+    const resetAt = this.monthlyResetAt();
+    if (!isSupabaseReady()) return { used: 0, resetAt };
+
+    const { data, error } = await supabase
+      .from('dm_usage')
+      .select('used')
+      .eq('user_id', userId)
+      .eq('month', monthKey())
+      .maybeSingle();
+
+    if (error) {
+      console.error('[db] getDMUsage error:', error.message);
+      // Fail open on read: the server enforces the limit regardless, so a
+      // failed read must not lock the Operator out of their own dashboard.
+      return { used: 0, resetAt };
+    }
+    return { used: data?.used ?? 0, resetAt };
   },
 
-  async incrementDMUsage(userId: string, count: number): Promise<number> {
-    const monthKey = new Date().toISOString().slice(0, 7);
-    const key = `dm_used_${userId}_${monthKey}`;
-    const current = parseInt(localStorage.getItem(key) ?? '0', 10);
-    const newCount = current + count;
-    localStorage.setItem(key, String(newCount));
-    return newCount;
+  async getMonthlyCount(kind: 'leads' | 'campaigns'): Promise<number> {
+    if (!isSupabaseReady()) return 0;
+
+    const { data, error } = await supabase
+      .from('usage_counters')
+      .select('count')
+      .eq('month', monthKey())
+      .eq('kind', kind)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[db] getMonthlyCount(${kind}) error:`, error.message);
+      return 0;
+    }
+    return data?.count ?? 0;
   },
 
-  // ─── Monthly quotas (leads + campaigns) — same pattern as DM usage ───────
+  async incrementMonthlyCount(kind: 'leads' | 'campaigns', by: number): Promise<number> {
+    if (!isSupabaseReady() || by <= 0) return 0;
 
-  getMonthlyLeadCount(userId: string): number {
-    const monthKey = new Date().toISOString().slice(0, 7);
-    return parseInt(localStorage.getItem(`leads_added_${userId}_${monthKey}`) ?? '0', 10);
-  },
+    const { data, error } = await supabase.rpc('increment_usage_counter', {
+      p_month: monthKey(),
+      p_kind: kind,
+      p_count: by,
+    });
 
-  incrementMonthlyLeadCount(userId: string, n: number): number {
-    const monthKey = new Date().toISOString().slice(0, 7);
-    const key = `leads_added_${userId}_${monthKey}`;
-    const next = this.getMonthlyLeadCount(userId) + n;
-    localStorage.setItem(key, String(next));
-    return next;
-  },
-
-  getMonthlyCampaignCount(userId: string): number {
-    const monthKey = new Date().toISOString().slice(0, 7);
-    return parseInt(localStorage.getItem(`campaigns_${userId}_${monthKey}`) ?? '0', 10);
-  },
-
-  incrementMonthlyCampaignCount(userId: string): number {
-    const monthKey = new Date().toISOString().slice(0, 7);
-    const key = `campaigns_${userId}_${monthKey}`;
-    const next = this.getMonthlyCampaignCount(userId) + 1;
-    localStorage.setItem(key, String(next));
-    return next;
+    if (error) {
+      console.error(`[db] incrementMonthlyCount(${kind}) error:`, error.message);
+      return 0;
+    }
+    return (data as number) ?? 0;
   },
 };
