@@ -6,7 +6,7 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 ## Tech Stack
 - **React 19 + TypeScript**
 - **Vite 6** — dev server on port 3000, env vars via `VITE_` prefix (`import.meta.env`)
-- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme, emerald/cyan/zinc palette, `#030A06` near-black background. Do NOT re-add the CDN `<script>`.
+- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme, emerald/cyan/zinc palette on a near-black ground; colours come from the tokens in `docs/DESIGN-TOKENS.md`. Do NOT re-add the CDN `<script>`.
 - **React Router v7** — public: `/` (landing), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/follow-ups`, `/calculator`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
@@ -311,9 +311,18 @@ npm run preview  # Preview production build
 ```
 
 ## Design System
-- Background: `#030A06` (near-black with green tint)
-- Accent: `emerald-400/500` (primary), `cyan-400` (secondary), `violet-400` (tertiary)
-- Cards: `rounded-[1.5rem]` with 1px gradient border + `inset 0 1px 1px rgba(255,255,255,0.04)` box-shadow
+**`docs/DESIGN-TOKENS.md` is the contract — read it before you type a colour.**
+Tokens live in `tailwind.config.js` (class names) and `src/lib/theme.ts` (raw
+hex/rgba, for Recharts props and inline styles, which no utility can reach).
+- Surfaces by depth, not by eyedropper: `surface` `#030604` (app background),
+  `surface-raised` `#050A08` (cards), `surface-sunken` `#030A06` (dashboard
+  cards), `surface-overlay` `#0A1510` (menus, popovers, inputs). No new
+  arbitrary `bg-[#hex]`.
+- Roles, not hues: `brand`/`positive` (emerald) primary action + good outcome,
+  `info` (cyan) **AI affordances only**, `caution` (amber), `danger` (red),
+  `neutral` (zinc) for all chrome. `violet` and `blue` are **retired** — fold
+  existing uses into `info` or `neutral`.
+- Cards: `rounded-[1.5rem]` with 1px gradient border + `inset 0 1px 1px rgba(255,255,255,0.04)` box-shadow — as `CARD_BEZEL` from `src/lib/theme.ts`, never re-typed inline
 - Text scale: `text-[10px]` labels → `text-sm` body → `text-2xl` metric values
 - Toast: custom hook (`useRef` timer), bottom-right, auto-dismiss 4 s
 
