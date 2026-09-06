@@ -32,9 +32,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
     ];
 
     return (
-        <aside className={`w-64 h-screen bg-[#030604] border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden z-40 transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside className={`w-64 h-screen bg-surface border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden z-40 transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             {/* Ambient glow matching landing page */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[200%] h-[300px] rounded-[100%] bg-gradient-to-t from-emerald-500/10 via-transparent to-transparent blur-[60px] pointer-events-none" />
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[200%] h-[300px] rounded-[100%] bg-gradient-to-t from-brand-500/10 via-transparent to-transparent blur-[60px] pointer-events-none" />
 
             <div className="p-6 flex flex-col h-full relative z-10">
                 {/* Logo */}
@@ -53,21 +53,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
                                 onClick={onNavigate}
                                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden ${
                                     isActive
-                                        ? 'text-emerald-400'
-                                        : 'text-zinc-500 hover:text-white'
+                                        ? 'text-brand-400'
+                                        : 'text-neutral-500 hover:text-white'
                                 }`}
                             >
                                 {/* Active background */}
                                 <span
                                     className={`absolute inset-0 rounded-xl transition-all duration-300 ${
                                         isActive
-                                            ? 'bg-emerald-500/10 border border-emerald-500/20'
+                                            ? 'bg-brand-500/10 border border-brand-500/20'
                                             : 'bg-transparent group-hover:bg-white/5'
                                     }`}
                                 />
                                 {/* Active indicator line */}
                                 {isActive && (
-                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-emerald-500 rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-brand-500 rounded-r-full shadow-[0_0_8px_theme(colors.brand.500/0.8)]" />
                                 )}
                                 <item.icon className={`w-4 h-4 relative z-10 transition-transform duration-300 ${isActive ? '' : 'group-hover:scale-110'}`} />
                                 <span className="relative z-10 flex-1">{item.label}</span>
@@ -80,10 +80,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
                 <div className="space-y-3 pt-4 border-t border-white/5">
                     {/* Live clock */}
                     <div className="px-4 py-2 flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">
+                        <span className="text-[10px] text-neutral-600 font-mono tracking-widest uppercase">
                             {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        <Zap className="w-3 h-3 text-emerald-600" />
+                        <Zap className="w-3 h-3 text-brand-600" />
                     </div>
 
                     <button
@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
                             // actually cleared (App's onLogout handles the redirect)
                             await onLogout?.();
                         }}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-600 hover:text-red-400 hover:bg-red-400/8 transition-all duration-300 group"
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-neutral-600 hover:text-danger-400 hover:bg-danger-400/8 transition-all duration-300 group"
                     >
                         <LogOut className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
                         Logout

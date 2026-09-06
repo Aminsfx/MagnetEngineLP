@@ -37,6 +37,31 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';
 import { Loader2, Sparkles, Menu } from 'lucide-react';
+import { CHANNEL, alpha } from '../lib/theme';
+
+/**
+ * The eyebrow above every page title. Five pages here spelled it out verbatim,
+ * so a token swap had to land five times and stayed right only by luck.
+ *
+ * Two more copies live outside this file — InboxView and ProfilePage — and are
+ * not this unit's to touch, so they still say `zinc-500` where these say
+ * `neutral-500`. Same pixels, split vocabulary: when someone owns all seven,
+ * this wants to be a shared `<PageEyebrow>` rather than a local constant.
+ */
+const PAGE_EYEBROW =
+  'inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 ' +
+  'text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3';
+
+/**
+ * How a usage pill reads at `used / cap`. The two thresholds already existed as
+ * hand-picked hues; naming them says what they mean — `caution` is "you are
+ * running out", `danger` is "you are out, the next one will be refused".
+ */
+function usagePillTone(fraction: number): string {
+  if (fraction >= 1) return 'text-danger-400 border-danger-500/30 bg-danger-500/8';
+  if (fraction >= 0.8) return 'text-caution-400 border-caution-500/30 bg-caution-500/8';
+  return 'text-neutral-500 border-white/8 bg-white/3';
+}
 
 /** Time-aware greeting for the dashboard header */
 function getGreeting(): string {
@@ -345,9 +370,9 @@ const DashboardShell: React.FC = () => {
 
   if (dataLoading) {
     return (
-      <div className="min-h-screen bg-[#030604] flex items-center justify-center">
-        <div className="flex items-center gap-3 text-zinc-600">
-          <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <div className="flex items-center gap-3 text-neutral-600">
+          <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
           <span className="text-sm font-mono">Loading your pipeline…</span>
         </div>
       </div>
@@ -362,7 +387,7 @@ const DashboardShell: React.FC = () => {
       <div className="p-8 space-y-6 max-w-7xl">
         <div className="flex items-start justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">
+            <div className={PAGE_EYEBROW}>
               Overview
             </div>
             <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">
@@ -373,7 +398,7 @@ const DashboardShell: React.FC = () => {
                 return full ? `, ${full}` : user?.email ? `, ${user.email.split('@')[0]}` : '';
               })()}
             </h1>
-            <p className="text-zinc-600 text-sm mt-1.5">Your pipeline is live and running.</p>
+            <p className="text-neutral-600 text-sm mt-1.5">Your pipeline is live and running.</p>
           </div>
         </div>
         <OnboardingChecklist leads={outreach.leads} config={config} />
@@ -391,9 +416,9 @@ const DashboardShell: React.FC = () => {
     '/campaign': (
       <div className="p-8 space-y-6 max-w-7xl">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Outreach</div>
+          <div className={PAGE_EYEBROW}>Outreach</div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
-          <p className="text-zinc-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
+          <p className="text-neutral-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
         </div>
         <CampaignBuilder onLeadsScraped={outreach.addLeads} />
       </div>
@@ -402,9 +427,9 @@ const DashboardShell: React.FC = () => {
     '/queue': (
       <div className="p-8 space-y-6 max-w-7xl">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Review</div>
+          <div className={PAGE_EYEBROW}>Review</div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Approval Queue</h1>
-          <p className="text-zinc-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
+          <p className="text-neutral-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
         </div>
         <ApprovalQueue
           leads={outreach.leads}
@@ -439,9 +464,9 @@ const DashboardShell: React.FC = () => {
     '/follow-ups': (
       <div className="p-8 max-w-7xl">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Automation</div>
+          <div className={PAGE_EYEBROW}>Automation</div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Follow-Up Sequencer</h1>
-          <p className="text-zinc-600 text-sm mt-1.5">
+          <p className="text-neutral-600 text-sm mt-1.5">
             Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
           </p>
         </div>
@@ -453,7 +478,7 @@ const DashboardShell: React.FC = () => {
 
     '/settings': (
       <div className="p-8 max-w-4xl">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-3">Configuration</div>
+        <div className={PAGE_EYEBROW}>Configuration</div>
         <h1 className="text-2xl font-semibold text-white tracking-tight mb-6">Settings</h1>
         <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} />
       </div>
@@ -463,10 +488,10 @@ const DashboardShell: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#030604] relative overflow-hidden">
-      {/* Global ambient glow */}
+    <div className="flex min-h-screen bg-surface relative overflow-hidden">
+      {/* Global ambient glow — the brand wash the whole shell sits in. */}
       <div className="fixed bottom-0 left-0 lg:left-64 right-0 h-[400px] pointer-events-none z-0"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(16,185,129,0.07) 0%, transparent 70%)' }}
+        style={{ background: `radial-gradient(ellipse at 50% 100%, ${alpha(CHANNEL.brand, 0.07)} 0%, transparent 70%)` }}
       />
       {/* Noise overlay */}
       <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.025]"
@@ -485,12 +510,12 @@ const DashboardShell: React.FC = () => {
 
       <div className="flex-1 ml-0 lg:ml-64 flex flex-col relative z-10">
         {/* Top header */}
-        <header className="h-14 border-b border-white/5 bg-[#030604]/80 backdrop-blur-xl flex items-center justify-between lg:justify-end px-4 sm:px-8 sticky top-0 z-20">
+        <header className="h-14 border-b border-white/5 bg-surface/80 backdrop-blur-xl flex items-center justify-between lg:justify-end px-4 sm:px-8 sticky top-0 z-20">
           {/* Mobile menu button */}
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            className="lg:hidden p-2 -ml-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="lg:hidden p-2 -ml-2 rounded-xl text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -503,7 +528,7 @@ const DashboardShell: React.FC = () => {
               const cap = extStats?.cap ?? Math.min(limits.maxDailyCap, config.dailySendCap ?? limits.maxDailyCap);
               const sent = extStats?.count ?? 0;
               const pct = cap > 0 ? sent / cap : 0;
-              const color = pct >= 1 ? 'text-red-400 border-red-500/30 bg-red-500/8' : pct >= 0.8 ? 'text-amber-400 border-amber-500/30 bg-amber-500/8' : 'text-zinc-500 border-white/8 bg-white/3';
+              const color = usagePillTone(pct);
               return (
                 <div
                   className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}
@@ -520,7 +545,7 @@ const DashboardShell: React.FC = () => {
             {(() => {
               const limit = limits.maxDMGenerations;
               const pct = outreach.dmUsed / limit;
-              const color = pct >= 1 ? 'text-red-400 border-red-500/30 bg-red-500/8' : pct >= 0.8 ? 'text-amber-400 border-amber-500/30 bg-amber-500/8' : 'text-zinc-500 border-white/8 bg-white/3';
+              const color = usagePillTone(pct);
               return (
                 <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}>
                   <Sparkles className="w-3 h-3" />
@@ -528,14 +553,16 @@ const DashboardShell: React.FC = () => {
                 </div>
               );
             })()}
-            {/* User avatar with email tooltip */}
+            {/* User avatar with email tooltip. The gradient was emerald→cyan;
+                a decorative avatar is not an AI affordance and cyan is reserved
+                for those, so it stays inside the brand ramp. */}
             <div
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-500 border border-white/15 shadow-[0_0_12px_rgba(16,185,129,0.3)] flex items-center justify-center cursor-default overflow-hidden"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-brand-300 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
               title={user?.email ?? ''}
             >
               {headerAvatar
                 ? <img src={headerAvatar} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-[10px] font-bold text-emerald-950 uppercase">{user?.email?.[0] ?? 'U'}</span>
+                : <span className="text-[10px] font-bold text-brand-950 uppercase">{user?.email?.[0] ?? 'U'}</span>
               }
             </div>
           </div>

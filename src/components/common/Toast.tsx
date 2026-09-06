@@ -30,18 +30,26 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const AUTO_DISMISS_MS = 4500;
 
+/**
+ * Variant → role. `success` and `error` are the data's state, so `positive`
+ * and `danger`. `info` is deliberately NOT the `info` role: cyan is reserved
+ * for AI and generation affordances (docs/DESIGN-TOKENS.md), and a toast
+ * saying "Campaign queued" is app chatter, not something the AI produced.
+ * Chatter is chrome, so it takes `neutral` — which also keeps the two toasts
+ * that *do* carry meaning the only coloured ones on screen.
+ */
 const VARIANT_STYLES: Record<ToastVariant, { border: string; icon: React.ReactNode }> = {
     success: {
-        border: 'border-emerald-500/30',
-        icon: <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />,
+        border: 'border-positive-500/30',
+        icon: <CheckCircle className="w-4 h-4 text-positive-400 flex-shrink-0" />,
     },
     error: {
-        border: 'border-red-500/30',
-        icon: <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />,
+        border: 'border-danger-500/30',
+        icon: <AlertCircle className="w-4 h-4 text-danger-400 flex-shrink-0" />,
     },
     info: {
-        border: 'border-cyan-500/30',
-        icon: <Info className="w-4 h-4 text-cyan-400 flex-shrink-0" />,
+        border: 'border-neutral-500/30',
+        icon: <Info className="w-4 h-4 text-neutral-400 flex-shrink-0" />,
     },
 };
 
@@ -74,14 +82,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     <div
                         key={t.id}
                         role="status"
-                        className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border bg-[#030A06] text-sm text-white animate-[toastIn_0.25s_ease-out] ${VARIANT_STYLES[t.variant].border}`}
+                        className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border bg-surface-sunken text-sm text-white animate-[toastIn_0.25s_ease-out] ${VARIANT_STYLES[t.variant].border}`}
                     >
                         <span className="mt-0.5">{VARIANT_STYLES[t.variant].icon}</span>
                         <span className="flex-1 leading-snug">{t.message}</span>
                         <button
                             onClick={() => dismiss(t.id)}
                             aria-label="Dismiss"
-                            className="text-zinc-600 hover:text-zinc-300 transition-colors mt-0.5"
+                            className="text-neutral-600 hover:text-neutral-300 transition-colors mt-0.5"
                         >
                             <X className="w-3.5 h-3.5" />
                         </button>
