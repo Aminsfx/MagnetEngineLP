@@ -528,13 +528,6 @@ const DashboardShell: React.FC = () => {
                 </div>
               );
             })()}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-[11px] text-zinc-600">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-              </span>
-              All systems operational
-            </div>
             {/* User avatar with email tooltip */}
             <div
               className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-500 border border-white/15 shadow-[0_0_12px_rgba(16,185,129,0.3)] flex items-center justify-center cursor-default overflow-hidden"

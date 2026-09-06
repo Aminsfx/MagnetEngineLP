@@ -42,15 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
                     <Logo subtitle="AI Lead Automation" />
                 </div>
 
-                {/* Status pill — matches landing page badge style */}
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-zinc-400 text-[11px] font-medium backdrop-blur-md mb-6 self-start">
-                    <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-                    </span>
-                    System Live
-                </div>
-
                 {/* Nav */}
                 <nav className="space-y-0.5 flex-1">
                     {navItems.map((item) => {
