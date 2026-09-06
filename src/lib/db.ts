@@ -2,7 +2,11 @@
  * db.ts — Cloud persistence layer for MagnetEngine
  *
  * Replaces localStorage with Supabase Postgres.
- * Falls back gracefully to the old storage.ts when Supabase is not configured
+ * This is the Supabase ADAPTER, not the seam. Which adapter a caller gets is
+ * decided once in store.ts (createStore); db.ts used to answer that question
+ * again with its own env-var check and quietly mirror writes to localStorage,
+ * which is how the two paths drifted apart. The isSupabaseReady() guards below
+ * are now only a safety net for an unconfigured client, never a second path.
  * (env vars missing) so the app never breaks in dev without credentials.
  *
  * SQL to run once in your Supabase SQL editor:
@@ -82,42 +86,18 @@
  */
 
 import { supabase } from './supabase';
-import { storage } from './storage'; // legacy localStorage fallback
 import type { AppConfig, Lead, FollowUpSequence, Conversation, Message } from './types';
 import type { PlanTier, Subscription } from './plans';
 
-// ── localStorage fallback keys for the inbox (dev / no-Supabase mode) ──────────
-const LS_CONVOS = 'magnetengine_conversations';
-const LS_MESSAGES = 'magnetengine_messages';
-
-function lsGet<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : [];
-  } catch {
-    return [];
-  }
-}
-function lsSet<T>(key: string, rows: T[]): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(rows));
-  } catch {
-    /* quota — ignore */
-  }
-}
-/** Merge incoming rows into an existing array by `id` (incoming wins). */
-function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
-  const map = new Map(existing.map((r) => [r.id, r]));
-  for (const r of incoming) map.set(r.id, r);
-  return Array.from(map.values());
-}
-
-/** True when Supabase env vars are present and client is usable */
 /** 'YYYY-MM' — the bucket every monthly counter is keyed by. */
 function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
+/**
+ * Safety net for an unconfigured client. NOT a second code path: which adapter
+ * a caller gets is decided once by createStore in store.ts.
+ */
 function isSupabaseReady(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL as string;
   return Boolean(url && url !== 'https://placeholder.supabase.co');
@@ -127,7 +107,7 @@ export const db = {
   // ─── Leads ────────────────────────────────────────────────────────────────
 
   async getLeads(userId: string): Promise<Lead[]> {
-    if (!isSupabaseReady()) return storage.getLeads();
+    if (!isSupabaseReady()) return [];
 
     const { data, error } = await supabase
       .from('leads')
@@ -137,32 +117,15 @@ export const db = {
 
     if (error) {
       console.error('[db] getLeads error:', error.message);
-      return storage.getLeads(); // fallback
+      return [];
     }
 
     return (data ?? []).map((row) => row.data as Lead);
   },
 
-  async upsertLead(lead: Lead, userId: string): Promise<void> {
-    if (!isSupabaseReady()) {
-      // Handled by bulk setLeads in localStorage path
-      return;
-    }
-
-    const { error } = await supabase
-      .from('leads')
-      .upsert({ id: lead.id, user_id: userId, data: lead }, { onConflict: 'id' });
-
-    if (error) console.error('[db] upsertLead error:', error.message);
-  },
 
   async upsertLeads(leads: Lead[], userId: string): Promise<void> {
-    if (!isSupabaseReady()) {
-      storage.setLeads(leads);
-      return;
-    }
-
-    if (leads.length === 0) return;
+    if (!isSupabaseReady() || leads.length === 0) return;
 
     const rows = leads.map((l) => ({ id: l.id, user_id: userId, data: l }));
 
@@ -176,16 +139,6 @@ export const db = {
     }
   },
 
-  async deleteLead(id: string): Promise<void> {
-    if (!isSupabaseReady()) return;
-
-    const { error } = await supabase
-      .from('leads')
-      .delete()
-      .eq('id', id);
-
-    if (error) console.error('[db] deleteLead error:', error.message);
-  },
 
   async deleteLeads(ids: string[]): Promise<void> {
     if (!isSupabaseReady()) return;
@@ -202,7 +155,7 @@ export const db = {
   // ─── Config ───────────────────────────────────────────────────────────────
 
   async getConfig(userId: string): Promise<AppConfig | null> {
-    if (!isSupabaseReady()) return storage.getConfig();
+    if (!isSupabaseReady()) return null;
 
     const { data, error } = await supabase
       .from('configs')
@@ -212,17 +165,14 @@ export const db = {
 
     if (error) {
       console.error('[db] getConfig error:', error.message);
-      return storage.getConfig();
+      return null;
     }
 
     return data ? (data.data as AppConfig) : null;
   },
 
   async setConfig(config: AppConfig, userId: string): Promise<void> {
-    if (!isSupabaseReady()) {
-      storage.setConfig(config);
-      return;
-    }
+    if (!isSupabaseReady()) return;
 
     const { error } = await supabase
       .from('configs')
@@ -299,7 +249,7 @@ export const db = {
   // ─── Conversations + Messages (AI SDR inbox) ──────────────────────────────
 
   async getConversations(userId: string): Promise<Conversation[]> {
-    if (!isSupabaseReady()) return lsGet<Conversation>(LS_CONVOS);
+    if (!isSupabaseReady()) return [];
 
     const { data, error } = await supabase
       .from('conversations')
@@ -309,7 +259,7 @@ export const db = {
 
     if (error) {
       console.error('[db] getConversations error:', error.message);
-      return lsGet<Conversation>(LS_CONVOS);
+      return [];
     }
 
     return (data ?? []).map((r) => ({
@@ -329,11 +279,7 @@ export const db = {
   },
 
   async upsertConversations(rows: Conversation[], userId: string): Promise<void> {
-    if (rows.length === 0) return;
-    if (!isSupabaseReady()) {
-      lsSet(LS_CONVOS, mergeById(lsGet<Conversation>(LS_CONVOS), rows));
-      return;
-    }
+    if (rows.length === 0 || !isSupabaseReady()) return;
 
     const payload = rows.map((c) => ({
       id: c.id,
@@ -362,10 +308,7 @@ export const db = {
   },
 
   async getMessages(userId: string, conversationId?: string): Promise<Message[]> {
-    if (!isSupabaseReady()) {
-      const all = lsGet<Message>(LS_MESSAGES);
-      return conversationId ? all.filter((m) => m.conversationId === conversationId) : all;
-    }
+    if (!isSupabaseReady()) return [];
 
     let q = supabase
       .from('messages')
@@ -391,11 +334,7 @@ export const db = {
   },
 
   async upsertMessages(rows: Message[], userId: string): Promise<void> {
-    if (rows.length === 0) return;
-    if (!isSupabaseReady()) {
-      lsSet(LS_MESSAGES, mergeById(lsGet<Message>(LS_MESSAGES), rows));
-      return;
-    }
+    if (rows.length === 0 || !isSupabaseReady()) return;
 
     const payload = rows.map((m) => ({
       id: m.id,

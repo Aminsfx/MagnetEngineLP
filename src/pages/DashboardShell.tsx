@@ -15,6 +15,7 @@ import ProfilePage from './ProfilePage';
 import { HealthScore } from '../components/dashboard/HealthScore';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
+import { createStore } from '../lib/store';
 import { filterUtils } from '../lib/filters';
 import { aiAPI, type ReplyResult } from '../lib/api';
 import { ingestThreads, type RawThread } from '../lib/inbox';
@@ -75,6 +76,12 @@ const DashboardShell: React.FC = () => {
   const toast = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // One decision, made once. Every persistence call below goes through this
+  // store and never asks again whether Supabase is configured or who is signed
+  // in — that question used to be re-answered at eight call sites in this file,
+  // inconsistently.
+  const store = useMemo(() => createStore(user?.id ?? null), [user?.id]);
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
@@ -131,8 +138,8 @@ const DashboardShell: React.FC = () => {
     // every message ever synced) used to be awaited here too, so first paint
     // was blocked on the user's entire chat history.
     Promise.all([
-      db.getLeads(userId),
-      db.getConfig(userId),
+      store.loadLeads(),
+      store.loadConfig(),
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
       setLeads(savedLeads ?? []);
@@ -140,7 +147,7 @@ const DashboardShell: React.FC = () => {
       setDmUsed(dmUsage.used);
       setDataLoading(false);
     });
-  }, [userId]);
+  }, [userId, store]);
 
   // Inbox history loads behind first paint. Until it lands, extension snapshots
   // are parked rather than ingested: `ingestThreads` dedupes echoed outbound
@@ -154,26 +161,24 @@ const DashboardShell: React.FC = () => {
     if (!userId) return;
     let cancelled = false;
 
-    Promise.all([db.getConversations(userId), db.getMessages(userId)]).then(
-      ([savedConvos, savedMessages]) => {
-        if (cancelled) return;
-        setConversations(savedConvos ?? []);
-        setMessages(savedMessages ?? []);
-        convosRef.current = savedConvos ?? [];
-        messagesRef.current = savedMessages ?? [];
-        inboxReady.current = true;
+    store.loadInbox().then(({ conversations: savedConvos, messages: savedMessages }) => {
+      if (cancelled) return;
+      setConversations(savedConvos);
+      setMessages(savedMessages);
+      convosRef.current = savedConvos;
+      messagesRef.current = savedMessages;
+      inboxReady.current = true;
 
-        const parked = pendingThreads.current;
-        pendingThreads.current = null;
-        if (parked) ingestInboxRef.current(parked);
-      },
-    );
+      const parked = pendingThreads.current;
+      pendingThreads.current = null;
+      if (parked) ingestInboxRef.current(parked);
+    });
 
     return () => {
       cancelled = true;
       inboxReady.current = false;
     };
-  }, [userId]);
+  }, [userId, store]);
 
   // Mark leads as sent for real, based on the handles the extension confirms
   // it actually sent (idempotent — only flips leads not already sent).
@@ -191,11 +196,10 @@ const DashboardShell: React.FC = () => {
     const byId = new Map(updated.map((l) => [l.id, l]));
     setLeads((prev) => {
       const next = prev.map((l) => byId.get(l.id) ?? l);
-      if (!user) storage.setLeads(next);
       return next;
     });
-    if (user) db.upsertLeads(updated, user.id).catch(console.error);
-  }, [user]);
+    store.saveLeads(updated).catch(console.error);
+  }, [store]);
 
   // Merge a fresh inbox snapshot from the extension into state + persist the
   // changed rows. Reads live refs so it can stay a stable callback. Returns the
@@ -214,16 +218,14 @@ const DashboardShell: React.FC = () => {
 
     setConversations(conversations);
     setMessages(messages);
-    if (user) {
-      if (changedConversations.length) db.upsertConversations(changedConversations, user.id).catch(console.error);
-      if (newMessages.length) db.upsertMessages(newMessages, user.id).catch(console.error);
-    }
+    store.saveConversations(changedConversations).catch(console.error);
+    store.saveMessages(newMessages).catch(console.error);
     // Conversations whose newest message is a freshly-arrived inbound.
     const newInboundConvIds = new Set(
       newMessages.filter((m) => m.direction === 'in').map((m) => m.conversationId),
     );
     return changedConversations.filter((c) => c.needsReply && newInboundConvIds.has(c.id));
-  }, [user]);
+  }, [store]);
 
   // Let the loader replay a parked snapshot through the current ingest closure.
   useEffect(() => { ingestInboxRef.current = ingestInbox; }, [ingestInbox]);
@@ -277,9 +279,8 @@ const DashboardShell: React.FC = () => {
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
     setConfig(newConfig);
-    storage.setConfig(newConfig); // keep localStorage in sync as fallback
-    if (user) await db.setConfig(newConfig, user.id);
-  }, [user]);
+    await store.saveConfig(newConfig);
+  }, [store]);
 
   const handleAddLeads = useCallback(async (newLeads: Lead[]) => {
     // Within-batch dedupe already happened in intake; this is the cross-batch
@@ -326,7 +327,7 @@ const DashboardShell: React.FC = () => {
     const added = toAdd;
     setLeads((prev) => {
       const merged = [...prev, ...added];
-      if (user) db.upsertLeads(added, user.id).catch(console.error);
+      store.saveLeads(added).catch(console.error);
       return merged;
     });
 
@@ -343,16 +344,15 @@ const DashboardShell: React.FC = () => {
       if (quotaCapped > 0) parts.push(`${quotaCapped} over your ${limits.maxLeadsPerMonth}/month limit`);
       toast.info(`${parts[0]} · skipped ${parts.slice(1).join(' + ')}.`);
     }
-  }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast]);
+  }, [user, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store]);
 
   const handleDeleteLead = useCallback(async (id: string) => {
     setLeads((prev) => {
       const next = prev.filter((l) => l.id !== id);
-      if (!user) storage.setLeads(next); // dev/localStorage: db.deleteLead no-ops
       return next;
     });
-    if (user) await db.deleteLead(id);
-  }, [user]);
+    await store.removeLeads([id]);
+  }, [store]);
 
   /** Bulk delete — one state update + one batched DB write */
   const handleDeleteLeads = useCallback(async (ids: string[]) => {
@@ -360,12 +360,11 @@ const DashboardShell: React.FC = () => {
     const idSet = new Set(ids);
     setLeads((prev) => {
       const next = prev.filter((l) => !idSet.has(l.id));
-      if (!user) storage.setLeads(next); // dev/localStorage: db.deleteLeads no-ops
       return next;
     });
-    if (user) await db.deleteLeads(ids);
+    await store.removeLeads(ids);
     toast.success(`${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted from the queue`);
-  }, [user, toast]);
+  }, [toast, store]);
 
   const handleUpdateLead = useCallback(async (updated: Lead) => {
     let oldLead: Lead | undefined;
@@ -378,8 +377,8 @@ const DashboardShell: React.FC = () => {
         fireWebhook(config, event, updated);
       }
     }
-    if (user) await db.upsertLead(updated, user.id);
-  }, [user, config]);
+    await store.saveLeads([updated]);
+  }, [config, store]);
 
   // Handoff to the extension is done by ApprovalQueue; a lead is marked "sent"
   // for real only when the extension confirms it (see the extension bridge), so
@@ -407,11 +406,11 @@ const DashboardShell: React.FC = () => {
     const batch = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
     const batchById = new Map(batch.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => batchById.get(l.id) ?? l));
-    if (user) await db.upsertLeads(batch, user.id);
+    await store.saveLeads(batch);
 
     toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
     return due.length;
-  }, [user, config.dailySendCap, toast]);
+  }, [config.dailySendCap, toast, store]);
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
 
@@ -429,9 +428,9 @@ const DashboardShell: React.FC = () => {
   const handleUpdateConversation = useCallback((conv: Conversation) => {
     const prev = convosRef.current.find((c) => c.id === conv.id);
     setConversations((list) => list.map((c) => (c.id === conv.id ? conv : c)));
-    if (user) db.upsertConversations([conv], user.id).catch(console.error);
+    store.saveConversations([conv]).catch(console.error);
     if (conv.status === 'booked' && prev?.status !== 'booked') markLeadBooked(conv.handle);
-  }, [user, markLeadBooked]);
+  }, [markLeadBooked, store]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
   const handleGenerateReply = useCallback(async (conv: Conversation): Promise<ReplyResult> => {
@@ -470,10 +469,8 @@ const DashboardShell: React.FC = () => {
       ...conv, lastMessageAt: now, lastMessageText: body, needsReply: false, unread: false,
     };
     setConversations((list) => list.map((c) => (c.id === conv.id ? updatedConv : c)));
-    if (user) {
-      db.upsertMessages([msg], user.id).catch(console.error);
-      db.upsertConversations([updatedConv], user.id).catch(console.error);
-    }
+    store.saveMessages([msg]).catch(console.error);
+    store.saveConversations([updatedConv]).catch(console.error);
 
     const delay = storage.getDmDelay();
     window.postMessage({
@@ -486,7 +483,7 @@ const DashboardShell: React.FC = () => {
       },
     }, '*');
     toast.success(`Reply queued to @${conv.handle}`);
-  }, [user, toast]);
+  }, [toast, store]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
@@ -520,9 +517,9 @@ const DashboardShell: React.FC = () => {
       }
       return l;
     }));
-    if (user && updatedBatch.length > 0) await db.upsertLeads(updatedBatch, user.id);
+    if (updatedBatch.length > 0) await store.saveLeads(updatedBatch);
     toast.success(`${ids.length} DM${ids.length !== 1 ? 's' : ''} approved`);
-  }, [user, toast]);
+  }, [toast, store]);
 
   const handleApproveLead = useCallback(async (id: string) => {
     let updated: Lead | undefined;
@@ -530,8 +527,8 @@ const DashboardShell: React.FC = () => {
       if (l.id === id) { updated = { ...l, approved: true, rejected: false }; return updated; }
       return l;
     }));
-    if (user && updated) await db.upsertLead(updated, user.id);
-  }, [user]);
+    if (updated) await store.saveLeads([updated]);
+  }, [store]);
 
   const handleRejectLead = useCallback(async (id: string) => {
     let updated: Lead | undefined;
@@ -539,8 +536,8 @@ const DashboardShell: React.FC = () => {
       if (l.id === id) { updated = { ...l, rejected: true, approved: false }; return updated; }
       return l;
     }));
-    if (user && updated) await db.upsertLead(updated, user.id);
-  }, [user]);
+    if (updated) await store.saveLeads([updated]);
+  }, [store]);
 
   const handleUpdateDM = useCallback(async (id: string, content: string) => {
     let updated: Lead | undefined;
@@ -548,8 +545,8 @@ const DashboardShell: React.FC = () => {
       if (l.id === id) { updated = { ...l, dmContent: content }; return updated; }
       return l;
     }));
-    if (user && updated) await db.upsertLead(updated, user.id);
-  }, [user]);
+    if (updated) await store.saveLeads([updated]);
+  }, [store]);
 
   const handleGenerateDMs = useCallback(async (targetLeads?: Lead[]) => {
     const remaining = limits.maxDMGenerations - dmUsed;
@@ -592,7 +589,7 @@ const DashboardShell: React.FC = () => {
         const updated = updatedBatch.find((u) => u.id === l.id);
         return updated ?? l;
       }));
-      if (user) await db.upsertLeads(updatedBatch, user.id);
+      await store.saveLeads(updatedBatch);
     }
     if (usedAfter !== null) setDmUsed(usedAfter);
 
@@ -609,7 +606,7 @@ const DashboardShell: React.FC = () => {
     toast.success(stillPending > 0
       ? `Generated ${successCount} DMs — ${stillPending} still pending, click again for the next batch.`
       : `Generated ${successCount} DM${successCount !== 1 ? 's' : ''} — review them in the Approval Queue.`);
-  }, [config, filteredLeads, user, limits, dmUsed, toast]);
+  }, [config, filteredLeads, limits, dmUsed, toast, store]);
 
   const handleLogout = useCallback(async () => {
     await signOut();
