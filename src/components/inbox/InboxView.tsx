@@ -20,20 +20,24 @@ interface InboxViewProps {
 type Filter = 'all' | 'needs_reply' | 'interested' | 'booked';
 
 /**
- * One role per intent, chosen by what the intent means to the funnel.
+ * One role per intent. Every intent is the AI reading a Conversation, so
+ * "the AI produced it" cannot be the whole rule — what separates them is how far
+ * each one is allowed to travel:
  *
- * `booked` is the only intent that becomes an Outcome — it stamps the Lead behind
- * the Conversation and fires a webhook — so it alone wears `positive`.
- * `interested` is the AI's judgement, which CONTEXT.md says "colours the Inbox
- * but does not move the funnel", so it wears `info`, the role reserved for what
- * the AI produced. Reading the two as one hue would let a misread look like a
- * booked call.
+ * - `objection` carries severity, and severity outranks provenance → `caution`.
+ * - `booked` is the only intent that becomes an Outcome: it stamps the Lead
+ *   behind the Conversation and fires a webhook → `positive`.
+ * - `interested` is a judgement that CONTEXT.md says "colours the Inbox but does
+ *   not move the funnel" → `info`, the role held for what the AI merely thinks.
+ *   Sharing a hue with `booked` would let a misread look like a booked call.
+ * - `neutral` and `not_interested` assert nothing → chrome, the latter dimmer
+ *   because it closes the Conversation rather than leaving it open.
  */
 const INTENT_META: Record<ConversationIntent, { label: string; cls: string }> = {
   interested:     { label: 'Interested',     cls: 'text-info-300 border-info-500/30 bg-info-500/10' },
   booked:         { label: 'Booked',         cls: 'text-positive-300 border-positive-500/30 bg-positive-500/10' },
   objection:      { label: 'Objection',      cls: 'text-caution-300 border-caution-500/30 bg-caution-500/10' },
-  not_interested: { label: 'Not interested', cls: 'text-neutral-400 border-white/10 bg-white/5' },
+  not_interested: { label: 'Not interested', cls: 'text-neutral-500 border-white/10 bg-white/5' },
   neutral:        { label: 'Neutral',        cls: 'text-neutral-300 border-neutral-500/30 bg-neutral-500/10' },
 };
 
@@ -158,7 +162,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
       {/* Header row */}
       <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.08] bg-white/[0.04] text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3">
             Conversations
           </div>
           <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">Inbox</h1>
@@ -180,7 +184,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
       </div>
 
       {config.autopilot && (
-        <div className="mb-3 px-3.5 py-2 rounded-xl border border-brand-500/25 bg-brand-500/8 text-brand-300/90 text-[12px] flex items-center gap-2 flex-shrink-0">
+        <div className="mb-3 px-3.5 py-2 rounded-xl border border-brand-500/25 bg-brand-500/[0.08] text-brand-300/90 text-[12px] flex items-center gap-2 flex-shrink-0">
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brand-500" />
@@ -192,7 +196,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
       {/* Two-pane */}
       <div className="flex flex-1 min-h-0 gap-4">
         {/* ── Left: thread list ── */}
-        <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-[340px] flex-shrink-0 rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden`}>
+        <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-[340px] flex-shrink-0 rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden`}>
           {/* Search + filters */}
           <div className="p-3 border-b border-white/5 space-y-2.5">
             <div className="relative">
@@ -201,7 +205,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search @handle or name"
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40"
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40"
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -212,7 +216,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
                     filter === t.key
                       ? 'text-brand-300 border-brand-500/30 bg-brand-500/10'
-                      : 'text-neutral-500 border-white/8 bg-transparent hover:text-white'
+                      : 'text-neutral-500 border-white/[0.08] bg-transparent hover:text-white'
                   }`}
                 >
                   {t.label} <span className="opacity-60">{counts[t.key]}</span>
@@ -238,7 +242,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     key={c.id}
                     onClick={() => openConversation(c)}
                     className={`w-full text-left px-3 py-3 border-b border-white/[0.04] flex gap-3 transition-colors ${
-                      active ? 'bg-brand-500/8' : 'hover:bg-white/[0.03]'
+                      active ? 'bg-brand-500/[0.08]' : 'hover:bg-white/[0.03]'
                     }`}
                   >
                     <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
@@ -260,7 +264,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                           <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium ${INTENT_META[c.intent].cls}`}>{INTENT_META[c.intent].label}</span>
                         )}
                         {c.account && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-neutral-500 border border-white/8">{c.account}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-neutral-500 border border-white/[0.08]">{c.account}</span>
                         )}
                       </div>
                     </div>
@@ -272,7 +276,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
         </div>
 
         {/* ── Right: thread + composer ── */}
-        <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-col flex-1 min-w-0 rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden`}>
+        <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-col flex-1 min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden`}>
           {!selected ? (
             <div className="flex-1 flex flex-col items-center justify-center text-neutral-600 gap-3 p-8 text-center">
               <MessageSquare className="w-10 h-10 text-neutral-700" />
@@ -298,7 +302,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   <span className={`text-[10px] px-2 py-1 rounded-full border font-medium ${INTENT_META[selected.intent].cls}`}>{INTENT_META[selected.intent].label}</span>
                 )}
                 {selected.status !== 'booked' && (
-                  <button onClick={setBooked} className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-positive-500/30 bg-positive-500/10 text-positive-300 hover:bg-positive-500/20 transition-colors">
+                  // Chrome, not `positive`: the control is the Operator's click,
+                  // while the pill it produces is the funnel state. Colouring both
+                  // emerald put a second accent beside the composer's one CTA.
+                  <button onClick={setBooked} className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:border-white/20 transition-colors">
                     <Calendar className="w-3 h-3" /> Booked
                   </button>
                 )}
@@ -308,7 +315,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
               <div className="px-4 py-2 border-b border-white/5 flex items-center gap-1.5 flex-wrap flex-shrink-0">
                 <Tag className="w-3 h-3 text-neutral-600" />
                 {(selected.labels ?? []).map((l) => (
-                  <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-neutral-300 border border-white/10 flex items-center gap-1">
+                  <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.08] text-neutral-300 border border-white/10 flex items-center gap-1">
                     {l}
                     <button onClick={() => removeLabel(l)} className="hover:text-danger-400"><X className="w-2.5 h-2.5" /></button>
                   </span>
@@ -332,7 +339,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
                       m.direction === 'out'
                         ? 'bg-brand-500/15 text-brand-50 border border-brand-500/20 rounded-br-md'
-                        : 'bg-white/5 text-neutral-200 border border-white/8 rounded-bl-md'
+                        : 'bg-white/5 text-neutral-200 border border-white/[0.08] rounded-bl-md'
                     }`}>
                       {m.text}
                       <div className={`text-[9px] mt-1 ${m.direction === 'out' ? 'text-brand-300/50' : 'text-neutral-600'}`}>{timeAgo(m.createdAt)}</div>
@@ -351,7 +358,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={2}
                   placeholder="Write a reply, or let the AI draft one…"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40 resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40 resize-none"
                 />
                 <div className="flex items-center gap-2">
                   <button
