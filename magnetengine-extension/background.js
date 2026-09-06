@@ -1,0 +1,261 @@
+// MagnetEngine — Background Service Worker v2
+
+// Fallbacks used only if the web app didn't send a value with the campaign.
+const DEFAULT_DAILY_CAP = 40;   // the app passes its own dailySendCap from Settings
+const DEFAULT_MIN_DELAY = 3;
+const DEFAULT_MAX_DELAY = 8;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+    // ── New campaign from web app ──────────────────────────────────
+    if (request.type === 'MAGNET_ENGINE_CAMPAIGN') {
+        chrome.storage.local.get(['isExecuting'], (result) => {
+            if (result.isExecuting) {
+                sendResponse({ status: 'rejected', reason: 'A campaign is already running. Pause or clear it first.' });
+                return;
+            }
+            const leads = request.payload.leads;
+            // User-chosen random delay range (minutes) between each DM.
+            const minDelay = Number(request.payload.minDelay) || DEFAULT_MIN_DELAY;
+            const maxDelay = Math.max(minDelay, Number(request.payload.maxDelay) || DEFAULT_MAX_DELAY);
+            // Daily send cap comes from the app's Settings (config.dailySendCap).
+            const dailyCap = Number(request.payload.dailyCap) || DEFAULT_DAILY_CAP;
+            chrome.storage.local.set({
+                campaignQueue: leads,
+                originalTotal: leads.length,
+                minDelay:      minDelay,
+                maxDelay:      maxDelay,
+                dailyCap:      dailyCap,
+                isExecuting:   false,
+                isPaused:      false,
+                failedCount:   0,
+            }, () => {
+                processNextLead();
+                sendResponse({ status: 'queued', count: leads.length });
+            });
+        });
+        return true;
+    }
+
+    // ── Task completed by content script ──────────────────────────
+    if (request.action === 'TASK_COMPLETE') {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog'], (result) => {
+            const today  = new Date().toDateString();
+            const newDay = result.dailyResetDate !== today;
+            let count    = newDay ? 0  : (result.dailySentCount || 0);
+            let sentLog  = newDay ? [] : (result.sentLog || []);   // handles actually sent today
+
+            let failed = result.failedCount || 0;
+            if (request.result === 'success') {
+                count++;
+                if (request.handle) {
+                    sentLog.push({ handle: request.handle, at: Date.now() });
+                    if (sentLog.length > 2000) sentLog = sentLog.slice(-2000);
+                }
+            }
+            if (request.result === 'failed') failed++;
+
+            const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
+
+            chrome.storage.local.set({
+                dailySentCount: count,
+                dailyResetDate: today,
+                failedCount:    failed,
+                sentLog:        sentLog,
+                isExecuting:    false,
+                currentTask:    null,
+            }, () => {
+                // Tell any open MagnetEngine tab what actually got sent, so the
+                // app marks the lead sent for real (not on handoff).
+                if (request.result === 'success' && request.handle) {
+                    broadcastToApp({
+                        type: 'MAGNET_ENGINE_SENT',
+                        handle: request.handle,
+                        dailySentCount: count,
+                        dailyCap: cap,
+                    });
+                }
+
+                if (count >= cap || result.isPaused) return;
+
+                // Random wait within the user-chosen min–max range (minutes).
+                const min = Number(result.minDelay) || DEFAULT_MIN_DELAY;
+                const max = Math.max(min, Number(result.maxDelay) || DEFAULT_MAX_DELAY);
+                const delayMinutes = min + Math.random() * (max - min);
+
+                const nextAlarmTime = Date.now() + delayMinutes * 60 * 1000;
+                chrome.storage.local.set({ nextAlarmTime }, () => {
+                    chrome.alarms.create('dripEngine', { delayInMinutes: delayMinutes });
+                });
+            });
+        });
+        sendResponse({ status: 'acknowledged' });
+        return true;
+    }
+
+    // ── Stats request from the web app (real sent count + sent log) ────────
+    if (request.action === 'getStats') {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog'], (result) => {
+            const fresh = result.dailyResetDate === new Date().toDateString();
+            sendResponse({
+                dailySentCount: fresh ? (result.dailySentCount || 0) : 0,
+                dailyCap:       Number(result.dailyCap) || DEFAULT_DAILY_CAP,
+                sentLog:        fresh ? (result.sentLog || []) : [],
+            });
+        });
+        return true;
+    }
+
+    // ── Inbox snapshot from the IG content-script poller ───────────────────
+    // Store the latest snapshot and push it to any open dashboard tab so the
+    // app can persist conversations/messages to Supabase and render the inbox.
+    if (request.action === 'INBOX_SYNC') {
+        const threads = Array.isArray(request.threads) ? request.threads : [];
+        chrome.storage.local.set({ inboxThreads: threads, inboxSyncedAt: Date.now() }, () => {
+            broadcastToApp({ type: 'MAGNET_ENGINE_INBOX', threads });
+        });
+        sendResponse({ status: 'ok', count: threads.length });
+        return true;
+    }
+
+    // ── Inbox request from the web app (latest snapshot) ───────────────────
+    if (request.action === 'getInbox') {
+        chrome.storage.local.get(['inboxThreads'], (result) => {
+            sendResponse({ threads: result.inboxThreads || [] });
+        });
+        return true;
+    }
+
+    // ── Pause campaign ─────────────────────────────────────────────
+    if (request.action === 'pauseCampaign') {
+        chrome.alarms.clear('dripEngine');
+        chrome.storage.local.set({ isPaused: true, nextAlarmTime: null });
+        sendResponse({ status: 'paused' });
+        return true;
+    }
+
+    // ── Resume campaign ────────────────────────────────────────────
+    if (request.action === 'resumeCampaign') {
+        chrome.storage.local.set({ isPaused: false }, () => {
+            processNextLead();
+        });
+        sendResponse({ status: 'resumed' });
+        return true;
+    }
+
+    // ── Clear campaign ─────────────────────────────────────────────
+    if (request.action === 'clearCampaign') {
+        chrome.alarms.clear('dripEngine');
+        chrome.storage.local.set({
+            campaignQueue: [],
+            currentTask:   null,
+            isExecuting:   false,
+            isPaused:      false,
+            nextAlarmTime: null,
+            originalTotal: 0,
+            failedCount:   0,
+        });
+        sendResponse({ status: 'cleared' });
+        return true;
+    }
+
+    // ── Close tab ──────────────────────────────────────────────────
+    if (request.action === 'closeCurrentTab' && sender.tab) {
+        chrome.tabs.remove(sender.tab.id);
+        sendResponse({ status: 'closed' });
+        return true;
+    }
+});
+
+// ── Alarm fires → process next lead / keep an IG tab alive for polling ─────
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'dripEngine') {
+        chrome.storage.local.set({ nextAlarmTime: null }, processNextLead);
+    } else if (alarm.name === 'inboxKeepAlive') {
+        ensureInboxTab();
+    }
+});
+
+// Periodic heartbeat so the inbox poller has a live instagram.com tab during
+// active outreach (the content-script poller only runs on an IG page).
+chrome.alarms.create('inboxKeepAlive', { periodInMinutes: 3 });
+
+// Ensure a background IG tab exists ONLY while a campaign is active — avoids
+// popping tabs open when the user isn't running outreach.
+function ensureInboxTab() {
+    chrome.storage.local.get(['campaignQueue', 'isExecuting'], (result) => {
+        const active = result.isExecuting || (result.campaignQueue && result.campaignQueue.length > 0);
+        if (!active) return;
+        chrome.tabs.query({}, (tabs) => {
+            const hasIg = tabs.some((t) => t.url && t.url.includes('instagram.com'));
+            if (hasIg) return;
+            chrome.tabs.create(
+                { url: 'https://www.instagram.com/direct/inbox/', active: false, pinned: true },
+                () => void chrome.runtime.lastError,
+            );
+        });
+    });
+}
+
+// ── Recover orphaned task on service worker restart ───────────────
+chrome.runtime.onStartup?.addListener(() => {
+    chrome.storage.local.get(['currentTask', 'isExecuting', 'campaignQueue'], (result) => {
+        if (result.currentTask && result.isExecuting) {
+            const queue = result.campaignQueue || [];
+            queue.unshift(result.currentTask);
+            chrome.storage.local.set({
+                campaignQueue: queue,
+                currentTask:   null,
+                isExecuting:   false,
+            }, processNextLead);
+        }
+    });
+});
+
+// ── Notify open MagnetEngine dashboard tabs ───────────────────────
+// The content script on those tabs relays the message into the page.
+function broadcastToApp(message) {
+    chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+            if (!tab.id || !tab.url) continue;
+            if (tab.url.includes('magnetengine.xyz') || tab.url.startsWith('http://localhost')) {
+                chrome.tabs.sendMessage(tab.id, message, () => void chrome.runtime.lastError);
+            }
+        }
+    });
+}
+
+// ── Core: open next Instagram tab ─────────────────────────────────
+function processNextLead() {
+    chrome.storage.local.get(
+        ['campaignQueue', 'isExecuting', 'isPaused', 'dailySentCount', 'dailyResetDate', 'dailyCap'],
+        (result) => {
+            if (result.isExecuting) return;
+            if (result.isPaused)    return;
+
+            const today = new Date().toDateString();
+            const count = result.dailyResetDate === today ? (result.dailySentCount || 0) : 0;
+            const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
+            if (count >= cap) return;
+
+            const queue = result.campaignQueue || [];
+            if (queue.length === 0) {
+                chrome.storage.local.set({ isExecuting: false });
+                return;
+            }
+
+            const [nextLead, ...rest] = queue;
+            chrome.storage.local.set({
+                campaignQueue: rest,
+                currentTask:   nextLead,
+                isExecuting:   true,
+            }, () => {
+                chrome.tabs.create({ url: `https://www.instagram.com/${nextLead.handle}/` }, (tab) => {
+                    if (chrome.runtime.lastError) {
+                        chrome.storage.local.set({ isExecuting: false });
+                    }
+                });
+            });
+        }
+    );
+}

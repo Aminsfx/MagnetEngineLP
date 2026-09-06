@@ -232,12 +232,16 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         }
         const safeMin = Math.max(1, Math.floor(minDelay) || 1);
         const safeMax = Math.max(safeMin, Math.floor(maxDelay) || safeMin);
-        sendCampaign({
+        const handoff = sendCampaign({
             leads: approved.map(l => ({ handle: l.handle, message: l.dmContent! })),
             minDelay: safeMin,
             maxDelay: safeMax,
             dailyCap: config.dailySendCap ?? 40,
         });
+        if (!handoff.delivered) {
+            toast.error(handoff.reason!);
+            return;
+        }
         toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent — DMs will drip every ${safeMin}–${safeMax} min.`);
     };
 

@@ -13,6 +13,7 @@ import { SettingsPanel } from '../components/settings/SettingsPanel';
 import { InboxView } from '../components/inbox/InboxView';
 import ProfilePage from './ProfilePage';
 import { HealthScore } from '../components/dashboard/HealthScore';
+import { ExtensionNotice } from '../components/common/ExtensionNotice';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
 import { useOutreach } from '../lib/useOutreach';
@@ -26,6 +27,9 @@ import {
   onExtensionMessage,
   requestExtensionSync,
   sendCampaign,
+  watchExtension,
+  getExtensionStatus,
+  type ExtensionStatus,
 } from '../lib/extensionProtocol';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT } from '../lib/prompt';
 import { AppConfig, Conversation, Message } from '../lib/types';
@@ -92,6 +96,8 @@ const DashboardShell: React.FC = () => {
   // Real per-day sent count reported by the extension (source of truth for what
   // actually went out), vs the app's optimistic handoff count.
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
+  // Which extension build is installed, and what it can still be asked to do.
+  const [extStatus, setExtStatus] = useState<ExtensionStatus>(getExtensionStatus);
 
   // ─── Inbox (AI SDR) ─────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -227,6 +233,13 @@ const DashboardShell: React.FC = () => {
     };
   }, [outreach, ingestInbox]);
 
+  // ─── Extension handshake ────────────────────────────────────────────────────
+  // Separate from the bridge above, and with its own empty dep list: the bridge
+  // re-subscribes whenever the outreach engine identity changes, and re-probing
+  // the extension on every one of those would be noise. Nothing here depends on
+  // app state — only on which extension is installed.
+  useEffect(() => watchExtension(setExtStatus), []);
+
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
     setConfig(newConfig);
@@ -279,6 +292,22 @@ const DashboardShell: React.FC = () => {
     const updatedConv: Conversation = {
       ...conv, lastMessageAt: now, lastMessageText: body, needsReply: false, unread: false,
     };
+
+    // Hand off BEFORE the optimistic write. A refused handoff means nothing is
+    // going out, and a Conversation showing a reply that was never sent — with
+    // needsReply cleared — is worse than no reply at all.
+    const delay = storage.getDmDelay();
+    const handoff = sendCampaign({
+      leads: [{ handle: conv.handle, message: body }],
+      minDelay: delay.min,
+      maxDelay: delay.max,
+      dailyCap: configRef.current.dailySendCap ?? 40,
+    });
+    if (!handoff.delivered) {
+      toast.error(handoff.reason!);
+      return;
+    }
+
     // recordOutbound also arms echo suppression for exactly this one Message,
     // so Instagram sending it back under its own id doesn't duplicate it — and
     // a genuinely repeated "ok" later still comes through.
@@ -287,13 +316,6 @@ const DashboardShell: React.FC = () => {
     store.saveMessages([msg]).catch(console.error);
     store.saveConversations([updatedConv]).catch(console.error);
 
-    const delay = storage.getDmDelay();
-    sendCampaign({
-      leads: [{ handle: conv.handle, message: body }],
-      minDelay: delay.min,
-      maxDelay: delay.max,
-      dailyCap: configRef.current.dailySendCap ?? 40,
-    });
     toast.success(`Reply queued to @${conv.handle}`);
   }, [toast, store, inbox]);
 
@@ -525,6 +547,9 @@ const DashboardShell: React.FC = () => {
             </div>
           </div>
         </header>
+
+        {/* Extension missing / behind the dashboard — silent otherwise */}
+        <ExtensionNotice status={extStatus} />
 
         {/* Page content */}
         <main className="flex-1 overflow-auto">

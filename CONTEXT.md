@@ -60,6 +60,14 @@ _Avoid_: rate limit, throttle
 A later scheduled touch to a Lead that already received a DM. Distinct from a
 reply, which the Lead initiates.
 
+**Handshake**:
+What the installed extension tells the dashboard about itself — the wire-protocol
+revision it speaks and the message names it accepts. The dashboard asks before
+handing over work, so a message the installed build can't act on is refused with
+a reason the Operator can read, rather than posted into silence. Needed because
+the two halves stop updating together once the extension ships from the store.
+_Avoid_: version check, ping, capability negotiation
+
 ### Inbox
 
 **Conversation**:

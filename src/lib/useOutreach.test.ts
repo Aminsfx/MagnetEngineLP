@@ -22,7 +22,9 @@ vi.mock('./api', () => ({
 
 vi.mock('./extensionProtocol', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./extensionProtocol')>()),
-  sendCampaign: vi.fn(),
+  // Default to an extension that accepts the handoff; the tests that care about
+  // a refusal override it per case.
+  sendCampaign: vi.fn(() => ({ delivered: true })),
 }));
 
 vi.mock('./db', () => ({
@@ -271,6 +273,27 @@ describe('sendFollowUps', () => {
     await act(() => result.current.sendFollowUps([]));
 
     expect(sendCampaign).not.toHaveBeenCalled();
+  });
+
+  it('leaves the step unstamped when the extension never got it', async () => {
+    // A stamped step is never retried. Stamping one the extension refused would
+    // silently drop that touch — the exact failure the handshake exists to stop.
+    vi.mocked(sendCampaign).mockReturnValueOnce({
+      delivered: false, reason: 'Extension not responding',
+    });
+    const { result, saved } = setup();
+    const target = lead('a', { handle: 'founder_one', dmSent: true });
+    act(() => result.current.hydrate([target], 0));
+
+    let count = 0;
+    await act(async () => {
+      count = await result.current.sendFollowUps([
+        { lead: target, stepIndex: 0, message: 'still keen?' },
+      ]);
+    });
+
+    expect(count).toBe(0);
+    expect(saved).toEqual([]);
   });
 });
 

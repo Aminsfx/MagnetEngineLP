@@ -77,7 +77,15 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   is made once, in `store.ts`.
 - **App ↔ extension** — message names live in `extension/protocol.js`; the app uses
   `src/lib/extensionProtocol.ts`. A test asserts the two agree, so never write a
-  `MAGNET_ENGINE_*` string literal anywhere else.
+  `MAGNET_ENGINE_*` string literal anywhere else. That test only proves the two
+  agree *in the repo* — in the field the dashboard updates on deploy and the
+  extension days later, so the installed copy announces itself over a
+  **Handshake** (`MAGNET_ENGINE_HELLO` → `HELLO_BACK`, carrying
+  `MAGNET_PROTOCOL.VERSION` and the names it accepts). Bump `VERSION` on both
+  sides when you add a message name. `sendCampaign` returns a `Handoff`, not
+  `void`: check `delivered` and show `reason` — never report success for a
+  handoff an old or missing extension will ignore, and never stamp a Lead
+  (`followedUp`, an outbound Message) off a refused one.
 - **Lead construction** — sources hand raw rows to `intake()`. A Handle is lowercase,
   `@`-less and unique *by construction*; don't re-normalise at call sites.
 - **Inbox → Lead** — a Conversation reaches the Lead behind it only as an

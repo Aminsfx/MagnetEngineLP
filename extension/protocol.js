@@ -17,6 +17,25 @@
 // the product.
 
 const MAGNET_PROTOCOL = {
+  /**
+   * Wire-protocol revision — bumped whenever a message name is added or a
+   * payload changes shape. Distinct from the manifest version, which moves for
+   * reasons the app doesn't care about (a new IG selector, an icon fix).
+   *
+   * This exists because the two halves stop shipping together once the
+   * extension is in the Chrome Web Store: the dashboard updates on deploy, the
+   * extension only after review AND after Chrome finds it idle — and this one
+   * pins an Instagram tab open during campaigns, so the heaviest users lag
+   * furthest. A dashboard that sends a name the installed copy doesn't know
+   * gets silence, because content.js no-ops on anything it doesn't recognise.
+   * The handshake turns that silence into "update your extension".
+   *
+   * 1 — pre-handshake (≤ 1.4.0). Inferred, never sent: those builds answer
+   *     GET_STATS but know nothing about HELLO.
+   * 2 — HELLO / HELLO_BACK.
+   */
+  VERSION: 2,
+
   /** Every page↔extension message name starts with this. */
   PREFIX: 'MAGNET_ENGINE_',
 
@@ -25,6 +44,7 @@ const MAGNET_PROTOCOL = {
     CAMPAIGN: 'MAGNET_ENGINE_CAMPAIGN',
     GET_STATS: 'MAGNET_ENGINE_GET_STATS',
     GET_INBOX: 'MAGNET_ENGINE_GET_INBOX',
+    HELLO: 'MAGNET_ENGINE_HELLO',
   },
 
   /** Extension → page, relayed into the page by the content script. */
@@ -32,6 +52,7 @@ const MAGNET_PROTOCOL = {
     STATS: 'MAGNET_ENGINE_STATS',
     SENT: 'MAGNET_ENGINE_SENT',
     INBOX: 'MAGNET_ENGINE_INBOX',
+    HELLO_BACK: 'MAGNET_ENGINE_HELLO_BACK',
   },
 
   /**
@@ -69,6 +90,23 @@ function messageKind(request) {
   return String(request.type || request.action || '');
 }
 
+/**
+ * What this build of the extension tells the dashboard about itself.
+ *
+ * `accepts` is derived from APP_TO_EXT rather than listed by hand, so adding a
+ * message name here is the whole change — the capability the dashboard tests
+ * against can't drift from the dispatch that implements it.
+ */
+function describeExtension() {
+  const manifest = globalThis.chrome?.runtime?.getManifest?.();
+  return {
+    type: MAGNET_PROTOCOL.EXT_TO_APP.HELLO_BACK,
+    protocolVersion: MAGNET_PROTOCOL.VERSION,
+    version: manifest?.version ?? '',
+    accepts: Object.values(MAGNET_PROTOCOL.APP_TO_EXT),
+  };
+}
+
 /** Normalize a campaign payload, applying the extension's own defaults. */
 function readCampaign(payload, defaults) {
   const minDelay = Number(payload?.minDelay) || defaults.minDelay;
@@ -85,3 +123,4 @@ globalThis.MAGNET_PROTOCOL = MAGNET_PROTOCOL;
 globalThis.isAppMessage = isAppMessage;
 globalThis.messageKind = messageKind;
 globalThis.readCampaign = readCampaign;
+globalThis.describeExtension = describeExtension;

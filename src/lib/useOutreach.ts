@@ -302,12 +302,18 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     if (due.length === 0) return 0;
 
     const delay = storage.getDmDelay();
-    sendCampaign({
+    const handoff = sendCampaign({
       leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
       minDelay: delay.min,
       maxDelay: delay.max,
       dailyCap: config.dailySendCap ?? 40,
     });
+    // Stamping a step the extension never received would burn it: the Lead
+    // reads as followed up, and the touch is never retried. Leave them due.
+    if (!handoff.delivered) {
+      toast.error(handoff.reason!);
+      return 0;
+    }
 
     const sentAt = new Date().toISOString();
     const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
