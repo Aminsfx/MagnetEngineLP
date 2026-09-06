@@ -32,3 +32,6 @@ supabase/.branches
 *.sln
 *.sw?
 magnetengine-extension.zip
+
+# Perf harness output (src/perf/perf.budgets.test.tsx)
+perf-report.txt

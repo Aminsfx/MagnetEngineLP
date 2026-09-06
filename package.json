@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "perf": "vitest run src/perf/perf.budgets.test.tsx",
     "lint": "eslint .",
     "verify": "npm run typecheck && npm run lint && npm run test:run",
     "ext:icons": "node scripts/gen-ext-icons.mjs",

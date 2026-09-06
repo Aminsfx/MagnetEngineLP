@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { MetricsGrid } from '../components/dashboard/MetricsGrid';
@@ -20,7 +20,7 @@ import { aiAPI, type ReplyResult } from '../lib/api';
 import { ingestThreads, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
-import { Lead, AppConfig, DashboardStats, Conversation, Message } from '../lib/types';
+import { Lead, AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';
@@ -141,19 +141,17 @@ const DashboardShell: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalLeads: 0,
-    approvedLeads: 0,
-    dmsSent: 0,
-    replyRate: 0,
-    positiveReplyRate: 0,
-    bookingRate: 0,
-    followUpRate: 0,
-    leadsContacted: 0,
-    activeCampaigns: 0,
-  });
+
+  // Derived, not stored. Keeping these in state meant every lead mutation
+  // committed twice: once for setLeads, then again when the effect wrote the
+  // recomputed values back — and the second commit re-rendered the whole
+  // Approval Queue table for no visible change.
+  const filteredLeads = useMemo(
+    () => filterUtils.filterLeads(leads, config),
+    [leads, config],
+  );
+  const stats = useMemo(() => filterUtils.calculateStats(leads), [leads]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [dailySendCount, setDailySendCount] = useState(0);
@@ -195,29 +193,54 @@ const DashboardShell: React.FC = () => {
   useEffect(() => {
     if (!userId) return;
 
+    // Only what the dashboard needs to paint. The inbox (conversations +
+    // every message ever synced) used to be awaited here too, so first paint
+    // was blocked on the user's entire chat history.
     Promise.all([
       db.getLeads(userId),
       db.getConfig(userId),
       db.getDMUsage(userId),
-      db.getConversations(userId),
-      db.getMessages(userId),
-    ]).then(([savedLeads, savedConfig, dmUsage, savedConvos, savedMessages]) => {
+    ]).then(([savedLeads, savedConfig, dmUsage]) => {
       setLeads(savedLeads ?? []);
       setConfig(savedConfig ?? DEFAULT_CONFIG);
       setDailySendCount(storage.getDailySends().count);
       setDmUsed(dmUsage.used);
-      setConversations(savedConvos ?? []);
-      setMessages(savedMessages ?? []);
       setDataLoading(false);
     });
   }, [userId]);
 
-  // Recalculate filtered leads + stats on any leads/config change
+  // Inbox history loads behind first paint. Until it lands, extension snapshots
+  // are parked rather than ingested: `ingestThreads` dedupes echoed outbound
+  // messages against the messages already in memory, so ingesting against a
+  // half-loaded inbox would duplicate our optimistic sends.
+  const inboxReady = useRef(false);
+  const pendingThreads = useRef<RawThread[] | null>(null);
+  const ingestInboxRef = useRef<(threads: RawThread[]) => Conversation[]>(() => []);
+
   useEffect(() => {
-    const filtered = filterUtils.filterLeads(leads, config);
-    setFilteredLeads(filtered);
-    setStats(filterUtils.calculateStats(leads));
-  }, [leads, config]);
+    if (!userId) return;
+    let cancelled = false;
+
+    Promise.all([db.getConversations(userId), db.getMessages(userId)]).then(
+      ([savedConvos, savedMessages]) => {
+        if (cancelled) return;
+        setConversations(savedConvos ?? []);
+        setMessages(savedMessages ?? []);
+        convosRef.current = savedConvos ?? [];
+        messagesRef.current = savedMessages ?? [];
+        inboxReady.current = true;
+
+        const parked = pendingThreads.current;
+        pendingThreads.current = null;
+        if (parked) ingestInboxRef.current(parked);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      inboxReady.current = false;
+    };
+  }, [userId]);
 
   // Mark leads as sent for real, based on the handles the extension confirms
   // it actually sent (idempotent — only flips leads not already sent).
@@ -246,6 +269,11 @@ const DashboardShell: React.FC = () => {
   // conversations that gained a NEW inbound message (for autopilot).
   const ingestInbox = useCallback((threads: RawThread[]): Conversation[] => {
     if (!Array.isArray(threads) || threads.length === 0) return [];
+    if (!inboxReady.current) {
+      // Keep the newest snapshot; the loader replays it once history is in.
+      pendingThreads.current = threads;
+      return [];
+    }
     const { conversations, messages, changedConversations, newMessages } = ingestThreads(
       threads, convosRef.current, messagesRef.current,
     );
@@ -263,6 +291,9 @@ const DashboardShell: React.FC = () => {
     );
     return changedConversations.filter((c) => c.needsReply && newInboundConvIds.has(c.id));
   }, [user]);
+
+  // Let the loader replay a parked snapshot through the current ingest closure.
+  useEffect(() => { ingestInboxRef.current = ingestInbox; }, [ingestInbox]);
 
   // Ref so the bridge effect can call the latest autopilot handler without
   // re-subscribing (defined further down).

@@ -1,15 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Lead, AppConfig } from '../../lib/types';
 import {
-    Sparkles, Send, Trash2, Check, X, Edit3,
-    Download, ChevronDown, Users, MessageSquare,
-    CheckCircle, XCircle, Clock, Search, Filter, MessageCircle,
-    MessagesSquare, CalendarCheck, Timer,
+    Sparkles, Send, Trash2, Download, ChevronDown, Users,
+    CheckCircle, Search, Filter, Timer,
 } from 'lucide-react';
 import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
 import { storage } from '../../lib/storage';
-import { ReplyBattlecards } from './ReplyBattlecards';
+import { useStable } from '../../lib/useStable';
+import { QueueRow } from './QueueRow';
 
 interface ApprovalQueueProps {
     leads: Lead[];
@@ -30,10 +29,24 @@ interface ApprovalQueueProps {
 
 type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
 
-function formatFollowers(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-    return String(n);
+/** Rows mounted at once. Keeps the table's DOM flat as the lead count grows. */
+const PAGE_SIZE = 50;
+
+/** Page numbers to show, with `null` standing in for an elided run. */
+function pageWindow(current: number, total: number): (number | null)[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+    const pages = new Set([1, total, current, current - 1, current + 1]);
+    const shown = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+
+    const out: (number | null)[] = [];
+    let prev = 0;
+    for (const p of shown) {
+        if (prev && p - prev > 1) out.push(null);
+        out.push(p);
+        prev = p;
+    }
+    return out;
 }
 
 function exportToCSV(leads: Lead[]) {
@@ -124,6 +137,35 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         });
     }, [leads, statusFilter, search, campaignFilter, applySettingsFilter, config]);
 
+    // ── Pagination ────────────────────────────────────────────────────────────
+    // Only a page of rows is mounted: 250 leads used to put ~11k elements and
+    // ~1.5k svg icons in the DOM at once. Bulk actions below deliberately still
+    // operate on the whole `filtered` set, not just the visible page.
+    const [page, setPage] = useState(1);
+
+    // Changing what's being filtered should start over at page 1 — adjusted
+    // during render (React's sanctioned pattern) rather than in an effect.
+    const filterKey = `${statusFilter}|${search}|${campaignFilter}|${applySettingsFilter}`;
+    const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+    if (filterKey !== lastFilterKey) {
+        setLastFilterKey(filterKey);
+        setPage(1);
+    }
+
+    const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    // Clamp during render rather than in an effect, so filtering down to fewer
+    // pages never shows an empty table for a frame.
+    const safePage = Math.min(page, pageCount);
+    if (safePage !== page) setPage(safePage);
+
+    const visible = useMemo(
+        () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+        [filtered, safePage],
+    );
+    const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+    const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
+    const pageNumbers = useMemo(() => pageWindow(safePage, pageCount), [safePage, pageCount]);
+
     const counts = useMemo(() => ({
         all: leads.length,
         pending: leads.filter(l => !l.dmContent).length,
@@ -132,17 +174,28 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         rejected: leads.filter(l => l.rejected).length,
     }), [leads]);
 
-    const startEdit = (lead: Lead) => {
+    // These are handed to 250 memoized rows — every one must keep a stable
+    // identity or React.memo compares unequal and the whole table re-renders.
+    const startEdit = useStable((lead: Lead) => {
         setEditingId(lead.id);
         setEditDraft(lead.dmContent ?? '');
-    };
+    });
 
-    const saveEdit = (id: string) => {
+    const saveEdit = useStable((id: string) => {
         onUpdateDM?.(id, editDraft);
         setEditingId(null);
-    };
+    });
 
-    const cancelEdit = () => setEditingId(null);
+    const cancelEdit = useStable(() => setEditingId(null));
+
+    const handleEditDraftChange = useStable((value: string) => setEditDraft(value));
+    const approveLead = useStable((id: string) => onApproveLead?.(id));
+    const rejectLead = useStable((id: string) => onRejectLead?.(id));
+    const updateLead = useStable((lead: Lead) => onUpdateLead?.(lead));
+    const generateForLead = useStable((lead: Lead) => onGenerateDMs([lead]));
+    const toggleBattlecards = useStable((id: string) =>
+        setBattlecardsFor(prev => (prev === id ? null : id)),
+    );
 
     // Normalize + persist the delay range whenever an input changes.
     const commitDelay = (min: number, max: number) => {
@@ -175,12 +228,12 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     };
 
     // ── Bulk selection ────────────────────────────────────────────────────────
-    const toggleSelect = (id: string) => setSelected(prev => {
+    const toggleSelect = useStable((id: string) => setSelected(prev => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
         else next.add(id);
         return next;
-    });
+    }));
 
     const allFilteredSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id));
 
@@ -218,11 +271,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         onApproveLeads?.(readyIds);
     };
 
-    const handleDelete = (lead: Lead) => {
+    const handleDelete = useStable((lead: Lead) => {
         if (window.confirm(`Delete @${lead.handle} from the queue? This cannot be undone.`)) {
             onDeleteLead?.(lead.id);
         }
-    };
+    });
 
     return (
         <div className="space-y-5">
@@ -420,243 +473,30 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04]">
-                            {filtered.map(lead => {
-                                const isEditing = editingId === lead.id;
-                                const rowClass = lead.approved
-                                    ? 'bg-emerald-500/[0.03]'
-                                    : lead.rejected
-                                    ? 'bg-red-500/[0.03]'
-                                    : '';
-
-                                return (
-                                    <React.Fragment key={lead.id}>
-                                    <tr className={`transition-colors hover:bg-white/[0.02] ${selected.has(lead.id) ? 'bg-emerald-500/[0.06]' : rowClass}`}>
-                                        {/* Select */}
-                                        <td className="pl-5 pr-2 py-4 align-top">
-                                            <input
-                                                type="checkbox"
-                                                checked={selected.has(lead.id)}
-                                                onChange={() => toggleSelect(lead.id)}
-                                                className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
-                                            />
-                                        </td>
-                                        {/* Prospect */}
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3">
-                                                {lead.profilePicUrl ? (
-                                                    <img src={lead.profilePicUrl} alt={lead.name}
-                                                        className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 flex-shrink-0"
-                                                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-cyan-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                                        {(lead.name || lead.handle)[0]?.toUpperCase()}
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <div className="font-medium text-white text-sm leading-tight">{lead.name}</div>
-                                                    <div className="text-zinc-600 text-xs mt-0.5">@{lead.handle}</div>
-                                                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-700">
-                                                        <Users className="w-3 h-3" />
-                                                        {formatFollowers(lead.followers)}
-                                                        {lead.businessAccount && (
-                                                            <span className="bg-amber-500/10 text-amber-500 px-1 py-0.5 rounded">Biz</span>
-                                                        )}
-                                                    </div>
-                                                    {lead.campaignName && (
-                                                        <div className="mt-1 inline-flex items-center gap-1 text-[9px] text-violet-300/80 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded-full max-w-[140px] truncate">
-                                                            {lead.campaignName}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        {/* Bio / Profile data */}
-                                        <td className="px-5 py-4">
-                                            <p className="text-xs text-zinc-500 leading-relaxed line-clamp-3">
-                                                {lead.bio ?? <span className="text-zinc-700 italic">No bio</span>}
-                                            </p>
-                                            {lead.city && (
-                                                <p className="text-[10px] text-zinc-700 mt-1">📍 {lead.city}</p>
-                                            )}
-                                        </td>
-
-                                        {/* DM */}
-                                        <td className="px-5 py-4">
-                                            {isEditing ? (
-                                                <div className="space-y-2">
-                                                    <textarea
-                                                        value={editDraft}
-                                                        onChange={e => setEditDraft(e.target.value)}
-                                                        rows={4}
-                                                        autoFocus
-                                                        className="w-full bg-[#030604] border border-emerald-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none"
-                                                    />
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => saveEdit(lead.id)}
-                                                            className="flex items-center gap-1 px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg text-xs hover:bg-emerald-500/30 transition-colors">
-                                                            <Check className="w-3 h-3" /> Save
-                                                        </button>
-                                                        <button onClick={cancelEdit}
-                                                            className="flex items-center gap-1 px-3 py-1 bg-white/5 text-zinc-400 rounded-lg text-xs hover:bg-white/10 transition-colors">
-                                                            <X className="w-3 h-3" /> Cancel
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : lead.dmContent ? (
-                                                <p className="text-xs text-zinc-300 leading-relaxed line-clamp-4 cursor-pointer hover:line-clamp-none transition-all"
-                                                    title="Click to see full DM">
-                                                    {lead.dmContent}
-                                                </p>
-                                            ) : (
-                                                <span className="text-xs text-zinc-700 italic">Pending generation…</span>
-                                            )}
-                                        </td>
-
-                                        {/* Status */}
-                                        <td className="px-5 py-4">
-                                            {lead.approved ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                    <CheckCircle className="w-3 h-3" /> Approved
-                                                </span>
-                                            ) : lead.rejected ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-                                                    <XCircle className="w-3 h-3" /> Rejected
-                                                </span>
-                                            ) : lead.dmContent ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                                    <MessageSquare className="w-3 h-3" /> Ready
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-zinc-800/60 text-zinc-500 border border-white/5">
-                                                    <Clock className="w-3 h-3" /> Pending
-                                                </span>
-                                            )}
-                                            {lead.booked && (
-                                                <span className="block mt-1.5 text-[10px] font-medium text-emerald-400">Booked ✓</span>
-                                            )}
-                                        </td>
-
-                                        {/* Actions */}
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-1">
-                                                {/* Edit */}
-                                                {lead.dmContent && !isEditing && (
-                                                    <button
-                                                        onClick={() => startEdit(lead)}
-                                                        title="Edit DM"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
-                                                    >
-                                                        <Edit3 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-
-                                                {/* Approve */}
-                                                {lead.dmContent && !lead.approved && (
-                                                    <button
-                                                        onClick={() => onApproveLead?.(lead.id)}
-                                                        title="Approve"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
-                                                    >
-                                                        <Check className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-
-                                                {/* Reject */}
-                                                {!lead.rejected && (
-                                                    <button
-                                                        onClick={() => onRejectLead?.(lead.id)}
-                                                        title="Reject"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-
-                                                {/* Mark replied */}
-                                                {lead.dmSent && !lead.replied && (
-                                                    <button
-                                                        onClick={() => {
-                                                            onUpdateLead?.({ ...lead, replied: true });
-                                                            setBattlecardsFor(lead.id);
-                                                        }}
-                                                        title="Mark as Replied"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-                                                    >
-                                                        <MessageCircle className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-                                                {/* Mark positive reply */}
-                                                {lead.replied && !lead.positiveReply && (
-                                                    <button
-                                                        onClick={() => onUpdateLead?.({ ...lead, positiveReply: true })}
-                                                        title="Mark as Positive Reply"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
-                                                    >
-                                                        <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
-                                                    </button>
-                                                )}
-                                                {/* Mark booked */}
-                                                {lead.positiveReply && !lead.booked && (
-                                                    <button
-                                                        onClick={() => onUpdateLead?.({ ...lead, booked: true })}
-                                                        title="Mark as Booked"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
-                                                    >
-                                                        <CalendarCheck className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-                                                {/* Reply battlecards */}
-                                                {lead.replied && (
-                                                    <button
-                                                        onClick={() => setBattlecardsFor(prev => prev === lead.id ? null : lead.id)}
-                                                        title="Reply battlecards"
-                                                        className={`p-1.5 rounded-lg transition-all ${battlecardsFor === lead.id ? 'text-cyan-400 bg-cyan-500/10' : 'text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10'}`}
-                                                    >
-                                                        <MessagesSquare className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-
-                                                {/* Generate DM for this lead */}
-                                                {!lead.dmContent && (
-                                                    <button
-                                                        onClick={() => onGenerateDMs([lead])}
-                                                        disabled={isGenerating}
-                                                        title="Generate DM"
-                                                        className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all disabled:opacity-40"
-                                                    >
-                                                        <Sparkles className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-
-                                                {/* Delete */}
-                                                {onDeleteLead && (
-                                                    <button
-                                                        onClick={() => handleDelete(lead)}
-                                                        title="Delete"
-                                                        className="p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {battlecardsFor === lead.id && lead.replied && (
-                                        <tr>
-                                            <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
-                                                <ReplyBattlecards
-                                                    lead={lead}
-                                                    calendarLink={config.calendarLink}
-                                                    onUpdateLead={onUpdateLead}
-                                                />
-                                            </td>
-                                        </tr>
-                                    )}
-                                    </React.Fragment>
-                                );
-                            })}
+                            {visible.map(lead => (
+                                <QueueRow
+                                    key={lead.id}
+                                    lead={lead}
+                                    isSelected={selected.has(lead.id)}
+                                    isEditing={editingId === lead.id}
+                                    editDraft={editingId === lead.id ? editDraft : null}
+                                    showBattlecards={battlecardsFor === lead.id}
+                                    isGenerating={isGenerating}
+                                    calendarLink={config.calendarLink}
+                                    canDelete={Boolean(onDeleteLead)}
+                                    onToggleSelect={toggleSelect}
+                                    onStartEdit={startEdit}
+                                    onSaveEdit={saveEdit}
+                                    onCancelEdit={cancelEdit}
+                                    onEditDraftChange={handleEditDraftChange}
+                                    onApprove={approveLead}
+                                    onReject={rejectLead}
+                                    onUpdateLead={updateLead}
+                                    onToggleBattlecards={toggleBattlecards}
+                                    onGenerateDM={generateForLead}
+                                    onDelete={handleDelete}
+                                />
+                            ))}
 
                             {filtered.length === 0 && (
                                 <tr>
@@ -675,6 +515,49 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         </tbody>
                     </table>
                 </div>
+
+                {/* ── Pagination ──────────────────────────────────────────── */}
+                {pageCount > 1 && (
+                    <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-white/5">
+                        <span className="text-[10px] text-zinc-700 font-mono">
+                            {rangeStart}–{rangeEnd} of {filtered.length}
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page <= 1}
+                                className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                            >
+                                ‹ Prev
+                            </button>
+                            {pageNumbers.map((p, i) =>
+                                p === null ? (
+                                    <span key={`gap-${i}`} className="px-1 text-xs text-zinc-700">…</span>
+                                ) : (
+                                    <button
+                                        key={p}
+                                        onClick={() => setPage(p)}
+                                        aria-current={p === page ? 'page' : undefined}
+                                        className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                                            p === page
+                                                ? 'bg-emerald-500/15 text-emerald-400'
+                                                : 'text-zinc-600 hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ),
+                            )}
+                            <button
+                                onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+                                disabled={page >= pageCount}
+                                className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                            >
+                                Next ›
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
