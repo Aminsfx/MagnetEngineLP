@@ -1,5 +1,6 @@
 import { Lead } from './types';
 import { invokeFunction } from './functions';
+import { intake } from './intake';
 
 /**
  * Instagram scraping.
@@ -27,86 +28,12 @@ export interface SearchParams {
     enhanceUserSearchWithFacebookPage: boolean;
 }
 
-/** Map one Apify result item → Lead (tries multiple field-name aliases for resilience) */
-function mapItem(item: Record<string, any>, campaignId: string): Lead | null {
-    const handle = item.username ?? item.handle ?? item.userName ?? '';
-    if (!handle) return null;
-
-    const name        = item.fullName ?? item.name ?? item.displayName ?? handle;
-    const followers   = Number(item.followersCount ?? item.followers ?? 0);
-    const following   = Number(item.followingCount ?? item.following ?? 0);
-    const postsCount  = Number(item.postsCount ?? item.mediaCount ?? item.posts ?? 0);
-    const bio         = item.biography ?? item.bio ?? item.description ?? '';
-    const isPrivate   = Boolean(item.isPrivate ?? false);
-    const verified    = Boolean(item.isVerified ?? item.verified ?? false);
-    const businessAccount   = Boolean(item.isBusinessAccount ?? item.isBusiness ?? false);
-    const businessCategory: string | undefined = item.businessCategoryName ?? item.category ?? undefined;
-    const profilePicUrl: string | undefined    = item.profilePicUrl ?? item.profilePicUrlHD ?? undefined;
-    const city: string | undefined             = item.city ?? item.locationName ?? undefined;
-
-    return {
-        id: crypto.randomUUID(),
-        campaignId,
-        handle,
-        name: name || handle,
-        followers,
-        following,
-        postsCount,
-        bio: bio || undefined,
-        isPrivate,
-        verified,
-        businessAccount,
-        businessCategory,
-        profilePicUrl,
-        city,
-        status: 'cold',
-        dmSent: false,
-        replied: false,
-    };
-}
-
 // ─── Followers / Following scraper ───────────────────────────────────────────
 export interface FollowersParams {
     usernames: string[];            // Instagram handles to scrape from
     type: 'followers' | 'following';
     maxItem: number;                // per username
     profileEnriched: boolean;       // true = fetch full bio + follower counts
-}
-
-function mapFollowerItem(item: Record<string, any>, campaignId: string): Lead | null {
-    const handle = item.username ?? '';
-    if (!handle) return null;
-
-    const name           = item.full_name ?? item.fullName ?? handle;
-    const bio            = item.biography ?? item.bio ?? '';
-    const profilePicUrl  = item.profile_pic_url ?? item.profilePicUrl ?? undefined;
-    const isPrivate      = Boolean(item.is_private ?? false);
-    const verified       = Boolean(item.is_verified ?? item.isVerified ?? false);
-    const followers      = Number(item.followersCount ?? item.edge_followed_by?.count ?? item.followers_count ?? 0);
-    const following      = Number(item.followingCount ?? item.edge_follow?.count ?? item.following_count ?? 0);
-    const businessAccount   = Boolean(item.isBusinessAccount ?? item.is_business_account ?? false);
-    const businessCategory  = item.businessCategoryName ?? item.business_category_name ?? item.category_name ?? undefined;
-    const city: string | undefined = item.city ?? undefined;
-
-    return {
-        id: crypto.randomUUID(),
-        campaignId,
-        handle,
-        name: name || handle,
-        followers,
-        following,
-        postsCount: 0,
-        bio: bio || undefined,
-        isPrivate,
-        verified,
-        businessAccount,
-        businessCategory,
-        profilePicUrl,
-        city,
-        status: 'cold',
-        dmSent: false,
-        replied: false,
-    };
 }
 
 // ─── Shared polling loop (calls the poll-scrape backend proxy) ────────────────
@@ -165,9 +92,7 @@ export async function runFollowersScrape(
 
     const items = await pollForItems(runId, 60, 'Scrape', onProgress);
     onProgress?.(`Mapping ${items.length} profiles…`);
-    const leads = items
-        .map(item => mapFollowerItem(item, campaignId))
-        .filter((l): l is Lead => l !== null);
+    const { leads } = intake({ source: 'followers', rows: items, campaignId });
     onProgress?.(`Done — ${leads.length} profiles scraped.`);
     return leads;
 }
@@ -199,9 +124,7 @@ export async function runApifyScrape(
 
     const items = await pollForItems(runId, 48, 'Scrape', onProgress);
     onProgress?.(`Mapping ${items.length} profiles…`);
-    const leads = items
-        .map(item => mapItem(item, campaignId))
-        .filter((l): l is Lead => l !== null);
+    const { leads } = intake({ source: 'search', rows: items, campaignId });
     onProgress?.(`Done — ${leads.length} profiles scraped.`);
     return leads;
 }

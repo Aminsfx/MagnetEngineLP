@@ -21,6 +21,7 @@ import { ingestThreads, type RawThread } from '../lib/inbox';
 import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
+import { dropKnownHandles } from '../lib/intake';
 import { Lead, AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
@@ -353,19 +354,13 @@ const DashboardShell: React.FC = () => {
   }, [user]);
 
   const handleAddLeads = useCallback(async (newLeads: Lead[]) => {
-    // De-dupe by handle against every lead already in the queue (any
-    // campaign) and within this batch itself — the same profile turns up
-    // across overlapping searches, repeat scrapes, and CSV re-imports.
-    const existingHandles = new Set(leadsRef.current.map((l) => l.handle.toLowerCase()));
-    const seenInBatch = new Set<string>();
-    const deduped: Lead[] = [];
-    for (const lead of newLeads) {
-      const handle = lead.handle.toLowerCase();
-      if (existingHandles.has(handle) || seenInBatch.has(handle)) continue;
-      seenInBatch.add(handle);
-      deduped.push(lead);
-    }
-    const duplicateCount = newLeads.length - deduped.length;
+    // Within-batch dedupe already happened in intake; this is the cross-batch
+    // half — the same profile turns up across overlapping searches, repeat
+    // scrapes, and CSV re-imports.
+    const { fresh: deduped, duplicates: duplicateCount } = dropKnownHandles(
+      newLeads,
+      leadsRef.current.map((l) => l.handle),
+    );
 
     if (deduped.length === 0) {
       if (duplicateCount > 0) {

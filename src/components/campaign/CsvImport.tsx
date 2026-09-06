@@ -2,52 +2,7 @@ import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
 import type { Lead, ColumnMapping } from '../../lib/types';
-
-// ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-export function parseFollowers(raw: string | undefined): number {
-    if (!raw) return 0;
-    const s = String(raw).trim().replace(/,/g, '');
-    const m = s.match(/^([\d.]+)\s*([kKmM])?$/);
-    if (!m) return 0;
-    const n = parseFloat(m[1]);
-    if (!Number.isFinite(n)) return 0;
-    const mult = m[2]?.toLowerCase() === 'm' ? 1_000_000 : m[2]?.toLowerCase() === 'k' ? 1_000 : 1;
-    return Math.round(n * mult);
-}
-
-export function parseBool(raw: string | undefined): boolean {
-    const s = String(raw ?? '').trim().toLowerCase();
-    return s === 'true' || s === '1' || s === 'yes';
-}
-
-export function cleanHandle(raw: string | undefined): string {
-    let s = String(raw ?? '').trim().toLowerCase();
-    // Full URLs → last path segment
-    if (s.includes('instagram.com')) {
-        s = s.replace(/\/+$/, '');
-        s = s.slice(s.lastIndexOf('/') + 1);
-    }
-    return s.replace(/^@/, '').trim();
-}
-
-const ALIASES: Record<keyof ColumnMapping, string[]> = {
-    handle: ['username', 'handle', 'ig', 'instagram', 'username', 'account'],
-    name: ['fullname', 'name', 'fullname', 'displayname'],
-    followers: ['followerscount', 'followers', 'followercount'],
-    bio: ['biography', 'bio', 'description', 'about'],
-    isPrivate: ['private', 'isprivate', 'isprivate'],
-};
-
-export function autoMap(headers: string[]): ColumnMapping {
-    const mapping: ColumnMapping = {};
-    const normalized = headers.map(h => ({ raw: h, norm: h.toLowerCase().replace(/[\s_]/g, '') }));
-    (Object.keys(ALIASES) as Array<keyof ColumnMapping>).forEach(field => {
-        const hit = normalized.find(h => ALIASES[field].includes(h.norm));
-        if (hit) mapping[field] = hit.raw;
-    });
-    return mapping;
-}
+import { intake, autoMap } from '../../lib/intake';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -95,34 +50,8 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
         });
     };
 
-    const buildLeads = (): { leads: Lead[]; skipped: number } => {
-        if (!mapping.handle) return { leads: [], skipped: rows.length };
-        const campaignId = crypto.randomUUID();
-        const createdAt = new Date().toISOString();
-        const seen = new Set<string>();
-        const leads: Lead[] = [];
-        let skipped = 0;
-
-        for (const row of rows) {
-            const handle = cleanHandle(row[mapping.handle]);
-            if (!handle || seen.has(handle)) { skipped++; continue; }
-            seen.add(handle);
-            leads.push({
-                id: crypto.randomUUID(),
-                campaignId,
-                handle,
-                name: mapping.name ? String(row[mapping.name] ?? '').trim() || handle : handle,
-                followers: mapping.followers ? parseFollowers(row[mapping.followers]) : 0,
-                bio: mapping.bio ? String(row[mapping.bio] ?? '').trim() || undefined : undefined,
-                isPrivate: mapping.isPrivate ? parseBool(row[mapping.isPrivate]) : false,
-                status: 'cold',
-                dmSent: false,
-                replied: false,
-            });
-        }
-        void createdAt;
-        return { leads, skipped };
-    };
+    const buildLeads = (): { leads: Lead[]; skipped: number } =>
+        intake({ source: 'csv', rows, mapping, campaignId: crypto.randomUUID() });
 
     const { leads: previewLeads, skipped } = rows.length > 0 ? buildLeads() : { leads: [], skipped: 0 };
 
