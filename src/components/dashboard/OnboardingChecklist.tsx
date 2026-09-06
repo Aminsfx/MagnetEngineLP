@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, X, ChevronRight, Rocket } from 'lucide-react';
 import { Lead, AppConfig } from '../../lib/types';
+import { alpha, CARD_BEZEL, CHANNEL } from '../../lib/theme';
 
 interface OnboardingChecklistProps {
   leads: Lead[];
@@ -82,23 +83,23 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
   return (
     <div
       className="rounded-[1.5rem] p-[1px] mb-6"
-      style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(255,255,255,0.04) 60%, rgba(6,182,212,0.08) 100%)' }}
+      style={{ background: `linear-gradient(135deg, ${alpha(CHANNEL.brand, 0.15)} 0%, ${alpha(CHANNEL.white, 0.04)} 60%, ${alpha(CHANNEL.info, 0.08)} 100%)` }}
     >
       <div
-        className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6 relative overflow-hidden"
-        style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}
+        className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 relative overflow-hidden"
+        style={CARD_BEZEL.inner}
       >
         {/* Background accent glow */}
-        <div className="absolute top-0 right-0 w-64 h-32 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-64 h-32 bg-brand-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Header */}
         <div className="flex items-start justify-between mb-5 relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
-              <Rocket className="w-4 h-4 text-emerald-400" />
+            <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
+              <Rocket className="w-4 h-4 text-brand-400" />
             </div>
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">Quick Start</p>
+              <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">Quick Start</p>
               <h3 className="text-sm font-semibold text-white tracking-tight leading-none">
                 {completedCount} of {steps.length} steps complete
               </h3>
@@ -107,7 +108,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
           <button
             onClick={handleDismiss}
             id="onboarding-dismiss-btn"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-all"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-600 hover:text-neutral-300 hover:bg-white/5 transition-all"
             title="Dismiss checklist"
           >
             <X className="w-3.5 h-3.5" />
@@ -117,7 +118,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
         {/* Progress bar */}
         <div className="h-1 bg-white/5 rounded-full mb-5 overflow-hidden relative z-10">
           <div
-            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-700"
+            className="h-full bg-gradient-to-r from-brand-500 to-info-500 rounded-full transition-all duration-700"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -129,28 +130,28 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
               key={step.id}
               className={`rounded-xl p-3 border transition-all duration-300 ${
                 step.complete
-                  ? 'bg-emerald-500/6 border-emerald-500/15'
+                  ? 'bg-positive-500/6 border-positive-500/15'
                   : 'bg-white/3 border-white/7 hover:border-white/12'
               }`}
             >
               <div className="flex items-start gap-2 mb-2">
                 <span className="flex-shrink-0 mt-0.5">
                   {step.complete ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-positive-400" />
                   ) : (
-                    <Circle className="w-3.5 h-3.5 text-zinc-700" />
+                    <Circle className="w-3.5 h-3.5 text-neutral-700" />
                   )}
                 </span>
-                <span className={`text-[11px] font-medium leading-snug ${step.complete ? 'text-emerald-400 line-through opacity-60' : 'text-white'}`}>
+                <span className={`text-[11px] font-medium leading-snug ${step.complete ? 'text-positive-400 line-through opacity-60' : 'text-white'}`}>
                   {i + 1}. {step.label}
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-600 leading-relaxed mb-2 pl-5">{step.description}</p>
+              <p className="text-[10px] text-neutral-600 leading-relaxed mb-2 pl-5">{step.description}</p>
               {!step.complete && (
                 <Link
                   to={step.path}
                   id={`onboarding-step-${step.id}`}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 hover:text-emerald-400 transition-colors pl-5"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-500 hover:text-brand-400 transition-colors pl-5"
                 >
                   {step.linkText}
                   <ChevronRight className="w-2.5 h-2.5" />

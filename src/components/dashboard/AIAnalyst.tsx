@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, AlertTriangle, CheckCircle, Info, Zap, TrendingUp, TrendingDown } from 'lucide-react';
 import { DashboardStats } from '../../lib/types';
+import { CARD_BEZEL } from '../../lib/theme';
 
 interface AIAnalystProps {
     stats: DashboardStats;
@@ -132,11 +133,11 @@ function buildInsights(stats: DashboardStats): Insight[] {
 }
 
 const insightStyle: Record<InsightType, string> = {
-    critical: 'bg-red-500/8 border-red-500/20 text-red-400',
-    warning:  'bg-amber-500/8 border-amber-500/20 text-amber-400',
-    tip:      'bg-cyan-500/8 border-cyan-500/20 text-cyan-400',
-    success:  'bg-emerald-500/8 border-emerald-500/20 text-emerald-400',
-    info:     'bg-white/4 border-white/8 text-zinc-400',
+    critical: 'bg-danger-500/8 border-danger-500/20 text-danger-400',
+    warning:  'bg-caution-500/8 border-caution-500/20 text-caution-400',
+    tip:      'bg-info-500/8 border-info-500/20 text-info-400',
+    success:  'bg-positive-500/8 border-positive-500/20 text-positive-400',
+    info:     'bg-white/4 border-white/8 text-neutral-400',
 };
 
 const analysisMessages = [
@@ -180,31 +181,30 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
     ].reduce((a, b) => a.value >= b.value ? a : b);
 
     return (
-        <div className="rounded-[1.5rem] p-[1px] h-full"
-            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}>
-            <div className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6 h-full flex flex-col relative overflow-hidden"
-                style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}>
+        <div className="rounded-[1.5rem] p-[1px] h-full" style={CARD_BEZEL.outer}>
+            <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 h-full flex flex-col relative overflow-hidden"
+                style={CARD_BEZEL.inner}>
 
                 {/* Background glow */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-info-500/5 rounded-full blur-3xl pointer-events-none" />
 
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <div className="w-8 h-8 rounded-xl bg-info-500/10 border border-info-500/20 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-info-400" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">AI Engine</p>
+                        <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">AI Engine</p>
                         <h3 className="text-sm font-semibold text-white tracking-tight leading-none">Analyst</h3>
                     </div>
                 </div>
 
                 {/* Typewriter feed */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/3 border border-white/6 mb-4">
-                    <Zap className="w-3 h-3 text-emerald-500 flex-shrink-0" />
-                    <span className="text-[11px] font-mono text-zinc-500 truncate">
+                    <Zap className="w-3 h-3 text-brand-500 flex-shrink-0" />
+                    <span className="text-[11px] font-mono text-neutral-500 truncate">
                         {typedText}
-                        <span className="animate-pulse text-emerald-500">|</span>
+                        <span className="animate-pulse text-brand-500">|</span>
                     </span>
                 </div>
 
@@ -219,7 +219,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
                             <span className="mt-0.5 flex-shrink-0">{insight.icon}</span>
                             <div className="min-w-0">
                                 <p className="text-[11px] font-semibold mb-0.5">{insight.title}</p>
-                                <p className="text-[11px] leading-relaxed text-zinc-400">{insight.text}</p>
+                                <p className="text-[11px] leading-relaxed text-neutral-400">{insight.text}</p>
                             </div>
                         </div>
                     ))}
@@ -227,8 +227,8 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
 
                 {/* Footer stat */}
                 <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-700 font-mono uppercase tracking-widest">{bestMetric.label}</span>
-                    <span className="text-sm font-semibold text-emerald-400">
+                    <span className="text-[10px] text-neutral-700 font-mono uppercase tracking-widest">{bestMetric.label}</span>
+                    <span className="text-sm font-semibold text-positive-400">
                         {bestMetric.value.toFixed(1)}%
                     </span>
                 </div>

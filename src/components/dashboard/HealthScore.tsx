@@ -1,6 +1,7 @@
 import React from 'react';
 import { Activity, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import type { Lead } from '../../lib/types';
+import { CARD_BEZEL } from '../../lib/theme';
 
 type Rag = 'green' | 'yellow' | 'red';
 
@@ -74,9 +75,9 @@ export function computeHealth(leads: Lead[], now: Date = new Date()): {
 }
 
 const RAG_STYLE: Record<Rag, string> = {
-    green: 'text-emerald-400 bg-emerald-500/8 border-emerald-500/20',
-    yellow: 'text-amber-400 bg-amber-500/8 border-amber-500/20',
-    red: 'text-red-400 bg-red-500/8 border-red-500/20',
+    green: 'text-positive-400 bg-positive-500/8 border-positive-500/20',
+    yellow: 'text-caution-400 bg-caution-500/8 border-caution-500/20',
+    red: 'text-danger-400 bg-danger-500/8 border-danger-500/20',
 };
 
 const RAG_ICON: Record<Rag, React.ReactNode> = {
@@ -91,19 +92,19 @@ export const HealthScore: React.FC<{ leads: Lead[] }> = ({ leads }) => {
     return (
         <div
             className="rounded-[1.5rem] p-[1px]"
-            style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)' }}
+            style={CARD_BEZEL.outer}
         >
             <div
-                className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-6"
-                style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}
+                className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6"
+                style={CARD_BEZEL.inner}
             >
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                            <Activity className="w-4 h-4 text-emerald-400" />
+                        <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-brand-400" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-semibold tracking-[0.2em] text-zinc-600 uppercase">This Week</p>
+                            <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">This Week</p>
                             <h3 className="text-sm font-semibold text-white tracking-tight leading-none">Outreach Health</h3>
                         </div>
                     </div>
@@ -115,7 +116,7 @@ export const HealthScore: React.FC<{ leads: Lead[] }> = ({ leads }) => {
                 </div>
 
                 {leads.length === 0 ? (
-                    <p className="text-xs text-zinc-600">Add your first leads to start tracking outreach health.</p>
+                    <p className="text-xs text-neutral-600">Add your first leads to start tracking outreach health.</p>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {checks.map(check => (

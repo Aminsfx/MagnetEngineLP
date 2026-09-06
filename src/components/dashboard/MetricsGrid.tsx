@@ -4,6 +4,7 @@ import {
     Calendar, RefreshCw, Mail, Layers, ArrowUpRight,
 } from 'lucide-react';
 import { DashboardStats } from '../../lib/types';
+import { alpha, CARD_BEZEL, CHANNEL } from '../../lib/theme';
 
 // Cold-DM industry benchmarks used for the overlay lines on the rate cards
 const BENCHMARKS = {
@@ -41,14 +42,17 @@ interface MetricCardProps {
     benchmark?: { text: string; tone: 'good' | 'bad' };
 }
 
+// A tile reports a number, so its classes speak `positive` rather than `brand`.
+// The glow says `brand` for the same emerald: CHANNEL carries one entry per hue,
+// and `positive` is an alias of it rather than a colour of its own.
 const MetricCard: React.FC<MetricCardProps> = ({
     title,
     value,
     subtext,
     change,
     icon,
-    glowColor = 'rgba(16,185,129,0.15)',
-    iconBg = 'bg-emerald-500/10 border-emerald-500/15',
+    glowColor = alpha(CHANNEL.brand, 0.15),
+    iconBg = 'bg-positive-500/10 border-positive-500/15',
     delay = 0,
     benchmark,
 }) => {
@@ -63,15 +67,15 @@ const MetricCard: React.FC<MetricCardProps> = ({
         <div
             className="rounded-[1.5rem] p-[1px]"
             style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+                ...CARD_BEZEL.outer,
                 opacity: visible ? 1 : 0,
                 transform: visible ? 'translateY(0)' : 'translateY(16px)',
                 transition: `opacity 0.55s ease ${delay}ms, transform 0.55s cubic-bezier(0.32,0.72,0,1) ${delay}ms`,
             }}
         >
             <div
-                className="bg-[#030A06] rounded-[calc(1.5rem-1px)] p-5 h-full relative overflow-hidden group cursor-default"
-                style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.04)' }}
+                className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-5 h-full relative overflow-hidden group cursor-default"
+                style={CARD_BEZEL.inner}
             >
                 {/* Hover glow orb */}
                 <div
@@ -85,7 +89,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
                         {icon}
                     </div>
                     {change && (
-                        <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/15 px-2 py-1 rounded-full">
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-positive-400 bg-positive-500/10 border border-positive-500/15 px-2 py-1 rounded-full">
                             <ArrowUpRight className="w-3 h-3" />
                             {change}
                         </span>
@@ -98,22 +102,22 @@ const MetricCard: React.FC<MetricCardProps> = ({
                 </p>
 
                 {/* Label */}
-                <p className="text-[10px] text-zinc-600 font-medium tracking-widest uppercase">{title}</p>
+                <p className="text-[10px] text-neutral-600 font-medium tracking-widest uppercase">{title}</p>
 
                 {/* Subtext */}
                 {subtext && (
-                    <p className="text-[10px] text-zinc-700 mt-1 leading-tight">{subtext}</p>
+                    <p className="text-[10px] text-neutral-700 mt-1 leading-tight">{subtext}</p>
                 )}
 
                 {/* Benchmark overlay */}
                 {benchmark && (
-                    <p className={`text-[10px] mt-1 font-medium ${benchmark.tone === 'good' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <p className={`text-[10px] mt-1 font-medium ${benchmark.tone === 'good' ? 'text-positive-400' : 'text-caution-400'}`}>
                         {benchmark.text}
                     </p>
                 )}
 
                 {/* Bottom accent */}
-                <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-brand-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </div>
         </div>
     );
@@ -131,18 +135,18 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 title="Approved Leads"
                 value={stats.approvedLeads.toLocaleString()}
                 subtext={`of ${stats.totalLeads} scraped`}
-                icon={<Users className="w-4.5 h-4.5 text-emerald-400" />}
-                glowColor="rgba(16,185,129,0.2)"
-                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                icon={<Users className="w-4.5 h-4.5 text-positive-400" />}
+                glowColor={alpha(CHANNEL.brand, 0.2)}
+                iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={0}
             />
             <MetricCard
                 title="DMs Sent"
                 value={stats.dmsSent.toLocaleString()}
                 subtext={`of ${stats.totalLeads} leads contacted`}
-                icon={<MessageSquare className="w-4.5 h-4.5 text-cyan-400" />}
-                glowColor="rgba(6,182,212,0.2)"
-                iconBg="bg-cyan-500/10 border-cyan-500/15"
+                icon={<MessageSquare className="w-4.5 h-4.5 text-info-400" />}
+                glowColor={alpha(CHANNEL.info, 0.2)}
+                iconBg="bg-info-500/10 border-info-500/15"
                 delay={60}
             />
             <MetricCard
@@ -150,9 +154,9 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={`${stats.replyRate}%`}
                 subtext="any reply to DM sent"
                 benchmark={benchmarkFor('replyRate', stats.replyRate)}
-                icon={<TrendingUp className="w-4.5 h-4.5 text-emerald-400" />}
-                glowColor="rgba(16,185,129,0.15)"
-                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                icon={<TrendingUp className="w-4.5 h-4.5 text-positive-400" />}
+                glowColor={alpha(CHANNEL.brand, 0.15)}
+                iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={120}
             />
             <MetricCard
@@ -160,9 +164,9 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={`${stats.positiveReplyRate}%`}
                 subtext="of replies showing interest"
                 benchmark={benchmarkFor('positiveReplyRate', stats.positiveReplyRate)}
-                icon={<ThumbsUp className="w-4.5 h-4.5 text-violet-400" />}
-                glowColor="rgba(139,92,246,0.2)"
-                iconBg="bg-violet-500/10 border-violet-500/15"
+                icon={<ThumbsUp className="w-4.5 h-4.5 text-neutral-400" />}
+                glowColor={alpha(CHANNEL.neutral, 0.2)}
+                iconBg="bg-neutral-500/10 border-neutral-500/15"
                 delay={180}
             />
 
@@ -172,36 +176,36 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={`${stats.bookingRate}%`}
                 subtext="positive replies → booked call"
                 benchmark={benchmarkFor('bookingRate', stats.bookingRate)}
-                icon={<Calendar className="w-4.5 h-4.5 text-amber-400" />}
-                glowColor="rgba(245,158,11,0.15)"
-                iconBg="bg-amber-500/10 border-amber-500/15"
+                icon={<Calendar className="w-4.5 h-4.5 text-caution-400" />}
+                glowColor={alpha(CHANNEL.caution, 0.15)}
+                iconBg="bg-caution-500/10 border-caution-500/15"
                 delay={240}
             />
             <MetricCard
                 title="Follow-up Rate"
                 value={`${stats.followUpRate}%`}
                 subtext="leads that received a follow-up"
-                icon={<RefreshCw className="w-4.5 h-4.5 text-zinc-400" />}
-                glowColor="rgba(161,161,170,0.12)"
-                iconBg="bg-zinc-500/10 border-zinc-500/15"
+                icon={<RefreshCw className="w-4.5 h-4.5 text-neutral-400" />}
+                glowColor={alpha(CHANNEL.neutral, 0.12)}
+                iconBg="bg-neutral-500/10 border-neutral-500/15"
                 delay={300}
             />
             <MetricCard
                 title="Leads Contacted"
                 value={stats.leadsContacted.toLocaleString()}
                 subtext="unique outreach touches"
-                icon={<Mail className="w-4.5 h-4.5 text-blue-400" />}
-                glowColor="rgba(96,165,250,0.15)"
-                iconBg="bg-blue-500/10 border-blue-500/15"
+                icon={<Mail className="w-4.5 h-4.5 text-neutral-400" />}
+                glowColor={alpha(CHANNEL.neutral, 0.15)}
+                iconBg="bg-neutral-500/10 border-neutral-500/15"
                 delay={360}
             />
             <MetricCard
                 title="Active Campaigns"
                 value={stats.activeCampaigns}
                 subtext="distinct campaign runs"
-                icon={<Layers className="w-4.5 h-4.5 text-emerald-400" />}
-                glowColor="rgba(16,185,129,0.18)"
-                iconBg="bg-emerald-500/10 border-emerald-500/15"
+                icon={<Layers className="w-4.5 h-4.5 text-positive-400" />}
+                glowColor={alpha(CHANNEL.brand, 0.18)}
+                iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={420}
             />
         </div>
