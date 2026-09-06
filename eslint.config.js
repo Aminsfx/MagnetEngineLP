@@ -70,10 +70,30 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',
-      globals: { ...globals.browser, ...globals.webextensions },
+      globals: {
+        ...globals.browser,
+        ...globals.webextensions,
+        // The extension has no build step, so protocol.js is a classic script
+        // that publishes these onto globalThis. background.js importScripts()
+        // it; content.js and popup.html load it first.
+        MAGNET_PROTOCOL: 'readonly',
+        isAppMessage: 'readonly',
+        messageKind: 'readonly',
+        readCampaign: 'readonly',
+        importScripts: 'readonly',
+      },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+    },
+  },
+
+  // ---- The file that DEFINES those globals ----
+  {
+    files: ['extension/protocol.js'],
+    rules: {
+      // It declares what the block above lists as globals, which is the point.
+      'no-redeclare': 'off',
     },
   },
 

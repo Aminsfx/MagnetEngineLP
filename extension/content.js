@@ -5,6 +5,10 @@
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Message names come from protocol.js, loaded first in content_scripts — the
+// same definition the background worker and the app use.
+const { APP_TO_EXT, EXT_TO_APP, RUNTIME } = MAGNET_PROTOCOL;
+
 // ── Web app: Relay campaign payload to background worker ──────
 // Runs on every non-Instagram page the manifest matches (localhost + the
 // production dashboard domain). To support a new domain, add it to
@@ -13,7 +17,7 @@ if (!window.location.hostname.includes("instagram.com")) {
     // Background → page: relay "actually sent" events and stat pushes into the
     // page so the app can reconcile real sends (not handoffs).
     chrome.runtime.onMessage.addListener((message) => {
-        if (message && typeof message.type === 'string' && message.type.startsWith('MAGNET_ENGINE_')) {
+        if (isAppMessage(message)) {
             window.postMessage(message, '*');
         }
     });
@@ -22,12 +26,12 @@ if (!window.location.hostname.includes("instagram.com")) {
         if (event.source !== window || !event.data.type) return;
 
         // Page → background: the app asks for the real sent count + sent log.
-        if (event.data.type === 'MAGNET_ENGINE_GET_STATS') {
+        if (event.data.type === APP_TO_EXT.GET_STATS) {
             try {
                 if (!chrome?.runtime?.sendMessage) return;
-                chrome.runtime.sendMessage({ action: 'getStats' }, (stats) => {
+                chrome.runtime.sendMessage({ action: RUNTIME.GET_STATS }, (stats) => {
                     if (chrome.runtime.lastError || !stats) return;
-                    window.postMessage({ type: 'MAGNET_ENGINE_STATS', ...stats }, '*');
+                    window.postMessage({ type: EXT_TO_APP.STATS, ...stats }, '*');
                 });
             } catch (e) {
                 console.warn("[MagnetEngine] getStats relay error:", e);
@@ -36,12 +40,12 @@ if (!window.location.hostname.includes("instagram.com")) {
         }
 
         // Page → background: the app asks for the latest inbox snapshot.
-        if (event.data.type === 'MAGNET_ENGINE_GET_INBOX') {
+        if (event.data.type === APP_TO_EXT.GET_INBOX) {
             try {
                 if (!chrome?.runtime?.sendMessage) return;
-                chrome.runtime.sendMessage({ action: 'getInbox' }, (res) => {
+                chrome.runtime.sendMessage({ action: RUNTIME.GET_INBOX }, (res) => {
                     if (chrome.runtime.lastError || !res) return;
-                    window.postMessage({ type: 'MAGNET_ENGINE_INBOX', threads: res.threads ?? [] }, '*');
+                    window.postMessage({ type: EXT_TO_APP.INBOX, threads: res.threads ?? [] }, '*');
                 });
             } catch (e) {
                 console.warn("[MagnetEngine] getInbox relay error:", e);
@@ -49,7 +53,7 @@ if (!window.location.hostname.includes("instagram.com")) {
             return;
         }
 
-        if (event.data.type === 'MAGNET_ENGINE_CAMPAIGN') {
+        if (event.data.type === APP_TO_EXT.CAMPAIGN) {
             console.log("[MagnetEngine] Campaign intercepted. Relaying to background...");
             try {
                 if (!chrome?.runtime?.sendMessage) {
@@ -158,7 +162,7 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
 
             if (chrome?.runtime?.sendMessage) {
                 chrome.runtime.sendMessage(
-                    { action: 'INBOX_SYNC', threads },
+                    { action: RUNTIME.INBOX_SYNC, threads },
                     () => void chrome.runtime.lastError,
                 );
             }
@@ -275,7 +279,7 @@ if (window.location.hostname.includes("instagram.com")) {
     function reportComplete(result, handle) {
         console.log(`[MagnetEngine] Reporting ${result} for @${handle}`);
         chrome.runtime.sendMessage({
-            action: "TASK_COMPLETE",
+            action: RUNTIME.TASK_COMPLETE,
             result: result, // 'success', 'failed', 'skipped'
             handle: handle
         });

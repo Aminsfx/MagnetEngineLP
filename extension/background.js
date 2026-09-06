@@ -1,25 +1,35 @@
 // MagnetEngine — Background Service Worker v2
 
+// The wire protocol is defined once, in protocol.js, and shared with the
+// content script (loaded first in content_scripts) and the app (which has a
+// typed adapter asserted to match).
+importScripts('protocol.js');
+const { APP_TO_EXT, EXT_TO_APP, RUNTIME, APP_HOSTS } = MAGNET_PROTOCOL;
+
 // Fallbacks used only if the web app didn't send a value with the campaign.
 const DEFAULT_DAILY_CAP = 40;   // the app passes its own dailySendCap from Settings
 const DEFAULT_MIN_DELAY = 3;
 const DEFAULT_MAX_DELAY = 8;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // One dispatch key. The campaign handoff used to arrive under `type` while
+    // everything else used `action`, so the listener read two different fields.
+    const kind = messageKind(request);
 
     // ── New campaign from web app ──────────────────────────────────
-    if (request.type === 'MAGNET_ENGINE_CAMPAIGN') {
+    if (kind === APP_TO_EXT.CAMPAIGN) {
         chrome.storage.local.get(['isExecuting'], (result) => {
             if (result.isExecuting) {
                 sendResponse({ status: 'rejected', reason: 'A campaign is already running. Pause or clear it first.' });
                 return;
             }
-            const leads = request.payload.leads;
-            // User-chosen random delay range (minutes) between each DM.
-            const minDelay = Number(request.payload.minDelay) || DEFAULT_MIN_DELAY;
-            const maxDelay = Math.max(minDelay, Number(request.payload.maxDelay) || DEFAULT_MAX_DELAY);
-            // Daily send cap comes from the app's Settings (config.dailySendCap).
-            const dailyCap = Number(request.payload.dailyCap) || DEFAULT_DAILY_CAP;
+            // Payload shape + defaults live with the protocol, so the app and
+            // the extension can't disagree about what a campaign looks like.
+            const { leads, minDelay, maxDelay, dailyCap } = readCampaign(request.payload, {
+                minDelay: DEFAULT_MIN_DELAY,
+                maxDelay: DEFAULT_MAX_DELAY,
+                dailyCap: DEFAULT_DAILY_CAP,
+            });
             chrome.storage.local.set({
                 campaignQueue: leads,
                 originalTotal: leads.length,
@@ -38,7 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Task completed by content script ──────────────────────────
-    if (request.action === 'TASK_COMPLETE') {
+    if (kind === RUNTIME.TASK_COMPLETE) {
         chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles'], (result) => {
             const today  = new Date().toDateString();
             const newDay = result.dailyResetDate !== today;
@@ -80,7 +90,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 // app marks the lead sent for real (not on handoff).
                 if (request.result === 'success' && request.handle) {
                     broadcastToApp({
-                        type: 'MAGNET_ENGINE_SENT',
+                        type: EXT_TO_APP.SENT,
                         handle: request.handle,
                         dailySentCount: count,
                         dailyCap: cap,
@@ -105,7 +115,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Stats request from the web app (real sent count + sent log) ────────
-    if (request.action === 'getStats') {
+    if (kind === RUNTIME.GET_STATS) {
         chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog', 'sentHandles'], (result) => {
             const fresh = result.dailyResetDate === new Date().toDateString();
             sendResponse({
@@ -123,17 +133,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // ── Inbox snapshot from the IG content-script poller ───────────────────
     // Store the latest snapshot and push it to any open dashboard tab so the
     // app can persist conversations/messages to Supabase and render the inbox.
-    if (request.action === 'INBOX_SYNC') {
+    if (kind === RUNTIME.INBOX_SYNC) {
         const threads = Array.isArray(request.threads) ? request.threads : [];
         chrome.storage.local.set({ inboxThreads: threads, inboxSyncedAt: Date.now() }, () => {
-            broadcastToApp({ type: 'MAGNET_ENGINE_INBOX', threads });
+            broadcastToApp({ type: EXT_TO_APP.INBOX, threads });
         });
         sendResponse({ status: 'ok', count: threads.length });
         return true;
     }
 
     // ── Inbox request from the web app (latest snapshot) ───────────────────
-    if (request.action === 'getInbox') {
+    if (kind === RUNTIME.GET_INBOX) {
         chrome.storage.local.get(['inboxThreads'], (result) => {
             sendResponse({ threads: result.inboxThreads || [] });
         });
@@ -141,7 +151,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Pause campaign ─────────────────────────────────────────────
-    if (request.action === 'pauseCampaign') {
+    if (kind === RUNTIME.PAUSE) {
         chrome.alarms.clear('dripEngine');
         chrome.storage.local.set({ isPaused: true, nextAlarmTime: null });
         sendResponse({ status: 'paused' });
@@ -149,7 +159,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Resume campaign ────────────────────────────────────────────
-    if (request.action === 'resumeCampaign') {
+    if (kind === RUNTIME.RESUME) {
         chrome.storage.local.set({ isPaused: false }, () => {
             processNextLead();
         });
@@ -158,7 +168,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Clear campaign ─────────────────────────────────────────────
-    if (request.action === 'clearCampaign') {
+    if (kind === RUNTIME.CLEAR) {
         chrome.alarms.clear('dripEngine');
         chrome.storage.local.set({
             campaignQueue: [],
@@ -174,7 +184,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // ── Close tab ──────────────────────────────────────────────────
-    if (request.action === 'closeCurrentTab' && sender.tab) {
+    if (kind === RUNTIME.CLOSE_TAB && sender.tab) {
         chrome.tabs.remove(sender.tab.id);
         sendResponse({ status: 'closed' });
         return true;
@@ -232,7 +242,9 @@ function broadcastToApp(message) {
     chrome.tabs.query({}, (tabs) => {
         for (const tab of tabs) {
             if (!tab.id || !tab.url) continue;
-            if (tab.url.includes('magnetengine.xyz') || tab.url.startsWith('http://localhost')) {
+            const isAppTab = APP_HOSTS.some((h) => tab.url.includes(h)) ||
+                            tab.url.startsWith('http://localhost');
+            if (isAppTab) {
                 chrome.tabs.sendMessage(tab.id, message, () => void chrome.runtime.lastError);
             }
         }

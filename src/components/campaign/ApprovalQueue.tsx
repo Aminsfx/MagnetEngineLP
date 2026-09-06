@@ -7,6 +7,7 @@ import {
 import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
 import { storage } from '../../lib/storage';
+import { sendCampaign } from '../../lib/extensionProtocol';
 import { useStable } from '../../lib/useStable';
 import { QueueRow } from './QueueRow';
 
@@ -221,15 +222,12 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         }
         const safeMin = Math.max(1, Math.floor(minDelay) || 1);
         const safeMax = Math.max(safeMin, Math.floor(maxDelay) || safeMin);
-        window.postMessage({
-            type: 'MAGNET_ENGINE_CAMPAIGN',
-            payload: {
-                leads: approved.map(l => ({ handle: l.handle, message: l.dmContent })),
-                minDelay: safeMin,
-                maxDelay: safeMax,
-                dailyCap: config.dailySendCap ?? 40,
-            },
-        }, '*');
+        sendCampaign({
+            leads: approved.map(l => ({ handle: l.handle, message: l.dmContent! })),
+            minDelay: safeMin,
+            maxDelay: safeMax,
+            dailyCap: config.dailySendCap ?? 40,
+        });
         onLeadsSent?.(approved.map(l => l.id));
         toast.success(`${approved.length} lead${approved.length !== 1 ? 's' : ''} sent — DMs will drip every ${safeMin}–${safeMax} min.`);
     };

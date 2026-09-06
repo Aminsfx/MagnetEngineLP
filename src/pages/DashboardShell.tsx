@@ -23,6 +23,12 @@ import { stampFollowUp, type DueFollowUp } from '../lib/followups';
 import { fireWebhook, detectTransitions } from '../lib/webhooks';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
 import { dropKnownHandles } from '../lib/intake';
+import {
+  EXT_TO_APP,
+  onExtensionMessage,
+  requestExtensionSync,
+  sendCampaign,
+} from '../lib/extensionProtocol';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT } from '../lib/prompt';
 import { Lead, AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -239,40 +245,31 @@ const DashboardShell: React.FC = () => {
   // and pushes inbox snapshots, so the header, per-lead "sent", and the Inbox
   // all reflect reality, not handoffs.
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.source !== window) return;
-      const d = e.data;
-      if (!d || typeof d.type !== 'string') return;
-
-      if (d.type === 'MAGNET_ENGINE_STATS') {
+    const stopListening = onExtensionMessage((d) => {
+      if (d.type === EXT_TO_APP.STATS) {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         // Reconcile against both: `sentLog` resets at midnight, `sentHandles`
         // never does, so a dashboard opened the next morning still learns what
         // went out yesterday instead of offering to send it again.
         markSentByHandles([
-          ...(d.sentLog ?? []).map((x: { handle?: string }) => x.handle ?? ''),
+          ...(d.sentLog ?? []).map((x) => x.handle ?? ''),
           ...(d.sentHandles ?? []),
         ]);
-      } else if (d.type === 'MAGNET_ENGINE_SENT') {
+      } else if (d.type === EXT_TO_APP.SENT) {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         if (d.handle) markSentByHandles([d.handle]);
-      } else if (d.type === 'MAGNET_ENGINE_INBOX') {
-        const newInbound = ingestInbox(d.threads ?? []);
+      } else if (d.type === EXT_TO_APP.INBOX) {
+        const newInbound = ingestInbox((d.threads ?? []) as RawThread[]);
         if (newInbound.length) autopilotRef.current(newInbound);
       }
-    };
-    window.addEventListener('message', onMessage);
+    });
 
-    const requestSync = () => {
-      window.postMessage({ type: 'MAGNET_ENGINE_GET_STATS' }, '*');
-      window.postMessage({ type: 'MAGNET_ENGINE_GET_INBOX' }, '*');
-    };
-    requestSync();                                   // on mount
-    window.addEventListener('focus', requestSync);   // and when the tab refocuses
+    requestExtensionSync();                                   // on mount
+    window.addEventListener('focus', requestExtensionSync);   // and on refocus
 
     return () => {
-      window.removeEventListener('message', onMessage);
-      window.removeEventListener('focus', requestSync);
+      stopListening();
+      window.removeEventListener('focus', requestExtensionSync);
     };
   }, [markSentByHandles, ingestInbox]);
 
@@ -392,15 +389,12 @@ const DashboardShell: React.FC = () => {
     if (due.length === 0) return 0;
 
     const delay = storage.getDmDelay();
-    window.postMessage({
-      type: 'MAGNET_ENGINE_CAMPAIGN',
-      payload: {
-        leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
-        minDelay: delay.min,
-        maxDelay: delay.max,
-        dailyCap: config.dailySendCap ?? 40,
-      },
-    }, '*');
+    sendCampaign({
+      leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
+      minDelay: delay.min,
+      maxDelay: delay.max,
+      dailyCap: config.dailySendCap ?? 40,
+    });
 
     const sentAt = new Date().toISOString();
     const batch = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
@@ -473,15 +467,12 @@ const DashboardShell: React.FC = () => {
     store.saveConversations([updatedConv]).catch(console.error);
 
     const delay = storage.getDmDelay();
-    window.postMessage({
-      type: 'MAGNET_ENGINE_CAMPAIGN',
-      payload: {
-        leads: [{ handle: conv.handle, message: body }],
-        minDelay: delay.min,
-        maxDelay: delay.max,
-        dailyCap: configRef.current.dailySendCap ?? 40,
-      },
-    }, '*');
+    sendCampaign({
+      leads: [{ handle: conv.handle, message: body }],
+      minDelay: delay.min,
+      maxDelay: delay.max,
+      dailyCap: configRef.current.dailySendCap ?? 40,
+    });
     toast.success(`Reply queued to @${conv.handle}`);
   }, [toast, store]);
 
