@@ -124,6 +124,42 @@ describe('ApprovalQueue pagination', () => {
         expect(handlesOnPage()[0]).toBe('founder_1');
     });
 
+    it('never re-sends a lead the extension already confirmed', async () => {
+        const user = userEvent.setup();
+        const leads = makeLeads(4).map((l, i) => ({
+            ...l,
+            approved: true,
+            dmContent: `draft for founder ${i}`,
+            dmSent: i < 2, // first two already went out
+        }));
+        const posted = vi.spyOn(window, 'postMessage');
+        renderQueue(leads);
+
+        await user.click(screen.getByRole('button', { name: /Send Approved to Extension/ }));
+
+        const payload = posted.mock.calls
+            .map(([msg]) => msg as { type?: string; payload?: { leads: { handle: string }[] } })
+            .find(msg => msg?.type === 'MAGNET_ENGINE_CAMPAIGN')?.payload;
+
+        expect(payload?.leads.map(l => l.handle)).toEqual(['founder_2', 'founder_3']);
+        posted.mockRestore();
+    });
+
+    it('refuses to send when every approved lead is already sent', async () => {
+        const user = userEvent.setup();
+        const leads = makeLeads(3).map((l, i) => ({
+            ...l, approved: true, dmContent: `draft for founder ${i}`, dmSent: true,
+        }));
+        const posted = vi.spyOn(window, 'postMessage');
+        renderQueue(leads);
+
+        await user.click(screen.getByRole('button', { name: /Send Approved to Extension/ }));
+
+        expect(posted.mock.calls.some(([m]) => (m as { type?: string })?.type === 'MAGNET_ENGINE_CAMPAIGN')).toBe(false);
+        expect(await screen.findByText(/already been sent/i)).toBeInTheDocument();
+        posted.mockRestore();
+    });
+
     it('clamps the page when the lead list shrinks under it', async () => {
         const user = userEvent.setup();
         const { rerender } = renderQueue(makeLeads(250));

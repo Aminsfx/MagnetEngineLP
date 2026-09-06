@@ -207,9 +207,16 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     };
 
     const handleSendToExtension = () => {
-        const approved = leads.filter(l => l.approved && l.dmContent);
+        // `!l.dmSent` is load-bearing: the extension REPLACES its queue with
+        // whatever arrives, so without this a second press re-DMs every lead
+        // already contacted. Instagram reads repeat DMs to the same handle as
+        // spam, so this is an account-restriction risk, not just bad data.
+        const approved = leads.filter(l => l.approved && l.dmContent && !l.dmSent);
         if (approved.length === 0) {
-            toast.error('No approved DMs to send. Approve some leads first.');
+            const allSent = leads.some(l => l.approved && l.dmContent && l.dmSent);
+            toast.error(allSent
+                ? 'Every approved DM has already been sent. Approve more leads to send again.'
+                : 'No approved DMs to send. Approve some leads first.');
             return;
         }
         const safeMin = Math.max(1, Math.floor(minDelay) || 1);

@@ -39,11 +39,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Task completed by content script ──────────────────────────
     if (request.action === 'TASK_COMPLETE') {
-        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog'], (result) => {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles'], (result) => {
             const today  = new Date().toDateString();
             const newDay = result.dailyResetDate !== today;
             let count    = newDay ? 0  : (result.dailySentCount || 0);
             let sentLog  = newDay ? [] : (result.sentLog || []);   // handles actually sent today
+
+            // Every handle ever sent, across days. `sentLog` resets each midnight
+            // because it drives the daily counter — so on its own it lets the app
+            // forget yesterday's sends and queue them all over again the next
+            // morning. This list never resets.
+            let sentHandles = Array.isArray(result.sentHandles) ? result.sentHandles : [];
 
             let failed = result.failedCount || 0;
             if (request.result === 'success') {
@@ -51,6 +57,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (request.handle) {
                     sentLog.push({ handle: request.handle, at: Date.now() });
                     if (sentLog.length > 2000) sentLog = sentLog.slice(-2000);
+
+                    const normalized = String(request.handle).toLowerCase().replace(/^@/, '');
+                    if (normalized && !sentHandles.includes(normalized)) sentHandles.push(normalized);
+                    if (sentHandles.length > 5000) sentHandles = sentHandles.slice(-5000);
                 }
             }
             if (request.result === 'failed') failed++;
@@ -62,6 +72,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 dailyResetDate: today,
                 failedCount:    failed,
                 sentLog:        sentLog,
+                sentHandles:    sentHandles,
                 isExecuting:    false,
                 currentTask:    null,
             }, () => {
@@ -95,12 +106,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Stats request from the web app (real sent count + sent log) ────────
     if (request.action === 'getStats') {
-        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog'], (result) => {
+        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog', 'sentHandles'], (result) => {
             const fresh = result.dailyResetDate === new Date().toDateString();
             sendResponse({
                 dailySentCount: fresh ? (result.dailySentCount || 0) : 0,
                 dailyCap:       Number(result.dailyCap) || DEFAULT_DAILY_CAP,
                 sentLog:        fresh ? (result.sentLog || []) : [],
+                // Not date-gated: the app reconciles against this so leads sent
+                // on earlier days stay marked as sent and never get re-queued.
+                sentHandles:    result.sentHandles || [],
             });
         });
         return true;

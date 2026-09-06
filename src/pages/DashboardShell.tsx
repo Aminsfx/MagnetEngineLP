@@ -132,6 +132,11 @@ Just the reply text. No quotes, no labels, no preamble. Raw text only.`,
   dmTone: 'casual',
 };
 
+// DM generation runs sequentially against the AI provider, so one click
+// processes a batch rather than the whole queue. The user is told what's left
+// and clicks again — silently doing 10 of 250 reads as a broken button.
+const GENERATION_BATCH = 10;
+
 // ─── Main dashboard shell ─────────────────────────────────────────────────────
 const DashboardShell: React.FC = () => {
   const { user, signOut } = useAuth();
@@ -311,7 +316,13 @@ const DashboardShell: React.FC = () => {
 
       if (d.type === 'MAGNET_ENGINE_STATS') {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
-        markSentByHandles((d.sentLog ?? []).map((x: { handle?: string }) => x.handle ?? ''));
+        // Reconcile against both: `sentLog` resets at midnight, `sentHandles`
+        // never does, so a dashboard opened the next morning still learns what
+        // went out yesterday instead of offering to send it again.
+        markSentByHandles([
+          ...(d.sentLog ?? []).map((x: { handle?: string }) => x.handle ?? ''),
+          ...(d.sentHandles ?? []),
+        ]);
       } else if (d.type === 'MAGNET_ENGINE_SENT') {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         if (d.handle) markSentByHandles([d.handle]);
@@ -627,40 +638,48 @@ const DashboardShell: React.FC = () => {
 
     setIsGenerating(true);
     const dmDate = new Date().toISOString();
-    let successCount = 0;
-
     const updatedBatch: Lead[] = [];
+    let failure: string | null = null;
 
-    for (const lead of leadsToProcess.slice(0, 10)) {
+    for (const lead of leadsToProcess.slice(0, GENERATION_BATCH)) {
       try {
         const dm = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
-        const updatedLead: Lead = { ...lead, dmContent: dm, dmDate };
-        updatedBatch.push(updatedLead);
-        successCount++;
+        updatedBatch.push({ ...lead, dmContent: dm, dmDate });
       } catch (error: any) {
         console.error(`Error generating DM for ${lead.name}:`, error);
-        setIsGenerating(false);
-        toast.error(`DM generation failed: ${error?.message ?? 'Unknown error'}`);
-        return;
+        // Stop the batch, but keep what already succeeded. Returning here used
+        // to discard up to nine finished DMs that had already been paid for.
+        failure = error?.message ?? 'Unknown error';
+        break;
       }
     }
 
-    if (updatedBatch.length > 0) {
+    const successCount = updatedBatch.length;
+    if (successCount > 0) {
       setLeads((prev) => prev.map((l) => {
         const updated = updatedBatch.find((u) => u.id === l.id);
         return updated ?? l;
       }));
-      if (user) await db.upsertLeads(updatedBatch, user.id);
-      if (user && successCount > 0) {
+      if (user) {
+        await db.upsertLeads(updatedBatch, user.id);
         const newUsed = await db.incrementDMUsage(user.id, successCount);
         setDmUsed(newUsed);
       }
     }
 
     setIsGenerating(false);
-    if (successCount > 0) {
-      toast.success(`Generated ${successCount} DM${successCount !== 1 ? 's' : ''} — review them in the Approval Queue.`);
+
+    if (failure) {
+      toast.error(successCount > 0
+        ? `Generated ${successCount} DM${successCount !== 1 ? 's' : ''}, then stopped: ${failure}`
+        : `DM generation failed: ${failure}`);
+      return;
     }
+
+    const stillPending = leadsToProcess.length - successCount;
+    toast.success(stillPending > 0
+      ? `Generated ${successCount} DMs — ${stillPending} still pending, click again for the next batch.`
+      : `Generated ${successCount} DM${successCount !== 1 ? 's' : ''} — review them in the Approval Queue.`);
   }, [config, filteredLeads, user, limits, dmUsed, toast]);
 
   const handleLogout = useCallback(async () => {
