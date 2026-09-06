@@ -9,6 +9,7 @@ import { filterUtils } from '../../lib/filters';
 import { storage } from '../../lib/storage';
 import { sendCampaign } from '../../lib/extensionProtocol';
 import { useStable } from '../../lib/useStable';
+import { useProgressiveCount } from '../../lib/useProgressiveCount';
 import { QueueRow } from './QueueRow';
 
 interface ApprovalQueueProps {
@@ -31,6 +32,9 @@ type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
 
 /** Rows mounted at once. Keeps the table's DOM flat as the lead count grows. */
 const PAGE_SIZE = 50;
+
+/** Rows added per frame while a page mounts — see `useProgressiveCount`. */
+const ROW_CHUNK = 12;
 
 /** Page numbers to show, with `null` standing in for an elided run. */
 function pageWindow(current: number, total: number): (number | null)[] {
@@ -97,9 +101,10 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     onUpdateLead,
 }) => {
     const toast = useToast();
-    const initialDelay = storage.getDmDelay();
-    const [minDelay, setMinDelay] = useState<number>(initialDelay.min);
-    const [maxDelay, setMaxDelay] = useState<number>(initialDelay.max);
+    // Lazy initialisers: this is a localStorage read + JSON.parse, and it used
+    // to run on every render of the queue.
+    const [minDelay, setMinDelay] = useState<number>(() => storage.getDmDelay().min);
+    const [maxDelay, setMaxDelay] = useState<number>(() => storage.getDmDelay().max);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [battlecardsFor, setBattlecardsFor] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -161,6 +166,13 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
         [filtered, safePage],
     );
+    // A page is mounted a chunk at a time so the first commit stays small — the
+    // toolbar and the first rows paint immediately instead of the browser
+    // freezing until all 50 rows exist. Bulk actions below still act on the
+    // whole `filtered` set, and pagination still reports the full page range:
+    // this bounds what React commits per frame, not what the page contains.
+    const mounted = useProgressiveCount(visible.length, `${filterKey}|${safePage}`, ROW_CHUNK);
+
     const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
     const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
     const pageNumbers = useMemo(() => pageWindow(safePage, pageCount), [safePage, pageCount]);
@@ -475,7 +487,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04]">
-                            {visible.map(lead => (
+                            {visible.slice(0, mounted).map(lead => (
                                 <QueueRow
                                     key={lead.id}
                                     lead={lead}

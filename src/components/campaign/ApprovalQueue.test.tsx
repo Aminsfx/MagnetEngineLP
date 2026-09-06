@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApprovalQueue } from './ApprovalQueue';
 import { ToastProvider } from '../common/Toast';
@@ -46,6 +46,10 @@ function renderQueue(leads: Lead[], props: Partial<React.ComponentProps<typeof A
 
 const rowCount = () => document.querySelectorAll('tbody tr').length;
 
+// A page mounts a chunk of rows per frame (see `useProgressiveCount`), so the
+// full page is there a few frames after the click, not synchronously.
+const rowsSettle = (expected: number) => waitFor(() => expect(rowCount()).toBe(expected));
+
 // Read the index off the DM cell, not the handle: row text runs the handle
 // straight into the follower count ("@founder_0" + "1.0K"), so a `\d+` match on
 // the handle swallows the count's leading digit.
@@ -58,17 +62,17 @@ const handlesOnPage = () =>
 describe('ApprovalQueue pagination', () => {
     beforeEach(() => localStorage.clear());
 
-    it('mounts only one page of rows, however many leads there are', () => {
+    it('mounts only one page of rows, however many leads there are', async () => {
         renderQueue(makeLeads(250));
 
-        expect(rowCount()).toBe(50);
+        await rowsSettle(50);
         expect(screen.getByText('1–50 of 250')).toBeInTheDocument();
     });
 
-    it('shows no pagination controls when everything fits on one page', () => {
+    it('shows no pagination controls when everything fits on one page', async () => {
         renderQueue(makeLeads(30));
 
-        expect(rowCount()).toBe(30);
+        await rowsSettle(30);
         expect(screen.queryByRole('button', { name: /Next/ })).not.toBeInTheDocument();
     });
 
@@ -81,13 +85,13 @@ describe('ApprovalQueue pagination', () => {
         await user.click(screen.getByRole('button', { name: /Next/ }));
 
         expect(handlesOnPage()[0]).toBe('founder_50');
-        expect(handlesOnPage()).toHaveLength(50);
+        await rowsSettle(50);
         expect(screen.getByText('51–100 of 120')).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /Next/ }));
 
         expect(handlesOnPage()[0]).toBe('founder_100');
-        expect(rowCount()).toBe(20); // last page is partial
+        await rowsSettle(20); // last page is partial
     });
 
     it('acts on the lead in the row that was clicked, not the first one', async () => {
@@ -178,7 +182,7 @@ describe('ApprovalQueue pagination', () => {
             </ToastProvider>,
         );
 
-        expect(rowCount()).toBe(20);
+        await rowsSettle(20);
         expect(handlesOnPage()[0]).toBe('founder_0');
     });
 });

@@ -93,6 +93,9 @@ import DashboardShell from '../pages/DashboardShell';
 import { ToastProvider } from '../components/common/Toast';
 import { filterUtils } from '../lib/filters';
 
+/** Mirrors ROW_CHUNK in ApprovalQueue — reported, not asserted. */
+const ROW_CHUNK_EXPECTED = 12;
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 function makeLeads(n: number): Lead[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -187,6 +190,11 @@ describe('perf harness', () => {
 
     const { commits } = await mountAt('/queue');
     await screen.findByRole('heading', { name: /Approval Queue/i });
+    // The page mounts a chunk of rows per frame; measure a settled table, or
+    // the approve below is credited with the rest of the mount.
+    await waitFor(() => {
+      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+    });
 
     const mountCommits = commits.length;
     const mountFilterCalls = filterSpy.mock.calls.length;
@@ -345,6 +353,10 @@ describe('perf harness', () => {
       h.dbCalls = [];
       const { view } = await mountAt('/queue');
       await screen.findByRole('heading', { name: /Approval Queue/i });
+      const settled = Math.min(n, 50);
+      await waitFor(() => {
+        expect(document.querySelectorAll('tbody tr').length).toBe(settled);
+      });
 
       const rows = document.querySelectorAll('tbody tr').length;
       const nodes = document.querySelectorAll('*').length;
@@ -368,10 +380,67 @@ describe('perf harness', () => {
     }
   });
 
+  it('M5: navigating Dashboard -> Approval Queue with 250 leads', async () => {
+    h.leads = makeLeads(250);
+    const { commits } = await mountAt('/dashboard');
+
+    const nodesBefore = document.querySelectorAll('*').length;
+    commits.length = 0;
+
+    // onRender fires synchronously after each commit's DOM writes, so sampling
+    // the element count here attributes nodes to the commit that added them.
+    const nodesPerCommit: number[] = [];
+    mutationProbe.current = () => {
+      nodesPerCommit.push(document.querySelectorAll('*').length);
+    };
+
+    const { act } = await import('@testing-library/react');
+    const link = document.querySelector<HTMLAnchorElement>('a[href="/queue"]')!;
+    const t0 = performance.now();
+    await act(async () => {
+      link.click();
+    });
+    await screen.findByRole('heading', { name: /Approval Queue/i });
+    await waitFor(() => {
+      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+    });
+    const elapsed = performance.now() - t0;
+    mutationProbe.current = null;
+
+    const nodesAfter = document.querySelectorAll('*').length;
+    const added = nodesPerCommit.map((n, i) => n - (i === 0 ? nodesBefore : nodesPerCommit[i - 1]));
+    const worstCommit = Math.max(...commits.map((c) => c.actualDuration));
+
+    report('M5 - navigate /dashboard -> /queue, 250 leads', {
+      'React commits': commits.length,
+      'commit durations (ms)': commits.map((c) => c.actualDuration.toFixed(1)).join(', '),
+      'slowest single commit (ms)': worstCommit.toFixed(1),
+      'total render time (ms)': commits.reduce((s, c) => s + c.actualDuration, 0).toFixed(1),
+      'wall clock until settled (ms)': elapsed.toFixed(0),
+      'DOM elements before': nodesBefore,
+      'DOM elements after': nodesAfter,
+      'DOM elements added': nodesAfter - nodesBefore,
+      'elements added per commit': added.join(', '),
+      'largest single commit (elements)': Math.max(...added),
+      'rows in first commit': ROW_CHUNK_EXPECTED,
+      'svg icons in table': document.querySelectorAll('tbody svg').length,
+    });
+
+    // -- Budget --------------------------------------------------------------
+    // Clicking the nav link must paint something. The whole page (~2,000 nodes,
+    // 300 icons) in one commit is what made the click feel frozen, so no single
+    // commit may build the entire table.
+    expect.soft(Math.max(...added), 'DOM elements added by any single commit')
+      .toBeLessThan(1200);
+  });
+
   it('M4: localStorage writes per single lead mutation', async () => {
     h.leads = makeLeads(250);
     await mountAt('/queue');
     await screen.findByRole('heading', { name: /Approval Queue/i });
+    await waitFor(() => {
+      expect(document.querySelectorAll('tbody tr').length).toBe(50);
+    });
 
     let calls = 0;
     let bytes = 0;
