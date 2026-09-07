@@ -413,15 +413,19 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         <div className="space-y-5">
             {/* ── Action bar ──────────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-3">
-                {/* Generate DMs — tinted, not filled. Drafting is cheap, repeatable
-                    and reversible, so it must not carry the same visual weight as
-                    the send below it. */}
+                {/* Generate DMs — black, and deliberately the darkest control in the
+                    bar. Drafting is cheap, repeatable and reversible, so it must not
+                    carry the weight of the send beside it. Sitting below the page
+                    ground rather than above it is the clearest way to say so; the
+                    border is load-bearing, since black on a near-black ground has
+                    no edge of its own. The icon keeps `info` so the button still
+                    reads as the AI action. */}
                 <button
                     onClick={handleGenerateForPending}
                     disabled={isGenerating || leads.length === 0}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-info-500/10 hover:bg-info-500/20 border border-info-500/40 text-info-300 disabled:opacity-50 font-semibold rounded-xl transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-neutral-900 border border-white/15 hover:border-white/25 text-white disabled:opacity-50 font-semibold rounded-xl transition-all text-sm"
                 >
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4 text-info-400" />
                     {isGenerating ? 'Generating…' : 'Generate AI DMs'}
                 </button>
 
