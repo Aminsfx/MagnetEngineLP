@@ -413,11 +413,13 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
         <div className="space-y-5">
             {/* ── Action bar ──────────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center gap-3">
-                {/* Generate DMs */}
+                {/* Generate DMs — tinted, not filled. Drafting is cheap, repeatable
+                    and reversible, so it must not carry the same visual weight as
+                    the send below it. */}
                 <button
                     onClick={handleGenerateForPending}
                     disabled={isGenerating || leads.length === 0}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-info-500 hover:bg-info-400 disabled:opacity-50 text-info-950 font-semibold rounded-xl transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-info-500/10 hover:bg-info-500/20 border border-info-500/40 text-info-300 disabled:opacity-50 font-semibold rounded-xl transition-all text-sm"
                 >
                     <Sparkles className="w-4 h-4" />
                     {isGenerating ? 'Generating…' : 'Generate AI DMs'}
@@ -469,10 +471,15 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     </button>
                 )}
 
-                {/* Send to Extension */}
+                {/* Send to Extension — the only solid fill in this bar, and the only
+                    button here that does something irreversible: it DMs real people
+                    from the Operator's own Instagram account. It used to be one of
+                    two identical saturated pills, distinguished from "Generate AI
+                    DMs" only by an adjacent blue-green hue. The glow is not
+                    decoration; it is what makes the terminal action findable. */}
                 <button
                     onClick={handleSendToExtension}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold rounded-xl transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold rounded-xl shadow-[0_0_20px_theme(colors.brand.500/0.28)] hover:shadow-[0_0_28px_theme(colors.brand.500/0.42)] transition-all text-sm"
                 >
                     <Send className="w-4 h-4" />
                     Send Approved to Extension
