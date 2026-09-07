@@ -52,14 +52,14 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, calend
     return (
         <div>
             <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] text-zinc-500">
+                <span className="text-[11px] text-neutral-500">
                     Reply battlecards — pick the one that matches their reply
                 </span>
                 <a
                     href={`https://instagram.com/${lead.handle}/`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-white transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] text-neutral-500 hover:text-white transition-colors"
                 >
                     <ExternalLink className="w-3 h-3" />
                     Open profile
@@ -69,18 +69,18 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, calend
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {CARDS.map(card => (
                     <div key={card.id} className="bg-white/[0.02] border border-white/6 rounded-xl p-3.5 flex flex-col gap-2.5">
-                        <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">
+                        <span className="text-[10px] uppercase tracking-wider text-neutral-600 font-semibold">
                             {card.label}
                         </span>
-                        <p className="text-xs text-zinc-300 leading-relaxed flex-1">
+                        <p className="text-xs text-neutral-300 leading-relaxed flex-1">
                             {renderReply(card.reply)}
                         </p>
                         <button
                             onClick={() => handleCopy(card)}
                             className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                 copiedId === card.id
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-white/5 text-zinc-400 border border-white/8 hover:bg-white/10 hover:text-white'
+                                    ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
+                                    : 'bg-white/5 text-neutral-400 border border-white/8 hover:bg-white/10 hover:text-white'
                             }`}
                         >
                             {copiedId === card.id
@@ -93,7 +93,7 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, calend
             </div>
 
             {!calendarLink?.trim() && (
-                <p className="text-[11px] text-amber-400/90 mt-3">
+                <p className="text-[11px] text-caution-400/90 mt-3">
                     Tip: add your Calendly/booking link in Settings so these replies paste ready-to-send.
                 </p>
             )}

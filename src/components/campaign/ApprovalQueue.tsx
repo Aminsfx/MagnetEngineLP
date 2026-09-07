@@ -35,7 +35,7 @@ type StatusFilter = 'all' | 'pending' | 'ready' | 'approved' | 'rejected';
  * Tailwind preflight collapses table borders, and a collapsed border is painted
  * by the table rather than the cell, so it stays put while a sticky <th> moves.
  */
-const STICKY_TH = 'sticky top-0 z-10 bg-[#050A08] shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]';
+const STICKY_TH = 'sticky top-0 z-10 bg-surface-raised shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]';
 
 /** Rows added per frame while a page mounts — see `useProgressiveCount`. */
 const ROW_CHUNK = 12;
@@ -98,7 +98,7 @@ const QueuePager: React.FC<QueuePagerProps> = ({
     onPage, label, rowsPerPageControl,
 }) => (
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
-        <span className="text-[11px] text-zinc-500 tabular-nums">
+        <span className="text-[11px] text-neutral-500 tabular-nums">
             Page {page} of {pageCount} · showing {rangeStart}–{rangeEnd} of {total} leads
         </span>
 
@@ -108,13 +108,13 @@ const QueuePager: React.FC<QueuePagerProps> = ({
                     <button
                         onClick={() => onPage(Math.max(1, page - 1))}
                         disabled={page <= 1}
-                        className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                        className="px-2.5 py-1 rounded-lg text-xs text-neutral-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-500"
                     >
                         ‹ Prev
                     </button>
                     {pageNumbers.map((p, i) =>
                         p === null ? (
-                            <span key={`gap-${i}`} className="px-1 text-xs text-zinc-700">…</span>
+                            <span key={`gap-${i}`} className="px-1 text-xs text-neutral-700">…</span>
                         ) : (
                             <button
                                 key={p}
@@ -122,8 +122,8 @@ const QueuePager: React.FC<QueuePagerProps> = ({
                                 aria-current={p === page ? 'page' : undefined}
                                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                                     p === page
-                                        ? 'bg-emerald-500/15 text-emerald-400'
-                                        : 'text-zinc-600 hover:text-white hover:bg-white/5'
+                                        ? 'bg-brand-500/15 text-brand-400'
+                                        : 'text-neutral-600 hover:text-white hover:bg-white/5'
                                 }`}
                             >
                                 {p}
@@ -133,7 +133,7 @@ const QueuePager: React.FC<QueuePagerProps> = ({
                     <button
                         onClick={() => onPage(Math.min(pageCount, page + 1))}
                         disabled={page >= pageCount}
-                        className="px-2.5 py-1 rounded-lg text-xs text-zinc-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                        className="px-2.5 py-1 rounded-lg text-xs text-neutral-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-500"
                     >
                         Next ›
                     </button>
@@ -417,7 +417,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 <button
                     onClick={handleGenerateForPending}
                     disabled={isGenerating || leads.length === 0}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-cyan-950 font-semibold rounded-xl transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-info-500 hover:bg-info-400 disabled:opacity-50 text-info-950 font-semibold rounded-xl transition-all text-sm"
                 >
                     <Sparkles className="w-4 h-4" />
                     {isGenerating ? 'Generating…' : 'Generate AI DMs'}
@@ -427,20 +427,20 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 <div className="relative">
                     <button
                         onClick={() => setShowExport(v => !v)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/8 text-zinc-300 font-medium rounded-xl transition-all text-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/8 text-neutral-300 font-medium rounded-xl transition-all text-sm"
                     >
                         <Download className="w-4 h-4" />
                         Export
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showExport ? 'rotate-180' : ''}`} />
                     </button>
                     {showExport && (
-                        <div className="absolute top-full mt-1 left-0 bg-[#0A1510] border border-white/8 rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
+                        <div className="absolute top-full mt-1 left-0 bg-surface-overlay border border-white/8 rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
                             <button onClick={() => { exportToCSV(filtered); setShowExport(false); }}
-                                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5 transition-colors">
+                                className="w-full text-left px-4 py-2.5 text-sm text-neutral-300 hover:bg-white/5 transition-colors">
                                 Export CSV
                             </button>
                             <button onClick={() => { exportToJSON(filtered); setShowExport(false); }}
-                                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5 transition-colors">
+                                className="w-full text-left px-4 py-2.5 text-sm text-neutral-300 hover:bg-white/5 transition-colors">
                                 Export JSON
                             </button>
                         </div>
@@ -451,7 +451,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 {counts.ready > 0 && (
                     <button
                         onClick={handleApproveAllReady}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-emerald-500/25 text-emerald-400 font-medium rounded-xl transition-all text-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-brand-500/25 text-brand-400 font-medium rounded-xl transition-all text-sm"
                     >
                         <CheckCircle className="w-4 h-4" />
                         Approve All ({counts.ready})
@@ -462,7 +462,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 {selected.size > 0 && (
                     <button
                         onClick={handleDeleteSelected}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 font-medium rounded-xl transition-all text-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-danger-500/10 hover:bg-danger-500/20 border border-danger-500/25 text-danger-400 font-medium rounded-xl transition-all text-sm"
                     >
                         <Trash2 className="w-4 h-4" />
                         Delete selected ({selected.size})
@@ -472,7 +472,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 {/* Send to Extension */}
                 <button
                     onClick={handleSendToExtension}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold rounded-xl transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold rounded-xl transition-all text-sm"
                 >
                     <Send className="w-4 h-4" />
                     Send Approved to Extension
@@ -480,26 +480,26 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                 {/* DM drip delay — random wait (minutes) between each DM */}
                 <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
-                    <Timer className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Delay</span>
+                    <Timer className="w-3.5 h-3.5 text-brand-400" />
+                    <span className="text-[10px] text-neutral-600 uppercase tracking-wider font-medium">Delay</span>
                     <input
                         type="number"
                         min={1}
                         value={minDelay}
                         onChange={e => commitDelay(Number(e.target.value), maxDelay)}
                         title="Minimum minutes between DMs"
-                        className="w-12 bg-[#030604] border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50"
                     />
-                    <span className="text-xs text-zinc-600">–</span>
+                    <span className="text-xs text-neutral-600">–</span>
                     <input
                         type="number"
                         min={1}
                         value={maxDelay}
                         onChange={e => commitDelay(minDelay, Number(e.target.value))}
                         title="Maximum minutes between DMs"
-                        className="w-12 bg-[#030604] border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50"
                     />
-                    <span className="text-[10px] text-zinc-600">min</span>
+                    <span className="text-[10px] text-neutral-600">min</span>
                 </div>
             </div>
 
@@ -512,13 +512,13 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                             statusFilter === f.id
                                 ? 'bg-white/10 text-white'
-                                : 'text-zinc-600 hover:text-zinc-400'
+                                : 'text-neutral-600 hover:text-neutral-400'
                         }`}
                     >
                         {f.label}
                         {counts[f.id] > 0 && (
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                                statusFilter === f.id ? 'bg-white/15 text-zinc-300' : 'bg-white/5 text-zinc-700'
+                                statusFilter === f.id ? 'bg-white/15 text-neutral-300' : 'bg-white/5 text-neutral-700'
                             }`}>
                                 {counts[f.id]}
                             </span>
@@ -531,13 +531,13 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
             <div className="flex flex-wrap items-center gap-2">
                 {/* Search */}
                 <div className="relative flex-1 min-w-[200px] max-w-xs">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
                     <input
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search by name or handle…"
-                        className="w-full pl-8 pr-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-zinc-300 placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/30 transition-all"
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-300 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/30 transition-all"
                     />
                 </div>
 
@@ -546,7 +546,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     <select
                         value={campaignFilter}
                         onChange={e => setCampaignFilter(e.target.value)}
-                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all max-w-[200px]"
+                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all max-w-[200px]"
                     >
                         <option value="all">All campaigns</option>
                         {campaigns.map(c => (
@@ -560,8 +560,8 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     onClick={() => setApplySettingsFilter(v => !v)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-xs rounded-xl border transition-all ${
                         applySettingsFilter
-                            ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-400'
-                            : 'border-white/8 bg-white/3 text-zinc-500 hover:text-zinc-300'
+                            ? 'border-brand-500/30 bg-brand-500/8 text-brand-400'
+                            : 'border-white/8 bg-white/3 text-neutral-500 hover:text-neutral-300'
                     }`}
                     title="Apply the keyword / follower / account-type filters configured in Settings"
                 >
@@ -573,17 +573,17 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 {(search || campaignFilter !== 'all' || applySettingsFilter) && (
                     <button
                         onClick={() => { setSearch(''); setCampaignFilter('all'); setApplySettingsFilter(false); }}
-                        className="px-3 py-2 text-xs text-zinc-700 hover:text-zinc-400 transition-colors"
+                        className="px-3 py-2 text-xs text-neutral-700 hover:text-neutral-400 transition-colors"
                     >
                         Clear
                     </button>
                 )}
 
-                <span className="ml-auto text-[10px] text-zinc-700 font-mono">{filtered.length} / {leads.length} leads</span>
+                <span className="ml-auto text-[10px] text-neutral-700 font-mono">{filtered.length} / {leads.length} leads</span>
             </div>
 
             {/* ── Table ───────────────────────────────────────────────────── */}
-            <div className="bg-[#050A08] border border-white/5 rounded-2xl overflow-hidden">
+            <div className="bg-surface-raised border border-white/5 rounded-2xl overflow-hidden">
                 {leads.length > 0 && (
                     <div className="border-b border-white/5">
                         <QueuePager
@@ -592,12 +592,12 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                             label="Approval queue pages"
                             rowsPerPageControl={
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] text-zinc-600">Rows</span>
+                                    <span className="text-[11px] text-neutral-600">Rows</span>
                                     <select
                                         aria-label="Rows per page"
                                         value={pageSize}
                                         onChange={e => changePageSize(Number(e.target.value) as QueuePageSize)}
-                                        className="bg-white/3 border border-white/8 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all"
+                                        className="bg-white/3 border border-white/8 rounded-lg px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all"
                                     >
                                         {QUEUE_PAGE_SIZES.map(n => (
                                             <option key={n} value={n}>{n}</option>
@@ -632,14 +632,14 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                         checked={allFilteredSelected}
                                         onChange={toggleSelectAll}
                                         title="Select all"
-                                        className="w-4 h-4 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-white/20 bg-transparent accent-brand-500 cursor-pointer"
                                     />
                                 </th>
-                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Prospect</th>
-                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[22%]`}>Profile</th>
-                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest w-[32%]`}>AI Generated DM</th>
-                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Status</th>
-                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest`}>Actions</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest`}>Prospect</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest w-[22%]`}>Profile</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest w-[32%]`}>AI Generated DM</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest`}>Status</th>
+                                <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest`}>Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.04]">
@@ -671,7 +671,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                             {filtered.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-12 text-center">
-                                        <div className="flex flex-col items-center gap-3 text-zinc-600">
+                                        <div className="flex flex-col items-center gap-3 text-neutral-600">
                                             <Users className="w-8 h-8 opacity-30" />
                                             <p className="text-sm">
                                                 {leads.length === 0
