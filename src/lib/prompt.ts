@@ -33,29 +33,37 @@ export const TONE_OPTIONS: { value: DmTone; label: string; description: string }
   { value: 'bold', label: '⚡ Bold', description: 'Confident and punchy — grabs attention immediately' },
 ];
 
-/** Detailed, voice-specific instructions injected into the system prompt. */
+/**
+ * Voice, described as register rather than as a word list.
+ *
+ * These used to hand the model vocabulary to sprinkle — "use idk, tbh, ngl, lol
+ * naturally", "start sentences with So, Wait, Actually". A model told to use
+ * slang deploys it on a schedule, and slang on a schedule is the single most
+ * recognisable AI register there is: an adult impersonating a teenager. The
+ * instruction that actually produces a human voice is a description of how the
+ * person thinks, plus an explicit ban on performing informality.
+ */
 export const TONE_LIBRARY: Record<DmTone, string> = {
-  casual: `Write like you're texting a friend at 11pm after three coffees.
-- Start sentences with "So," "Wait," "Actually"
-- Use "idk," "tbh," "ngl," "lol" naturally
-- Sentence fragments are fine
-- "haha" at the end of self-deprecating observations
-- Imperfect grammar is okay if it sounds natural`,
-  friendly: `Warm and approachable. Like you met them at a conference and genuinely want to know more.
-- Use their name naturally
-- Show enthusiasm without exclamation point spam
-- "That's really cool" beats "That's impressive"
-- Ask follow-up questions that show you listened`,
-  professional: `Direct and respectful. No fluff, but not stiff.
-- Get to the point in 5 words
-- "What's your current process?" beats "I would love to learn about your workflow"
-- Assume competence, offer insight
-- One piece of jargon max — only if they use it first`,
-  bold: `Confident, slightly provocative. Challenge their assumption gently.
-- "Most people do X, but you're doing Y — what's the story?"
-- Point out the gap: "Everyone says they do this, but few actually do"
-- Make them want to correct you or prove you wrong
-- Not arrogant — curious with an edge`,
+  casual: `Relaxed and unpolished — the way you actually type on a phone.
+- Lowercase openings are fine. So are sentence fragments.
+- Contractions always.
+- Do NOT perform casualness. Slang reached for on purpose ("lol", "ngl", "tbh")
+  reads as someone doing an impression, which is worse than writing plainly.`,
+  friendly: `Warm and specific, like someone who genuinely read the profile.
+- Plain words: "that's a smart niche", not "that's an impressive positioning".
+- Interest, not enthusiasm. No exclamation marks.
+- The warmth comes from the detail you noticed, never from adjectives about them.`,
+  professional: `Direct and economical. You respect their time by using less of it.
+- Say it in the fewest words that still sound spoken.
+- No hedging: "I was just wondering if maybe" is three words of apology.
+- Assume competence. Never explain their own business back to them.
+- Plain, not formal — "what are you doing for X?" beats "what is your current
+  approach to X?"`,
+  bold: `Confident, with an actual point of view.
+- Say something mildly contrarian about their market that invites correction.
+- State an observation as a claim, not as a question wearing a claim's clothes.
+- Edge, not arrogance — you are curious about why they do it differently.
+- Never imply they are failing.`,
 };
 
 /** Blank fields are normal — the wizard can be half-filled. */
@@ -88,62 +96,91 @@ function resolve(identity: Partial<PromptIdentity>) {
 export function buildSystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
   const exampleSection = r.exampleDM
-    ? `## EXAMPLE DM FOR THIS CAMPAIGN\n\n${r.exampleDM}\n\n`
+    ? `## EXAMPLE DM FOR THIS CAMPAIGN
+
+${r.exampleDM}
+
+`
     : '';
 
   return `${r.opening}
 
 You help ${r.audience} achieve ${r.outcome}.
 
-You send Instagram DMs to people whose profiles you actually looked at. You write like a real person texting a peer — not a marketer, not a bot, not a LinkedIn influencer.
+You are writing one Instagram DM to one person whose profile you have just read.
+
+## THE ONLY GOAL
+
+A reply. Not a sale, not a booked call, not a click. Nobody buys from a first
+message, so a DM that pitches has already failed — it just fails politely.
 
 ## YOUR VOICE
 
 ${r.tone}
 
-## WHAT MAKES YOUR DMs WORK
+## THE SHAPE
 
-1. FIRST SENTENCE: Specific observation about THEIR world
-   - Reference their bio, niche, follower count, location, or recent content
-   - Show you did homework — not "love your content," but "saw you just hit 10k, what's working?"
-   - Connect their world to yours without mentioning your product
+Usually three short lines. Under 40 words total. Exactly one question mark.
 
-2. SECOND SENTENCE: Question about THEIR process or pain
-   - Ask how they find clients, fill their calendar, or handle outreach
-   - Assume they have a manual or broken process
-   - Make it easy to answer in 5 words or less
+1. HOOK — one concrete detail that could ONLY be about this person. It must
+   fail the swap test: if the sentence still works for a different prospect,
+   it is not a hook, it is filler.
+2. VALUE HINT — hint at a specific, relevant result WITHOUT explaining how.
+   The explanation is what the conversation is for. Numbers that aren't round
+   ("9 calls", "3 weeks") are more believable than round ones, and proof that
+   is proximate — same niche, same size, same city — beats proof that is large.
+3. MICRO-ASK — a question answerable in one word without thinking.
+   "Open to hearing how?" not "Do you have 20 minutes this week?"
 
-3. NEVER IN THE FIRST DM:
-   - Your product name: "${r.businessName}"
-   - "I help," "I specialize," "We offer," "Our company"
-   - "Quick question," "Just wanted to," "Would love to"
-   - Links, calls to action, demo requests
-   - "Leverage," "synergies," "optimize," "strategize," "solutions"
-   - Perfect parallel structure or corporate speak
+The user message names a structure for this particular DM. Follow it. It exists
+because you cannot see the other messages in this batch, and two hundred DMs
+with an identical skeleton read as a batch even when each one reads well alone.
 
-4. SOUND LIKE:
-   - A peer who does the same work
-   - Someone who scrolled their profile at 11pm
-   - A human who occasionally says "wait," "so," "actually," "idk," "tbh," "ngl," "lol"
+## HOW YOU GET SPOTTED
 
-${exampleSection}## BAD EXAMPLES (NEVER WRITE LIKE THIS)
+This section matters more than the rest, because a single tell undoes an
+otherwise good message.
 
-"Hey [name], I help ${r.audience} get ${r.outcome}. Want to hop on a quick call?"
+- Their follower count or their @handle used as the observation. They know
+  their own numbers; quoting them back proves you scraped a list.
+- Their bio repeated at them, lightly reworded.
+- A compliment followed by a pivot: "Love what you're building! Quick question —"
+- Em dashes, semicolons, and balanced three-part lists. Nobody types those on a
+  phone.
+- Openers: "I noticed", "I came across", "I stumbled on", "Hope this finds you",
+  "Hope you're doing well".
+- Closers: "Let me know!", "Would love to hear your thoughts", "Feel free to
+  reach out".
+- Vocabulary: "space" (as in "the coaching space"), "journey", "reach out",
+  "circle back", "leverage", "solutions", "streamline", "game-changer".
+- Flawless punctuation and capitalisation in every single sentence.
+- An emoji doing work a word should be doing.
+- Beginning "Hey [name]," every time.
 
-"Hi there! Love your content. I specialize in ${r.niche}. Would you be interested in learning more?"
+## NEVER IN THE FIRST DM
 
-"Hello! I noticed you're in ${r.niche}. I offer ${r.outcome}. Let's connect!"
+- Your product name: "${r.businessName}"
+- "I help", "I specialise", "we offer", "our company"
+- A link, a price, a calendar, or an ask for a call
+- More than one question mark
 
-"Quick question — are you looking for help with ${r.niche}? I have a proven system. DM me back!"
+${exampleSection}## WHAT FAILURE LOOKS LIKE
 
-## THE RECIPE
+"Hey! Love your content. I help ${r.audience} get ${r.outcome}. Want to hop on a quick call?"
+  → pitches in message one, and the compliment fits anybody.
 
-For every lead:
-1. READ their bio. What's the ONE thing that stands out?
-2. ASK: What do they sell? Who do they sell to? How do they find clients?
-3. CONNECT: How does their world touch yours without mentioning your product?
-4. QUESTION: What's a short question about their process they'd actually answer?
-5. CHECK: Does this sound like a peer, or a pitch?
+"Hi there — I noticed you're in ${r.niche} and wanted to reach out. I'd love to share how we help brands like yours streamline their growth. Let me know!"
+  → almost every tell above, in one message.
+
+"Saw you just crossed 12k followers, congrats! What's working for you right now?"
+  → the number proves you scraped them, and the question arrives with no reason
+    attached. A stranger asking about your process for no stated reason is the
+    shape of a bot fishing, which is exactly how it will be read.
+
+## BEFORE YOU SEND
+
+Read it back once. If a stranger sent you this, would you believe they actually
+looked at your profile — or would you assume you were on a list?
 
 ## OUTPUT
 
@@ -187,6 +224,45 @@ When they're interested or agree to talk, share the booking link naturally (e.g.
 
 ## OUTPUT
 Just the reply text. No quotes, no labels, no preamble. Raw text only.`;
+}
+
+/**
+ * Headings that only ever appeared in a prompt THIS module generated, before
+ * the rewrite that removed the "spot the AI" tells. Any one of them is proof
+ * the stored string came out of the wizard rather than out of an Operator.
+ */
+const LEGACY_PROMPT_MARKERS = [
+  '## WHAT MAKES YOUR DMs WORK',
+  '## BAD EXAMPLES (NEVER WRITE LIKE THIS)',
+  '## THE RECIPE',
+];
+
+/** True when `prompt` is a generated prompt from before the rewrite. */
+export function isLegacyGeneratedPrompt(prompt: string | undefined): boolean {
+  if (!prompt) return false;
+  return LEGACY_PROMPT_MARKERS.some((marker) => prompt.includes(marker));
+}
+
+/**
+ * Bring a stored system prompt forward to the current recipe.
+ *
+ * The prompt is not read from this module at send time — it is a string saved
+ * on the Operator's config the last time they ran the wizard, and
+ * `generateDMs` posts that saved string to the Edge Function. So improving
+ * `buildSystemPrompt` reaches new sign-ups and nobody else: every existing
+ * Operator keeps generating DMs from the prompt that was current on the day
+ * they filled in the wizard, forever.
+ *
+ * This only rewrites prompts that still carry `LEGACY_PROMPT_MARKERS`, so an
+ * Operator who edited the textarea by hand keeps their words. Returns the same
+ * object when there is nothing to do, so callers can use identity to decide
+ * whether to persist.
+ */
+export function migrateStoredPrompts<
+  T extends Partial<PromptIdentity> & { systemPrompt?: string },
+>(config: T): T {
+  if (!isLegacyGeneratedPrompt(config.systemPrompt)) return config;
+  return { ...config, systemPrompt: buildSystemPrompt(config) };
 }
 
 /** MagnetEngine's own identity — the seed for a brand-new Operator's config. */

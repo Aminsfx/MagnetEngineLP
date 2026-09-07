@@ -31,7 +31,7 @@ import {
   getExtensionStatus,
   type ExtensionStatus,
 } from '../lib/extensionProtocol';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT } from '../lib/prompt';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompts } from '../lib/prompt';
 import { AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
@@ -164,7 +164,14 @@ const DashboardShell: React.FC = () => {
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
       outreach.hydrate(savedLeads ?? [], dmUsage.used);
-      setConfig(savedConfig ?? DEFAULT_CONFIG);
+      // The DM prompt is a string saved on the config, not read from `prompt.ts`
+      // at send time — so improving the recipe reaches new sign-ups and nobody
+      // else unless stored copies are brought forward. Only prompts the wizard
+      // generated are rewritten; a hand-edited one is the Operator's own.
+      const loaded = savedConfig ?? DEFAULT_CONFIG;
+      const migrated = migrateStoredPrompts(loaded);
+      setConfig(migrated);
+      if (migrated !== loaded) store.saveConfig(migrated).catch(console.error);
       setDataLoading(false);
     });
     // `outreach` is intentionally not a dependency: hydrate is stable and

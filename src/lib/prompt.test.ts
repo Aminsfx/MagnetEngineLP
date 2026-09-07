@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSystemPrompt,
+  isLegacyGeneratedPrompt,
+  migrateStoredPrompts,
   buildReplySystemPrompt,
   DEFAULT_IDENTITY,
   DEFAULT_SYSTEM_PROMPT,
@@ -94,5 +96,44 @@ describe('TONE_OPTIONS', () => {
   it('offers exactly the tones the library can build', () => {
     expect(TONE_OPTIONS.map((t) => t.value).sort())
       .toEqual(Object.keys(TONE_LIBRARY).sort());
+  });
+});
+
+describe('migrateStoredPrompts', () => {
+  // The prompt that actually generates DMs is a string saved on the Operator's
+  // config, not one read from this module at send time. Without a migration,
+  // improving the recipe reaches new sign-ups and literally nobody else.
+  const legacy = [
+    'You are the founder of Apex Growth.',
+    '## WHAT MAKES YOUR DMs WORK',
+    '1. FIRST SENTENCE: Specific observation about THEIR world',
+  ].join('\n\n');
+
+  it('recognises a prompt the old wizard generated', () => {
+    expect(isLegacyGeneratedPrompt(legacy)).toBe(true);
+    expect(isLegacyGeneratedPrompt(DEFAULT_SYSTEM_PROMPT)).toBe(false);
+    expect(isLegacyGeneratedPrompt(undefined)).toBe(false);
+    expect(isLegacyGeneratedPrompt('')).toBe(false);
+  });
+
+  it('rebuilds a stored legacy prompt from the identity on that config', () => {
+    const migrated = migrateStoredPrompts({ ...marcus, systemPrompt: legacy });
+
+    expect(migrated.systemPrompt).toBe(buildSystemPrompt(marcus));
+    expect(migrated.systemPrompt).toContain('You are Marcus, founder at Apex Growth.');
+    // The whole point: the tells the rewrite removed are gone.
+    expect(migrated.systemPrompt).not.toContain('## WHAT MAKES YOUR DMs WORK');
+    expect(migrated.systemPrompt).toContain('## HOW YOU GET SPOTTED');
+  });
+
+  it('leaves a hand-edited prompt alone, and says so by identity', () => {
+    // Same object back means "nothing to persist" to the caller.
+    const custom = { ...marcus, systemPrompt: 'just write something nice, thanks' };
+    expect(migrateStoredPrompts(custom)).toBe(custom);
+  });
+
+  it('is idempotent — a migrated config is not migrated again', () => {
+    const once = migrateStoredPrompts({ ...marcus, systemPrompt: legacy });
+    expect(migrateStoredPrompts(once)).toBe(once);
   });
 });
