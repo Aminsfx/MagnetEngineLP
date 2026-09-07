@@ -144,9 +144,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                             )}
                             <p className={`truncate ${fullName ? 'text-neutral-500 text-sm' : 'text-white font-semibold text-base'}`}>{user.email}</p>
                             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                {/* Static dot on purpose: this reports the real plan, not a fake live status. */}
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-[11px] font-semibold capitalize">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                                {/* Static dot on purpose: this reports the real plan, not a fake live status.
+                                    `positive` rather than `brand`: a subscription being active is a state,
+                                    and the page's one `brand` accent belongs to Update Password. */}
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-positive-500/10 border border-positive-500/20 text-positive-400 text-[11px] font-semibold capitalize">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-positive-400" />
                                     Member Plan
                                 </span>
                                 <span className="text-neutral-600 text-xs">Member since {memberSince}</span>
@@ -174,13 +176,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                                     className="text-neutral-600 hover:text-brand-400 transition-colors"
                                 >
                                     {copied
-                                        ? <Check className="w-3.5 h-3.5 text-brand-400" />
+                                        ? <Check className="w-3.5 h-3.5 text-positive-400" />
                                         : <Copy className="w-3.5 h-3.5" />
                                     }
                                 </button>
                             </div>
                             <p className="text-xs text-neutral-500 font-mono truncate">{user.id.slice(0, 16)}…</p>
-                            {copied && <p className="text-[10px] text-brand-500 mt-1">Copied to clipboard!</p>}
+                            {copied && <p className="text-[10px] text-positive-500 mt-1">Copied to clipboard!</p>}
                         </div>
                     </div>
                 </div>
