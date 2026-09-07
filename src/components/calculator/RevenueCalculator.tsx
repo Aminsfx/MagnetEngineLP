@@ -26,87 +26,89 @@ export const RevenueCalculator: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto">
-            <div className="bg-[#030604] border border-white/5 rounded-2xl p-8">
+            <div className="bg-surface border border-white/5 rounded-2xl p-8">
                 <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-900 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-600 to-brand-900 flex items-center justify-center">
                         <Calculator className="w-6 h-6 text-white" />
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-white">Revenue Calculator</h2>
-                        <p className="text-sm text-zinc-500">Reverse engineer your daily DM target</p>
+                        <p className="text-sm text-neutral-500">Reverse engineer your daily DM target</p>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Monthly Revenue Goal ($)</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">Monthly Revenue Goal ($)</label>
                         <input
                             type="number"
                             value={revenueGoal}
                             onChange={(e) => setRevenueGoal(Number(e.target.value))}
-                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full bg-surface-raised border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Average Deal Size ($)</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">Average Deal Size ($)</label>
                         <input
                             type="number"
                             value={dealSize}
                             onChange={(e) => setDealSize(Number(e.target.value))}
-                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full bg-surface-raised border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">DM → Reply Rate (%)</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">DM → Reply Rate (%)</label>
                         <input
                             type="number"
                             value={dmToReply}
                             onChange={(e) => setDmToReply(Number(e.target.value))}
-                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full bg-surface-raised border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Reply → Call Rate (%)</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">Reply → Call Rate (%)</label>
                         <input
                             type="number"
                             value={replyToCall}
                             onChange={(e) => setReplyToCall(Number(e.target.value))}
-                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full bg-surface-raised border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Call → Close Rate (%)</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">Call → Close Rate (%)</label>
                         <input
                             type="number"
                             value={callToClose}
                             onChange={(e) => setCallToClose(Number(e.target.value))}
-                            className="w-full bg-[#050A08] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full bg-surface-raised border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                         />
                     </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-2xl p-8 text-center">
-                    <TrendingUp className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-                    <p className="text-sm text-zinc-400 mb-2">You need to send</p>
+                {/* The projection is the payoff of this tool, so it carries `brand`.
+                    It used to fade emerald → cyan; cyan now means "the AI made this". */}
+                <div className="bg-gradient-to-br from-brand-500/10 to-brand-700/10 border border-brand-500/20 rounded-2xl p-8 text-center">
+                    <TrendingUp className="w-12 h-12 text-brand-500 mx-auto mb-4" />
+                    <p className="text-sm text-neutral-400 mb-2">You need to send</p>
                     <p className="text-6xl font-bold text-white mb-2">{results.dailyDMs}</p>
-                    <p className="text-lg text-zinc-400 mb-6">DMs per day</p>
+                    <p className="text-lg text-neutral-400 mb-6">DMs per day</p>
 
                     <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/10">
                         <div>
                             <p className="text-2xl font-bold text-white">{results.dealsNeeded}</p>
-                            <p className="text-xs text-zinc-500">Deals Needed</p>
+                            <p className="text-xs text-neutral-500">Deals Needed</p>
                         </div>
                         <div>
                             <p className="text-2xl font-bold text-white">{results.dmsNeeded}</p>
-                            <p className="text-xs text-zinc-500">Total DMs</p>
+                            <p className="text-xs text-neutral-500">Total DMs</p>
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-emerald-500">${revenueGoal.toLocaleString()}</p>
-                            <p className="text-xs text-zinc-500">Revenue Goal</p>
+                            <p className="text-2xl font-bold text-brand-500">${revenueGoal.toLocaleString()}</p>
+                            <p className="text-xs text-neutral-500">Revenue Goal</p>
                         </div>
                     </div>
                 </div>
