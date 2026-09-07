@@ -5,8 +5,12 @@
 // Secrets: APIFY_API_KEY (required)
 //
 // POST JSON: { runId: string }
-// → { status: 'RUNNING'|'SUCCEEDED'|'FAILED'|..., items?: any[] }
+// → { status: 'RUNNING'|'SUCCEEDED'|'FAILED'|..., statusMessage?: string, items?: any[] }
 //   `items` (the raw dataset) is included only when status === 'SUCCEEDED'.
+//   `statusMessage` is the actor's own last word on the run ("scraped 0 items",
+//   "account is private", …). A SUCCEEDED run with an empty dataset is the one
+//   failure the client cannot otherwise explain, so it is passed through rather
+//   than dropped here — the Operator sees the run's reason, not our guess.
 
 import { json, servePost } from "../_shared/http.ts";
 import { APIFY_BASE } from "../_shared/apify.ts";
@@ -29,6 +33,7 @@ servePost<Body>("poll-scrape", async ({ body }) => {
   }
   const statusData = await res.json();
   const status: string = statusData?.data?.status ?? "RUNNING";
+  const statusMessage: string | undefined = statusData?.data?.statusMessage ?? undefined;
 
   if (status === "SUCCEEDED") {
     const datasetId: string = statusData?.data?.defaultDatasetId;
@@ -37,8 +42,8 @@ servePost<Body>("poll-scrape", async ({ body }) => {
     );
     if (!itemsRes.ok) throw new Error(`Dataset fetch failed (${itemsRes.status})`);
     const items = await itemsRes.json();
-    return json(200, { status, items });
+    return json(200, { status, statusMessage, items });
   }
 
-  return json(200, { status });
+  return json(200, { status, statusMessage });
 });

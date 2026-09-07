@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Lead } from '../../lib/types';
-import { runApifyScrape, runFollowersScrape, SearchParams, FollowersParams } from '../../lib/apify';
+import { runApifyScrape, runFollowersScrape, explainEmptyScrape, SearchParams, FollowersParams } from '../../lib/apify';
 import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
@@ -136,9 +136,10 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         };
 
         try {
-            const leads = await runApifyScrape(params, log);
+            const outcome = await runApifyScrape(params, log);
+            const { leads } = outcome;
             if (leads.length === 0) {
-                setError('No profiles returned. Try different search terms or a higher limit.');
+                setError(explainEmptyScrape(outcome, 'Try different search terms or a higher limit.'));
             } else {
                 setResults(leads);
                 setSelected(new Set(leads.map(l => l.id))); // auto-select all
@@ -170,9 +171,14 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         };
 
         try {
-            const leads = await runFollowersScrape(params, log);
+            const outcome = await runFollowersScrape(params, log);
+            const { leads } = outcome;
             if (leads.length === 0) {
-                setError('No profiles returned. The account may be private or have no followers.');
+                setError(explainEmptyScrape(
+                    outcome,
+                    'Instagram only exposes follower lists for public accounts, and serves them in bounded pages — large accounts often return nothing. '
+                    + 'If the account is public, open this run in the Apify console: its log says why the list came back empty.',
+                ));
             } else {
                 setResults(leads);
                 setSelected(new Set(leads.map(l => l.id)));
