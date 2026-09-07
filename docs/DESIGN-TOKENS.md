@@ -23,6 +23,7 @@ block would only be a second definition of the same values to drift from.
 | `brand` | emerald | Primary action, success, "on". The product's one accent. |
 | `positive` | emerald | A good outcome in data — replied, booked, under budget. |
 | `info` | cyan | AI and generation affordances **only**. Nothing else earns cyan. |
+| `accent` | cyan | Decoration that needs a second colour — gradients, avatar placeholders, a progress bar. Carries no meaning. |
 | `caution` | amber | Approaching a limit; a warning that is not yet a failure. |
 | `danger` | red | Destructive action, over limit, error. |
 | `neutral` | zinc | Text, borders, chrome. The default for anything not above. |
@@ -30,6 +31,23 @@ block would only be a second definition of the same values to drift from.
 `brand` and `positive` are the same emerald on purpose. They are separated so a
 future palette change can move the accent without recolouring every success
 state, and so a reader can tell "this is the CTA" from "this number is good".
+
+### `accent` vs `info` — same cyan, different promise
+
+`info` is a claim: *the AI produced this.* `accent` is an admission: *a gradient
+needed a second colour.* They compile to identical pixels, so the distinction
+buys nothing at runtime — it buys the ability to trust `info` when you grep for
+what the AI touches.
+
+The gap was found the hard way. Three workers hit the same decorative
+emerald→cyan avatar gradient in three files and resolved it three ways: one kept
+the cyan and called it `info` (which made this table a lie), two dropped the cyan
+for a brand ramp (which changed pixels nobody asked to change). `accent` is the
+third answer, and all four decorative gradients now use it — the two avatars that
+had lost their cyan have it back.
+
+If you are reaching for `accent`, check first that the thing really is
+decoration. A status, a state, a limit and an AI output all have roles already.
 
 ### `violet` is retired
 
@@ -46,6 +64,22 @@ rule in `index.html` was the last non-component blue and is now `brand`.
 `index.html`'s `<body>` still carries `selection:bg-blue-500/30
 selection:text-blue-200` — fold those into `brand` when a wave-two worker owns
 that line.
+
+## Opacity steps
+
+Tailwind v3's opacity scale runs 0, 5, 10, 15, 20, 25, 30, 40… — it has **no 3,
+4, 6, 7, 8 or 12**. An off-scale modifier does not warn and does not fall back:
+it silently emits no rule at all.
+
+This repo had written 128 of them, including 86 `border-white/8` — the hairline
+that is this UI's card edge. Those borders had been authored, reviewed and
+shipped, and had never once rendered. `tailwind.config.js` now defines the steps
+the design actually uses, so they do.
+
+Before adding a new fractional step, add it to `theme.extend.opacity` too, or
+check the built CSS. `grep -o 'border-white[^{,: ]*' dist/assets/*.css | sort -u`
+lists what really exists.
+
 
 ## Surfaces
 

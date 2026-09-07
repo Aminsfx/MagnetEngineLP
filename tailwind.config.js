@@ -8,6 +8,7 @@ import colors from 'tailwindcss/colors';
  *
  * Roles, not hues: see docs/DESIGN-TOKENS.md for which role means what and how
  * to pick one. `violet` is deliberately absent — it had 60 uses and no meaning.
+ * `blue` likewise.
  * Raw hex/rgba for Recharts props and inline styles lives in src/lib/theme.ts.
  *
  * @type {import('tailwindcss').Config}
@@ -23,6 +24,20 @@ export default {
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'sans-serif'],
       },
+      // Tailwind v3's opacity scale jumps 5 -> 10 -> 15 -> 20, so `border-white/8`
+      // and its neighbours matched nothing and emitted NO CSS — 128 uses across
+      // the app, including the 86 `/8` hairlines that are this UI's card edge.
+      // The borders were written, reviewed and never rendered. Adding the steps
+      // the design actually uses is what makes them appear.
+      opacity: {
+        3: '0.03',
+        4: '0.04',
+        6: '0.06',
+        7: '0.07',
+        8: '0.08',
+        12: '0.12',
+      },
+
       colors: {
         // The four dark grounds every panel sits on, absorbing the ~115
         // arbitrary `bg-[#hex]` utilities and their one-off strays.
@@ -40,6 +55,13 @@ export default {
         // emit the same rule while the name says why the colour is there.
         positive: colors.emerald,
         info: colors.cyan,
+        // Decorative cyan. Same ramp as `info`, different promise: `info` means
+        // the AI produced this, `accent` means a gradient or flourish needed a
+        // second colour. Two workers independently hit this gap — one spelled a
+        // decorative avatar gradient `info`, which made the role map a lie; the
+        // other dropped the cyan entirely, which changed pixels. This is the
+        // third option: the pixels stay, and `info` keeps meaning one thing.
+        accent: colors.cyan,
         caution: colors.amber,
         danger: colors.red,
         neutral: colors.zinc,

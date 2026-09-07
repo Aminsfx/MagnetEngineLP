@@ -124,7 +124,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                         ) : (
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-brand-800 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-accent-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                                 {(lead.name || lead.handle)[0]?.toUpperCase()}
                             </div>
                         )}

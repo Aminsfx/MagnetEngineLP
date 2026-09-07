@@ -118,7 +118,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
         {/* Progress bar */}
         <div className="h-1 bg-white/5 rounded-full mb-5 overflow-hidden relative z-10">
           <div
-            className="h-full bg-gradient-to-r from-brand-500 to-info-500 rounded-full transition-all duration-700"
+            className="h-full bg-gradient-to-r from-brand-500 to-accent-500 rounded-full transition-all duration-700"
             style={{ width: `${progress}%` }}
           />
         </div>

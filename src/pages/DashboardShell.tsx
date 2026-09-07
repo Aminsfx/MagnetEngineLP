@@ -557,7 +557,7 @@ const DashboardShell: React.FC = () => {
                 a decorative avatar is not an AI affordance and cyan is reserved
                 for those, so it stays inside the brand ramp. */}
             <div
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-brand-300 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-accent-500 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
               title={user?.email ?? ''}
             >
               {headerAvatar

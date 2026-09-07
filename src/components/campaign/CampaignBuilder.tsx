@@ -653,7 +653,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                     />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-info-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                                         {(lead.name || lead.handle)[0]?.toUpperCase()}
                                     </div>
                                 )}
