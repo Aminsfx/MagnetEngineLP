@@ -13,6 +13,9 @@ import type { ExtensionStatus } from '../../lib/extensionProtocol';
  *
  * Deliberately renders nothing while `checking` — a banner that flashes on
  * every load teaches Operators to ignore banners.
+ *
+ * `caution`, not `danger`, for both states: nothing has failed yet — the next
+ * send would. Red here would cry wolf on a page an Operator sits on all day.
  */
 export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status }) => {
   if (status.state === 'checking') return null;
@@ -24,16 +27,16 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
   return (
     <div
       role="status"
-      className="mx-4 sm:mx-8 mt-4 flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3"
+      className="mx-4 sm:mx-8 mt-4 flex items-start gap-3 rounded-2xl border border-caution-500/25 bg-caution-500/[0.07] px-4 py-3"
     >
-      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-caution-400" />
       <div className="text-[13px] leading-relaxed">
-        <p className="font-medium text-amber-200">
+        <p className="font-medium text-caution-200">
           {absent
             ? 'Extension not detected'
             : 'Your MagnetEngine extension is out of date'}
         </p>
-        <p className="text-zinc-400 mt-0.5">
+        <p className="text-neutral-400 mt-0.5">
           {absent ? (
             <>
               DMs, follow-ups and inbox replies all send through the browser
@@ -45,7 +48,7 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
               This build
               {status.version ? <> (v{status.version})</> : null}
               {' '}is older than the dashboard, so newer actions won&apos;t reach it.
-              Open <span className="font-mono text-zinc-300">chrome://extensions</span>,
+              Open <span className="font-mono text-neutral-300">chrome://extensions</span>,
               click Update, then reload this page.
             </>
           )}
