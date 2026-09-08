@@ -7,6 +7,7 @@ import { useToast } from '../common/Toast';
 import {
     buildSystemPrompt,
     buildReplySystemPrompt,
+    isLegacyGeneratedPrompt,
     DEFAULT_REPLY_SYSTEM_PROMPT,
     TONE_OPTIONS,
     type PromptIdentity,
@@ -147,6 +148,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         const machineWritten =
             current === '' ||
             current === DEFAULT_REPLY_SYSTEM_PROMPT ||
+            // A persona generated at an older recipe version is still ours to
+            // replace — without this, re-running the wizard would preserve a
+            // stale prompt as if the Operator had typed it.
+            isLegacyGeneratedPrompt(current) ||
             current === buildReplySystemPrompt({
                 founderName: config.founderName ?? '',
                 founderRole: config.founderRole ?? '',
