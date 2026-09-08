@@ -8,8 +8,11 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // Replaces .eslintignore. `supabase/functions` is Deno (npm:/jsr: specifiers
-    // + Deno globals) and is not part of this TS project.
-    ignores: ['dist/**', 'node_modules/**', 'supabase/**', '*.zip'],
+    // + Deno globals) and is not part of this TS project. `.claude/` holds
+    // agent worktrees — full copies of this repo, each with its own
+    // tsconfig.json, which are not source and must never be linted as if they
+    // were (see tsconfigRootDir below).
+    ignores: ['dist/**', 'node_modules/**', 'supabase/**', '.claude/**', '*.zip'],
   },
 
   // ---- App source: React + TypeScript ----
@@ -21,6 +24,13 @@ export default tseslint.config(
       globals: globals.browser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
+        // Pin the project root to this file's directory. Without it,
+        // typescript-eslint infers the root by looking for tsconfig.json, finds
+        // one per agent worktree under `.claude/`, and refuses to parse ANY
+        // file — 177 parse errors across the repo, none of them real code
+        // problems. Pinned, the answer no longer depends on what happens to be
+        // sitting in the working tree.
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     plugins: {
@@ -80,6 +90,7 @@ export default tseslint.config(
         isAppMessage: 'readonly',
         messageKind: 'readonly',
         readCampaign: 'readonly',
+        describeExtension: 'readonly',
         importScripts: 'readonly',
       },
     },
