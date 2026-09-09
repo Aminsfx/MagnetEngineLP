@@ -18,6 +18,30 @@ import { FunctionError } from './functions';
  * that way, and the Operator must not be handed an empty DM either way.
  */
 const GENERATE_DM = resolve(__dirname, '../../supabase/functions/generate-dm/index.ts');
+const GENERATE_REPLY = resolve(__dirname, '../../supabase/functions/generate-reply/index.ts');
+
+describe('both generators clean their output the same way', () => {
+  // They each used to carry a private cleaner. The two drifted, and the reply
+  // one — the one whose output autopilot sends with no human reading it — ended
+  // up with no label handling at all. `completion.test.ts` proves the shared
+  // module behaves; this proves both functions actually use it.
+  it.each([
+    ['generate-dm', GENERATE_DM],
+    ['generate-reply', GENERATE_REPLY],
+  ])('%s imports the shared cleaner', (_name, path) => {
+    expect(readFileSync(path, 'utf8')).toMatch(/from "\.\.\/_shared\/completion\.ts"/);
+  });
+
+  it.each([
+    ['generate-dm', GENERATE_DM],
+    ['generate-reply', GENERATE_REPLY],
+  ])('%s keeps no private cleaner of its own', (_name, path) => {
+    const source = readFileSync(path, 'utf8');
+
+    expect(source).not.toContain('function sanitizeOutput');
+    expect(source).not.toContain('function cleanReply');
+  });
+});
 
 describe('the generate-dm error contract', () => {
   it('raises the same code the client branches on', () => {

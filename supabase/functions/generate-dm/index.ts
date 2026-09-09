@@ -15,6 +15,10 @@
 
 import { json, servePost } from "../_shared/http.ts";
 import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
+import { cleanCompletion } from "../_shared/completion.ts";
+
+/** Character ceiling on a DM. A good one is nowhere near it. */
+const DM_LIMIT = 1000;
 
 function sanitizeBio(bio: string | undefined): string {
   if (!bio) return "No bio available";
@@ -22,19 +26,6 @@ function sanitizeBio(bio: string | undefined): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .substring(0, 300);
-}
-
-function sanitizeOutput(text: string): string {
-  let cleaned = text.trim();
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
-      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
-  }
-  cleaned = cleaned.replace(/\*\*/g, "").replace(/\*/g, "");
-  cleaned = cleaned.replace(/^(Subject|DM|Message|Here'?s?\s*(the|your)\s*(DM|message)):\s*/i, "");
-  cleaned = cleaned.replace(/^[-•]\s+/, "");
-  cleaned = cleaned.substring(0, 1000);
-  return cleaned.trim();
 }
 
 /**
@@ -141,7 +132,7 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
   let raw = "";
   let dm = "";
   for (let attempt = 0; attempt < 2 && !dm; attempt++) {
-    raw = await complete({
+    const completion = await complete({
       provider: resolved.provider,
       key: resolved.key,
       system: systemPrompt,
@@ -155,7 +146,13 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
       // sentence, and temperature is the only lever that touches it directly.
       temperature: 0.95,
     });
-    dm = sanitizeOutput(raw);
+    raw = completion.text;
+    // A completion the token cap cut in half is cut back to its last finished
+    // sentence rather than retried: at temperature 0.95 a model that ran long
+    // once will very likely run long again, so a retry buys a coin flip for a
+    // full provider call. If the salvage leaves nothing, the loop below is
+    // where the retry happens anyway.
+    dm = cleanCompletion(raw, { limit: DM_LIMIT, truncated: completion.truncated });
   }
 
   // Still nothing after the retry. It is a failed generation: say so with a

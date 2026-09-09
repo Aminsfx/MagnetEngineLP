@@ -65,7 +65,7 @@ extension/
   protocol.js                    # Wire protocol — shared by worker, content script, popup
   background.js / content.js / popup.js
 supabase/
-  functions/_shared/             # http.ts (servePost), ai.ts (providers), apify.ts, emails.ts
+  functions/_shared/             # http.ts (servePost), ai.ts (providers), completion.ts (output cleanup), apify.ts, emails.ts
   migrations/0001_usage.sql      # dm_usage + usage_counters
 CONTEXT.md                       # Domain glossary — read before naming anything
 ```
@@ -101,6 +101,14 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Never infer a send from anything else.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.
+- **Model output → a message** — a completion becomes something a prospect can
+  read only through `cleanCompletion` / `replyEnvelope` in
+  `_shared/completion.ts`. Never write a second cleaner: generate-dm and
+  generate-reply each carried a private one, they drifted, and the reply path —
+  the one autopilot sends with no human reading it — ended up with no label
+  handling at all. The module holds no Deno globals *by contract*, because
+  `src/lib/completion.test.ts` imports it, which is what both executes it in
+  vitest and pulls it into `npm run typecheck`.
 
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
@@ -154,6 +162,8 @@ APIKeys { openai?, claude?, gemini? }  // NO apify — backend-managed
 ## AI DM Generation (src/lib/api.ts → generate-dm Edge Function)
 - `aiAPI.generateDM(provider, lead, systemPrompt)` calls the `generate-dm` Edge Function via `supabase.functions.invoke`. Provider keys (`CLAUDE_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`) are Supabase secrets; prompt building + injection-safe bio handling + output cleanup run server-side. Client sees no key.
 - **A generation that produces nothing is a failure, not a DM.** Cleanup can strip a completion down to `""`; the function retries once, then answers `502 { error, code: 'empty_completion' }` and bills no quota. The code matters: `invokeFunction` surfaces it on a `FunctionError`, and `useOutreach` skips that one Lead and keeps generating, where every other error stops the batch. Never let a blank reach a Lead as `dmContent` — the Approval Queue reads a DM as `!!dmContent`, so a blank shows the Operator an empty queue under a toast claiming success.
+- **A completion is not a message.** Models answer a person before producing an artefact ("Sure! Here's the DM:"), and whatever survives cleanup is what the extension types into Instagram — the queue renders `dmContent` verbatim. `_shared/completion.ts` is the only thing standing there, so it fails closed: every rule must recognise a *label*, not a suspicious-looking line. A left-in preamble is ugly and the Operator can see it; an eaten clause is invisible and gets sent. The prompt is the other half — `## NEVER IN THE FIRST DM` and `## OUTPUT` in `prompt.ts` — but a prompt fix reaches nobody without a `PROMPT_VERSION` bump, and never reaches a hand-edited prompt at all, which is why cleanup has to stand alone.
+- **`complete()` reports truncation.** `maxTokens` is 140, so a completion that spent tokens on preamble can be cut mid-sentence. `{ text, truncated }` lets `cleanCompletion` cut back to the last finished sentence instead of shipping a fragment; if nothing survives, it falls into the `empty_completion` path. Reply generation asks for its envelope with `jsonSchema`, not a boolean — assistant prefill returns a 400 on this model family.
 
 ## Environment Variables
 **Frontend (`.env`, gitignored — PUBLIC, ships in the bundle; only non-secret values):**

@@ -64,9 +64,22 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('undefined');
   });
 
-  it('always ends with the raw-text output rule', () => {
+  it('ends by stating that the whole response is the DM', () => {
+    // Last position, because it is the one the model reads most recently — and
+    // stated positively, because "no preamble" names the thing it forbids.
     expect(buildSystemPrompt(marcus).trimEnd())
-      .toMatch(/Just the DM text\. No quotes\. No labels\. No preamble\. Raw text only\.$/);
+      .toMatch(/You are not answering me\. You are writing to them\.$/);
+  });
+
+  it('bans preamble where the model looks for hard stops', () => {
+    // It used to appear once, in the OUTPUT section, and nowhere in the list of
+    // things never to do. DMs arrived reading "Here is the DM: hey...".
+    const never = buildSystemPrompt(marcus).split('## NEVER IN THE FIRST DM')[1];
+    expect(never).toContain('Any words that are not the message.');
+  });
+
+  it('asks the hook to carry a reason for the message existing', () => {
+    expect(buildSystemPrompt(marcus)).toContain('implied BECAUSE');
   });
 });
 
@@ -98,8 +111,26 @@ describe('buildReplySystemPrompt', () => {
 
   it('never lets the model quote a price or a result it was not given', () => {
     const prompt = buildReplySystemPrompt(marcus);
-    expect(prompt).toContain('Never quote a\n  number you were not given');
+    // Asserted without the line wrapping — the rule is the point, and pinning
+    // the newline made an unrelated reflow of this paragraph fail the suite.
+    expect(prompt.replace(/\s+/g, ' ')).toContain('Never quote a number you were not given');
     expect(prompt).toContain('never claim a number you were not given');
+  });
+
+  it('anchors the whole price before naming ways to pay it', () => {
+    expect(buildReplySystemPrompt(marcus))
+      .toContain('never the cheapest\n  option first');
+  });
+
+  it('states no output format, because its consumer wraps it in one', () => {
+    // generate-reply appends "respond with a SINGLE JSON object and nothing
+    // else". This prompt used to say "raw text only" sixty lines above that,
+    // and a model handed two contradictory format rules produced an envelope
+    // that would not parse — which the old code sent to the prospect verbatim.
+    const prompt = buildReplySystemPrompt(marcus);
+    expect(prompt).not.toContain('Raw text only');
+    expect(prompt).not.toContain('## OUTPUT');
+    expect(prompt).toContain('## WHAT COUNTS AS THE REPLY');
   });
 });
 

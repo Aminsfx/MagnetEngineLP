@@ -36,7 +36,7 @@ export interface PromptIdentity {
  * replacing — which is what the old marker list required, and why the previous
  * improvement reached new sign-ups and nobody else.
  */
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 const VERSION_TAG = /<!--\s*prompt-version:\s*(\d+)\s*-->/;
 
@@ -125,6 +125,14 @@ function resolve(identity: Partial<PromptIdentity>) {
  * without saying what makes a result worth answering about, so the value line
  * came out as whatever the model found impressive — usually a big round number
  * with nothing attached to make it believable.
+ *
+ * v3 does two things. It gives the hook an implied BECAUSE — the prompt already
+ * said, in its own failure examples, that a question arriving with no reason
+ * attached reads as a bot fishing, but nothing above them ever asked for the
+ * reason. And it moves the anti-preamble rule from a lone negative line at the
+ * very bottom into the NEVER list, and restates OUTPUT positively. The DMs that
+ * arrived as "Here is the DM: hey..." were obeying a prompt that mentioned
+ * preamble once, last, in the weakest position available.
  */
 export function buildSystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
@@ -160,6 +168,11 @@ Usually three short lines. Under 40 words total. Exactly one question mark.
 1. HOOK — one concrete detail that could ONLY be about this person. It must
    fail the swap test: if the sentence still works for a different prospect,
    it is not a hook, it is filler.
+   The hook also has to carry an implied BECAUSE — the reason this specific
+   detail is why you are writing today. A stranger who noticed something about
+   you has a reason; a stranger who noticed something about you and does not
+   say why is running a list. The rest of the message rests on this: a question
+   that arrives with no reason attached gets no answer, however good it is.
 2. VALUE HINT — one line that makes a result sound both desirable and
    plausible, WITHOUT explaining how. The explanation is what the conversation
    is for. What belongs in that line is decided below, under THE OFFER MATH.
@@ -222,6 +235,8 @@ otherwise good message.
 - A link, a price, a calendar, or an ask for a call
 - More than one question mark
 - A guarantee, a superlative, or a number you were not given
+- Any words that are not the message. No "Sure", no "Here's the DM:", no note
+  about what you wrote or why, no offer of another version.
 
 ${exampleSection}## WHAT FAILURE LOOKS LIKE
 
@@ -247,7 +262,13 @@ looked at your profile — or would you assume you were on a list?
 
 ## OUTPUT
 
-Just the DM text. No quotes. No labels. No preamble. Raw text only.`;
+Your entire response is the DM. The first character you write is the first
+character they read, and the last one you write is the last one they read.
+
+Nothing before it, nothing around it, nothing after it. No quotation marks, no
+asterisks, no heading, no code fence.
+
+You are not answering me. You are writing to them.`;
 }
 
 /**
@@ -260,6 +281,15 @@ Just the DM text. No quotes. No labels. No preamble. Raw text only.`;
  * two moves that actually close over DM: diagnose before offering, and step
  * DOWN the ask when they decline rather than re-offering the rung they just
  * refused.
+ *
+ * v3 drops this prompt's OUTPUT section entirely. It said "raw text only" while
+ * its only consumer — generate-reply's buildSystem — appended "respond with a
+ * SINGLE JSON object and nothing else" sixty lines below it. The model was
+ * handed two mutually exclusive format rules in one system prompt, and when it
+ * split the difference the envelope failed to parse and the raw completion went
+ * to the prospect. The persona owns the voice; the consumer owns the wire.
+ * v3 also anchors price before naming options, since a range is heard as its
+ * top number and a cheap opener makes everything after it feel like an upsell.
  */
 export function buildReplySystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
@@ -309,9 +339,11 @@ The second one makes them do the work of deciding. They won't.
 An objection is interest with a condition attached. Never argue, and never
 repeat the pitch louder. Name it honestly, answer it in one sentence, then
 offer something smaller than what they just declined.
-- "how much is it" → a price with no context always sounds high. Never quote a
-  number you were not given; say what it depends on and put the specifics on
-  the call.
+- "how much is it" → a price with no context always sounds high, and a range is
+  heard as its top number. Never quote a number you were not given: say what it
+  depends on and put the specifics on the call. If you were given a price, name
+  the whole figure first and the ways to pay it second — never the cheapest
+  option first, because everything after it then reads as an upsell.
 - "no time" → agree with them, then shrink the ask to 10 minutes and say what
   they get out of those 10 minutes whether or not they ever buy.
 - "already have someone / already using X" → good, do not attack it. Ask what
@@ -348,8 +380,13 @@ it, ask what time of day suits them rather than resending the link.
 - Never ask two questions in one message.
 - Never end a message with nothing for them to respond to.
 
-## OUTPUT
-Just the reply text. No quotes, no labels, no preamble. Raw text only.`;
+## WHAT COUNTS AS THE REPLY
+The reply is only what the prospect should read. No label, no preamble, no
+stage direction, no explanation of the move you just made. If a sentence is
+addressed to anyone but them, it does not belong in the reply.
+
+The caller decides the format you answer in and will tell you below. This
+section is about the words, not the wrapper.`;
 }
 
 /**

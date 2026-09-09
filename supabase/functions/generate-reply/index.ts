@@ -18,20 +18,29 @@
 
 import { json, servePost } from "../_shared/http.ts";
 import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
+import { replyEnvelope } from "../_shared/completion.ts";
 
 const INTENTS = ["interested", "objection", "not_interested", "neutral", "booked"] as const;
 type Intent = (typeof INTENTS)[number];
+
+/** Character ceiling on one inbox reply. */
+const REPLY_LIMIT = 800;
+
+/** The envelope the model is asked to answer in. */
+const REPLY_SCHEMA = {
+  type: "object",
+  properties: {
+    reply: { type: "string" },
+    intent: { type: "string", enum: [...INTENTS] },
+  },
+  required: ["reply", "intent"],
+  additionalProperties: false,
+};
 
 function sanitize(text: string): string {
   return (text ?? "")
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .substring(0, 600);
-}
-
-function cleanReply(text: string): string {
-  let c = text.trim();
-  if ((c.startsWith('"') && c.endsWith('"')) || (c.startsWith("'") && c.endsWith("'"))) c = c.slice(1, -1);
-  return c.replace(/\*\*/g, "").replace(/\*/g, "").substring(0, 800).trim();
 }
 
 function buildSystem(base: string, calendarLink: string | undefined): string {
@@ -61,21 +70,33 @@ function buildTranscript(messages: any[], contact: any): string {
   return `Conversation with ${who}:\n\n${lines.join("\n")}\n\nWrite your next reply now as JSON.`;
 }
 
-/** Parse the model's JSON output; fall back to treating the whole thing as reply. */
-function parseResult(raw: string, calendarLink: string | undefined): { reply: string; intent: Intent } {
-  let reply = "";
-  let intent: Intent = "neutral";
-  try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-    const obj = JSON.parse(slice);
-    reply = cleanReply(String(obj.reply ?? ""));
-    if (INTENTS.includes(obj.intent)) intent = obj.intent;
-  } catch {
-    reply = cleanReply(raw);
-  }
-  if (!reply) reply = cleanReply(raw) || "Thanks for the reply! Want to hop on a quick call?";
+/**
+ * The reply and its intent, from whatever the model actually returned.
+ *
+ * Envelope parsing and cleanup both live in `_shared/completion.ts`; what stays
+ * here is the part that is this function's own business — validating the intent
+ * against the list the Inbox understands, and attaching the booking link.
+ *
+ * This used to hand the entire raw completion back as `reply` whenever JSON
+ * parsing failed, and autopilot sends a reply to the prospect with nobody
+ * reading it first.
+ */
+function parseResult(
+  raw: string,
+  truncated: boolean,
+  calendarLink: string | undefined,
+): { reply: string; intent: Intent } {
+  const parsed = replyEnvelope(raw, { limit: REPLY_LIMIT, truncated });
+
+  const intent: Intent = INTENTS.includes(parsed.intent as Intent)
+    ? (parsed.intent as Intent)
+    : "neutral";
+
+  // A reply we could not recover is not a reason to say nothing — the Operator
+  // has a live conversation open — but it must be OUR sentence, not a fragment
+  // of the model's scaffolding.
+  let reply = parsed.reply || "Thanks for the reply! Want to hop on a quick call?";
+
   // Ensure the booking link is present when they're interested.
   if (intent === "interested" && calendarLink && !reply.includes(calendarLink)) {
     reply = `${reply} ${calendarLink}`.trim();
@@ -102,15 +123,18 @@ servePost<Body>("generate-reply", async ({ body }) => {
   const resolved = resolveProvider(provider);
   if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
-  const raw = await complete({
+  const completion = await complete({
     provider: resolved.provider,
     key: resolved.key,
     system: buildSystem(systemPrompt, calendarLink),
     user: buildTranscript(messages, contact),
     maxTokens: 400,
     temperature: 0.5,
-    jsonMode: true,
+    jsonSchema: REPLY_SCHEMA,
   });
 
-  return json(200, { ...parseResult(raw, calendarLink), provider: resolved.provider });
+  return json(200, {
+    ...parseResult(completion.text, completion.truncated, calendarLink),
+    provider: resolved.provider,
+  });
 });
