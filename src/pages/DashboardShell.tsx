@@ -19,7 +19,7 @@ import { db } from '../lib/db';
 import { useOutreach } from '../lib/useOutreach';
 import { createStore } from '../lib/store';
 import { aiAPI, type ReplyResult } from '../lib/api';
-import { createInboxLog, type RawThread } from '../lib/inbox';
+import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { readOutcome } from '../lib/outcome';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
 import {
@@ -315,7 +315,7 @@ const DashboardShell: React.FC = () => {
     if (!body) return;
     const now = new Date().toISOString();
     const msg: Message = {
-      id: `local_${conv.id}_${Date.now()}`,
+      id: `${LOCAL_MESSAGE_PREFIX}${conv.id}_${Date.now()}`,
       conversationId: conv.id,
       direction: 'out',
       text: body,

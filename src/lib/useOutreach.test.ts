@@ -13,7 +13,11 @@ import type { Outcome } from './outcome';
  * against a hand-maintained 15-method fake of the database.
  */
 
-vi.mock('./api', () => ({
+// `isEmptyCompletion` stays real — it is the thing that decides whether a
+// failed generation skips one Lead or stops the batch, so a stubbed copy would
+// pass while the wire contract with generate-dm drifted.
+vi.mock('./api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api')>()),
   aiAPI: {
     generateDM: vi.fn(),
     generateReply: vi.fn(),
@@ -41,7 +45,8 @@ vi.mock('./webhooks', async (importOriginal) => ({
   fireWebhook: vi.fn(),
 }));
 
-import { aiAPI } from './api';
+import { aiAPI, EMPTY_COMPLETION } from './api';
+import { FunctionError } from './functions';
 import { sendCampaign } from './extensionProtocol';
 import { db } from './db';
 import { fireWebhook } from './webhooks';
@@ -209,6 +214,129 @@ describe('generateDMs', () => {
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('used all'));
   });
 
+  it('does not count a DM the provider never actually wrote', async () => {
+    // The regression this exists for: `generate-dm` can answer 200 with an
+    // empty `dm` (its sanitizer strips preambles, quotes and markdown, and a
+    // label-only completion cleans down to ""). The engine only treated a
+    // *thrown* error as failure, so a blank counted, got stamped onto the Lead
+    // as dmContent: '', and the toast said "Generated 10 DMs" while the queue
+    // — which reads a DM as `!!dmContent` — showed none of them.
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'a real dm', used: 1, limit: 500 })
+      .mockResolvedValueOnce({ dm: '', used: 2, limit: 500 })
+      .mockResolvedValueOnce({ dm: '     ', used: 3, limit: 500 });
+
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    // Only the real one is stamped, and nothing carries a blank dmContent.
+    expect(result.current.leads.filter((l) => l.dmContent).map((l) => l.id)).toEqual(['a']);
+    expect(result.current.leads.every((l) => l.dmContent === undefined || l.dmContent.trim() !== '')).toBe(true);
+    expect(saved.flat().map((l) => l.id)).toEqual(['a']);
+    // And the Operator is told, rather than being sent to an empty queue.
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('empty'));
+  });
+
+  it('reports the count the queue will actually show', async () => {
+    vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: '', used: 1, limit: 500 });
+    const { result } = setup();
+    act(() => result.current.hydrate(Array.from({ length: 10 }, (_, i) => lead(`l${i}`)), 0));
+
+    await act(() => result.current.generateDMs());
+
+    const claimed = [...toast.success.mock.calls, ...toast.error.mock.calls]
+      .map((c) => String(c[0])).join(' | ').match(/Generated (\d+)/);
+    expect(Number(claimed?.[1] ?? 0)).toBe(result.current.leads.filter((l) => !!l.dmContent).length);
+  });
+
+  it('never claims a DM that had nowhere to land', async () => {
+    // Leads that left the queue mid-batch (a re-scrape, a bulk delete) used to
+    // be dropped by the `prev.map(...)` write-back without ever being counted
+    // out of the total the toast reported.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let n = 0;
+    vi.mocked(aiAPI.generateDM).mockImplementation(async () => {
+      n += 1;
+      if (n === 2) await gate;
+      return { dm: `dm ${n}`, used: n, limit: 500 };
+    });
+
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    // The batch is started OUTSIDE an enclosing act, so the delete below can
+    // actually commit while the call is in flight. Nesting the acts would make
+    // React defer the commit to the outer boundary, which no browser does.
+    let run!: Promise<void>;
+    await act(async () => { run = result.current.generateDMs(); });
+    await act(async () => { result.current.hydrate([lead('a')], 0); });  // b, c gone
+    await act(async () => { release(); await run; });
+
+    const claimed = [...toast.success.mock.calls, ...toast.error.mock.calls]
+      .map((c) => String(c[0])).join(' | ').match(/Generated (\d+)/);
+    expect(Number(claimed?.[1] ?? 0)).toBe(result.current.leads.filter((l) => !!l.dmContent).length);
+  });
+
+  it('skips the Lead the model fumbled and generates the rest', async () => {
+    // generate-dm answers 502 + code `empty_completion` once it has retried and
+    // still has nothing — a verdict on ONE Lead, billed to nobody. Treating it
+    // like any other thrown error stopped the batch, so a single bad roll
+    // abandoned every Lead behind it that would have generated fine.
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'first', used: 1, limit: 500 })
+      .mockRejectedValueOnce(new FunctionError('The AI returned an empty message.', {
+        code: EMPTY_COMPLETION,
+      }))
+      .mockResolvedValueOnce({ dm: 'third', used: 2, limit: 500 });
+
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(vi.mocked(aiAPI.generateDM)).toHaveBeenCalledTimes(3);
+    expect(result.current.leads.filter((l) => l.dmContent).map((l) => l.id)).toEqual(['a', 'c']);
+    // And the Operator is told which Lead to retry, by name.
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('@b'));
+  });
+
+  it('still stops the batch on a failure that is not about one Lead', async () => {
+    // No configured provider, a dead network, a spent quota: the next Lead will
+    // fail the same way, so burning the batch against it helps nobody.
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'first', used: 1, limit: 500 })
+      .mockRejectedValueOnce(new FunctionError('No AI provider configured'));
+
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(vi.mocked(aiAPI.generateDM)).toHaveBeenCalledTimes(2);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('then stopped'));
+  });
+
+  it('keeps the "click again" hint when part of the batch went wrong', async () => {
+    // The blank branch used to return before computing stillPending, so a batch
+    // with one fumble silently dropped the only thing telling the Operator
+    // there were more Leads waiting behind it.
+    vi.mocked(aiAPI.generateDM).mockImplementation(async (_p, l) =>
+      l.handle === 'l0'
+        ? Promise.reject(new FunctionError('empty', { code: EMPTY_COMPLETION }))
+        : { dm: 'a real dm', used: 1, limit: 500 });
+
+    const { result } = setup();
+    act(() => result.current.hydrate(Array.from({ length: 14 }, (_, i) => lead(`l${i}`)), 0));
+
+    await act(() => result.current.generateDMs());
+
+    // 10 attempted, 1 fumbled, 9 landed — 5 never attempted plus the fumbled one.
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('5 still pending'));
+  });
+
   it('skips Leads that already have a DM', async () => {
     const { result } = setup();
     act(() => result.current.hydrate([lead('a', { dmContent: 'already' })], 0));
@@ -299,7 +427,7 @@ describe('sendFollowUps', () => {
 
 describe('recordOutcomes', () => {
   const outcome = (over: Partial<Outcome> = {}): Outcome => ({
-    handle: 'founder_one', replied: false, booked: false, ...over,
+    handle: 'founder_one', sent: false, replied: false, booked: false, ...over,
   });
 
   it('reflects an Inbox reply on the Lead behind the handle', async () => {

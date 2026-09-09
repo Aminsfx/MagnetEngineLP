@@ -1,3 +1,4 @@
+import { confirmedByInstagram } from './inbox';
 import type { Conversation, Lead, Message } from './types';
 
 /**
@@ -12,7 +13,20 @@ import type { Conversation, Lead, Message } from './types';
  */
 export interface Outcome {
   handle: string;
-  /** The prospect sent at least one inbound Message. A fact, not a judgement. */
+  /**
+   * An outbound Message exists on the thread.
+   *
+   * This is Instagram's own record, not the product's bookkeeping: the
+   * extension reads the inbox API and tags direction by comparing each item's
+   * sender to the viewer (`extension/content.js`). So an outbound Message here
+   * is the extension confirming a DM reached Instagram — the second of the two
+   * confirmation paths CONTEXT.md allows for Sent, alongside the send receipt
+   * the extension returns at send time.
+   */
+  sent: boolean;
+  /** When the first outbound Message on the thread was sent. */
+  sentAt?: string;
+  /** The prospect answered our DM. A fact, not a judgement. */
   replied: boolean;
   /** When they first did. */
   repliedAt?: string;
@@ -21,15 +35,30 @@ export interface Outcome {
 
 /** Read a Conversation and its Messages as an Outcome. Pure. */
 export function readOutcome(conversation: Conversation, messages: Message[]): Outcome {
-  const inbound = messages
-    .filter((m) => m.conversationId === conversation.id && m.direction === 'in')
-    .map((m) => m.createdAt)
-    .sort((a, b) => a.localeCompare(b));
+  const mine = messages.filter((m) => m.conversationId === conversation.id);
+  const at = (direction: Message['direction'], where: (m: Message) => boolean = () => true) =>
+    mine.filter((m) => m.direction === direction && where(m))
+      .map((m) => m.createdAt).sort((a, b) => a.localeCompare(b));
+
+  // Only an outbound Message Instagram reported back. The app also writes one
+  // optimistically the moment the extension ACCEPTS a campaign — and accepting
+  // is not sending. Counting those would make Sent mean "handed to the
+  // extension", which is the one thing CONTEXT.md says it never means, and
+  // Autopilot would be doing it unattended.
+  const sentAt = at('out', confirmedByInstagram)[0];
+  // A reply is an answer to outreach, so it has to come after outreach. A
+  // prospect who DMs the Operator cold is an inbound lead, not a reply, and
+  // counting it would inflate reply rate with threads the product never
+  // started — and stamp `replied` on a Lead that was never Sent, which is
+  // exactly the arithmetic that let replyRate print above 100%.
+  const repliedAt = sentAt ? at('in').find((t) => t >= sentAt) : undefined;
 
   return {
     handle: conversation.handle,
-    replied: inbound.length > 0,
-    repliedAt: inbound[0],
+    sent: sentAt !== undefined,
+    sentAt,
+    replied: repliedAt !== undefined,
+    repliedAt,
     // Interest alone is an AI judgement and does not move the funnel; booking
     // is a confirmed event, whether the Operator clicked it or the model read
     // it off a "yes, Tuesday works".
@@ -54,20 +83,36 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
   const next: Lead = { ...lead };
   let changed = false;
 
+  // Sent, from the outbound Message the extension read back out of Instagram's
+  // own inbox. CONTEXT.md's rule is that Sent is never *inferred* — and this
+  // isn't inference, it's the same observer reporting the same fact by a second
+  // route. It also closes the arithmetic: `replied` below can only be true on a
+  // thread that holds an outbound Message, so `replied` implies `dmSent` and
+  // filters.ts's replyRate (replied/dmsSent) can no longer exceed 100%.
+  if (outcome.sent && !lead.dmSent) {
+    next.dmSent = true;
+    next.dmDate = lead.dmDate ?? outcome.sentAt;
+    changed = true;
+  }
+
   if (outcome.replied && !lead.replied) {
     next.replied = true;
     next.replyDate = lead.replyDate ?? outcome.repliedAt;
     changed = true;
   }
 
-  // Deliberately does NOT touch `dmSent`. CONTEXT.md defines Sent as "the
-  // extension has confirmed a DM actually reached Instagram", and that stays
-  // the only way a Lead becomes Sent. The cost is that a Lead which replied
-  // without a confirmed send counts in `replied` but not `dmsSent`, so
-  // filters.ts's replyRate can read above 100% — see the note in CLAUDE.md.
   if (outcome.booked && !lead.booked) {
     // A booking implies everything before it in the funnel, which is what
     // `markBooked` did and what the rate calculations in filters.ts assume.
+    // Sent is part of "everything before it": you cannot book someone you never
+    // messaged, and leaving it out would reopen the >100% reply rate through
+    // the one branch that sets `replied` without reading the thread.
+    //
+    // No date comes with it. `sentAt` is set above when the thread actually
+    // showed an outbound Message; dating a send from `repliedAt` instead would
+    // put it on the day they answered, which is a day the conversion chart
+    // would then draw a send on.
+    next.dmSent = true;
     next.booked = true;
     next.positiveReply = true;
     next.replied = true;

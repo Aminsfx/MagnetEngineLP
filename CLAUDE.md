@@ -95,8 +95,10 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   reflects its Outcome — which matters because Ingestion re-reads every
   Conversation on every poll. Pass the whole batch; it folds several threads
   for one handle together (Instagram serves a message request as a second
-  thread) and writes once. An Outcome never sets `dmSent` — only the extension
-  confirms a send.
+  thread) and writes once. An Outcome sets `dmSent` only from an outbound
+  Message on the thread — which is the extension reading Instagram's own
+  inbox, so Sent still rests on the extension's word, by a second route.
+  Never infer a send from anything else.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.
 
@@ -151,6 +153,7 @@ APIKeys { openai?, claude?, gemini? }  // NO apify — backend-managed
 
 ## AI DM Generation (src/lib/api.ts → generate-dm Edge Function)
 - `aiAPI.generateDM(provider, lead, systemPrompt)` calls the `generate-dm` Edge Function via `supabase.functions.invoke`. Provider keys (`CLAUDE_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`) are Supabase secrets; prompt building + injection-safe bio handling + output cleanup run server-side. Client sees no key.
+- **A generation that produces nothing is a failure, not a DM.** Cleanup can strip a completion down to `""`; the function retries once, then answers `502 { error, code: 'empty_completion' }` and bills no quota. The code matters: `invokeFunction` surfaces it on a `FunctionError`, and `useOutreach` skips that one Lead and keeps generating, where every other error stops the batch. Never let a blank reach a Lead as `dmContent` — the Approval Queue reads a DM as `!!dmContent`, so a blank shows the Operator an empty queue under a toast claiming success.
 
 ## Environment Variables
 **Frontend (`.env`, gitignored — PUBLIC, ships in the bundle; only non-secret values):**
@@ -282,7 +285,7 @@ role; users can read their own count but never write it.
 - AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
 - Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
 - **Inbox → funnel:** every changed Conversation is read as an `Outcome` (`src/lib/outcome.ts`) and the batch handed to `outreach.recordOutcomes`, which stamps the Leads behind the handles. An inbound Message sets `replied` + `replyDate`; booking — the Operator's "Booked" click or the AI's `booked` intent — sets `booked`/`positiveReply`/`replied`/`status: 'won'`. The AI's `interested` intent deliberately does **not** move the funnel: it colours the Inbox only, so a misread never inflates metrics or fires a webhook the Operator can't unsend. Reply rate, the conversion chart, AI Analyst, Health Score and the `replied`/`positive_reply`/`booked` webhooks all depend on this path.
-- **Known gap:** an Outcome never infers `dmSent` — CONTEXT.md reserves Sent for extension confirmation. So a Lead that replies without a confirmed send (DM'd outside the app, or a lost confirmation) counts in `replied` but not `dmsSent`, and `filters.ts`'s `replyRate` (`replied/dmsSent`) can read above 100%. Closing it means either relaxing the Sent rule or only counting a reply on threads with a recorded outbound Message — an open decision, not an oversight.
+- **Reply rate stays ≤ 100% by construction.** An Outcome reads `sent` off the thread's outbound Messages, which the extension pulls from Instagram's own inbox API (`extension/content.js` tags direction by comparing the sender to the viewer) — a second confirmation route, not an inference, so Sent stays the extension's word. A reply is only read from an inbound Message that arrived *after* an outbound one, which makes `replied` a subset of `dmSent` and keeps `filters.ts`'s `replyRate` (`replied/dmsSent`) in range. A prospect who DMs the Operator first is an inbound lead, not a reply, and does not move the funnel. `booked` implies Sent for the same reason — you cannot book someone you never messaged.
 - **Limitation:** polling + autopilot only run while an `instagram.com` tab is open (the background worker can't send IG's SameSite cookie). During active campaigns the extension keeps a pinned inbox tab alive.
 
 ## Security Constraints — MUST NEVER CHANGE

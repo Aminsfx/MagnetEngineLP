@@ -8,7 +8,10 @@
 // Operators can spend the Owner's AI credits.
 //
 // POST JSON: { lead, systemPrompt, provider: 'openai'|'claude'|'gemini' }
-// → { dm: string, provider: string }
+// → { dm: string, provider: string, used: number, limit: number }
+//   502 { error, code: "empty_completion" } when the model returns nothing
+//   usable even after a retry — no quota is spent, and the code tells the
+//   client this is about one Lead rather than the whole workspace.
 
 import { json, servePost } from "../_shared/http.ts";
 import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
@@ -125,23 +128,53 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
   const resolved = resolveProvider(provider);
   if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
-  const raw = await complete({
-    provider: resolved.provider,
-    key: resolved.key,
-    system: systemPrompt,
-    user: buildUserPrompt(lead),
-    // A 40-word DM is ~60 tokens. 200 gave the model room to keep talking, and
-    // it took it; the cap is now just above what a good message needs.
-    maxTokens: 140,
-    // Was 0.4. That is an extraction temperature — it makes the model pick its
-    // single likeliest phrasing every time, so 250 leads got 250 messages with
-    // the same rhythm. Homogeneity across the batch is the tell, not any one
-    // sentence, and temperature is the only lever that touches it directly.
-    temperature: 0.95,
-  });
+  // Cleanup can legitimately leave nothing behind: a completion that is only a
+  // label ("Message:"), only markdown, only a quote character, or only
+  // whitespace all clean down to "". Returning that as a 200 made the client
+  // count it as a generation and stamp an empty dmContent on the Lead, so the
+  // Operator was told "Generated 10 DMs" and found an empty queue.
+  //
+  // At temperature 0.95 a blank is usually one bad roll rather than a broken
+  // provider, so spend a second one before calling it a failure — a retry here
+  // costs a few hundred tokens the Owner already pays for, where giving up
+  // costs the Operator a Lead they have to notice and re-run by hand.
+  let raw = "";
+  let dm = "";
+  for (let attempt = 0; attempt < 2 && !dm; attempt++) {
+    raw = await complete({
+      provider: resolved.provider,
+      key: resolved.key,
+      system: systemPrompt,
+      user: buildUserPrompt(lead),
+      // A 40-word DM is ~60 tokens. 200 gave the model room to keep talking, and
+      // it took it; the cap is now just above what a good message needs.
+      maxTokens: 140,
+      // Was 0.4. That is an extraction temperature — it makes the model pick its
+      // single likeliest phrasing every time, so 250 leads got 250 messages with
+      // the same rhythm. Homogeneity across the batch is the tell, not any one
+      // sentence, and temperature is the only lever that touches it directly.
+      temperature: 0.95,
+    });
+    dm = sanitizeOutput(raw);
+  }
 
-  // Count it only after the provider actually billed us. Atomic, so concurrent
-  // generations can't lose a count.
+  // Still nothing after the retry. It is a failed generation: say so with a
+  // code the client can act on, log what the model actually said, and do not
+  // bill for it. `empty_completion` is paired with the same literal in
+  // src/lib/api.ts, where it tells the batch to skip this Lead and carry on
+  // instead of stopping — a bad roll is about this Lead, not the workspace.
+  if (!dm) {
+    console.error(
+      `[generate-dm] empty DM after cleanup and one retry (provider=${resolved.provider}, raw=${JSON.stringify(raw).slice(0, 300)})`,
+    );
+    return json(502, {
+      error: "The AI returned an empty message. Nothing was counted against your quota — try again.",
+      code: "empty_completion",
+    });
+  }
+
+  // Count it only after the provider actually billed us AND we have a message
+  // to show for it. Atomic, so concurrent generations can't lose a count.
   const { data: newUsed } = await sb.rpc("increment_dm_usage", {
     p_user_id: user.id,
     p_month: month,
@@ -151,7 +184,7 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
   // Report which provider actually ran — the requested one is only a preference
   // when the Owner hasn't configured its key.
   return json(200, {
-    dm: sanitizeOutput(raw),
+    dm,
     provider: resolved.provider,
     used: newUsed ?? used + 1,
     limit: MONTHLY_DM_LIMIT,

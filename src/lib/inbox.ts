@@ -22,6 +22,25 @@ export interface IngestResult extends InboxState {
     newInbound: Conversation[];
 }
 
+/**
+ * Marks a Message the app recorded optimistically — sent to the extension, not
+ * yet seen echoed back by Instagram. Ingestion replaces it with the real item
+ * once Instagram reports it, so the prefix is how the rest of the app tells
+ * "we asked for this to be sent" from "Instagram says this exists".
+ */
+export const LOCAL_MESSAGE_PREFIX = 'local_';
+
+/**
+ * Whether Instagram itself reported this Message, rather than the app writing
+ * it down on the way out.
+ *
+ * CONTEXT.md's **Sent** turns on exactly this distinction: handing work to the
+ * extension is not a send, so a Message still wearing a local id is not
+ * evidence one happened.
+ */
+export const confirmedByInstagram = (message: Message): boolean =>
+    !message.id.startsWith(LOCAL_MESSAGE_PREFIX);
+
 const echoSignature = (conversationId: string, text: string) =>
     `${conversationId}|${text.trim()}`;
 

@@ -4,7 +4,7 @@ import type { PlanLimits } from './plans';
 import type { WorkspaceStore } from './store';
 import type { DueFollowUp } from './followups';
 import { db } from './db';
-import { aiAPI } from './api';
+import { aiAPI, isEmptyCompletion } from './api';
 import { filterUtils } from './filters';
 import { canonicalHandle, dropKnownHandles } from './intake';
 import { stampFollowUp } from './followups';
@@ -32,6 +32,22 @@ import { storage } from './storage';
 /** DM generation runs sequentially against the provider, so one call does a
  *  batch rather than the whole queue. The caller is told what's left. */
 export const GENERATION_BATCH = 10;
+
+/** How many handles a failure message names before it stops listing them. */
+const NAMED_IN_TOAST = 3;
+
+/**
+ * Name the Leads something went wrong for, rather than counting them.
+ *
+ * "3 leads failed" tells the Operator to go hunting through a queue of 250 for
+ * rows that look no different from the rest; "@a, @b, @c" tells them what to
+ * click.
+ */
+function nameHandles(handles: string[]): string {
+  const shown = handles.slice(0, NAMED_IN_TOAST).map((h) => `@${h}`).join(', ');
+  const rest = handles.length - NAMED_IN_TOAST;
+  return rest > 0 ? `${shown} +${rest} more` : shown;
+}
 
 export interface OutreachEngine {
   leads: Lead[];
@@ -256,6 +272,8 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     setIsGenerating(true);
     const dmDate = new Date().toISOString();
     const generated: Lead[] = [];
+    /** Handles the provider answered for, but with no message in the answer. */
+    const blank: string[] = [];
     let failure: string | null = null;
     let usedAfter: number | null = null;
 
@@ -265,9 +283,24 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
         // the engine keeps no tally of its own.
         const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
         usedAfter = used;
-        generated.push({ ...lead, dmContent: dm, dmDate });
+        // A 200 carrying no message is a failed generation, not a generation.
+        // Only a *thrown* error used to count as failure, so a blank was
+        // stamped on as `dmContent: ''` — which the queue reads as "no DM yet"
+        // (`!!l.dmContent`). The toast said ten and the queue showed none, with
+        // nothing anywhere naming the reason. Whitespace is the same failure
+        // wearing a truthy value: it renders as a Ready row with an empty body.
+        const text = (dm || '').trim();
+        if (!text) { blank.push(lead.handle); continue; }
+        generated.push({ ...lead, dmContent: text, dmDate });
       } catch (error: unknown) {
         console.error(`Error generating DM for ${lead.handle}:`, error);
+        // Two failures wearing one shape. A model that returned nothing is a
+        // verdict on THIS Lead — generate-dm already retried, billed nothing,
+        // and the next Lead will very likely be fine — so skip and carry on.
+        // Anything else (no provider configured, spent quota, dead network) is
+        // failing for every Lead alike, and grinding the remaining nine against
+        // it just spends the Operator's wait for nine identical errors.
+        if (isEmptyCompletion(error)) { blank.push(lead.handle); continue; }
         // Stop the batch but keep what succeeded. Returning here used to discard
         // up to nine finished DMs that had already been paid for.
         failure = error instanceof Error ? error.message : 'Unknown error';
@@ -275,25 +308,54 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
       }
     }
 
-    if (generated.length > 0) {
-      const byId = new Map(generated.map((l) => [l.id, l]));
+    // Only a Lead still in the queue can receive its DM. A re-scrape or a bulk
+    // delete during the batch removes it, and the `prev.map` below drops the
+    // result on the floor — which the count has to reflect, or the toast
+    // reports DMs that exist nowhere. `leadsRef` refreshes in an effect, so it
+    // is current by the time the awaited batch finishes.
+    const present = new Set(leadsRef.current.map((l) => l.id));
+    const landed = generated.filter((l) => present.has(l.id));
+    const dropped = generated.length - landed.length;
+
+    if (landed.length > 0) {
+      const byId = new Map(landed.map((l) => [l.id, l]));
       setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-      await store.saveLeads(generated);
+      await store.saveLeads(landed);
     }
     if (usedAfter !== null) setDmUsed(usedAfter);
     setIsGenerating(false);
 
+    const count = (n: number) => `${n} DM${n !== 1 ? 's' : ''}`;
+
     if (failure) {
-      toast.error(generated.length > 0
-        ? `Generated ${generated.length} DM${generated.length !== 1 ? 's' : ''}, then stopped: ${failure}`
+      toast.error(landed.length > 0
+        ? `Generated ${count(landed.length)}, then stopped: ${failure}`
         : `DM generation failed: ${failure}`);
       return;
     }
 
-    const stillPending = pending.length - generated.length;
+    // Every Lead the batch touched but did not finish is still pending, so the
+    // hint belongs on the error path too. It used to `return` above this line,
+    // which meant one fumbled Lead hid the fact that forty more were waiting.
+    const stillPending = pending.length - landed.length;
+    const nextBatch = stillPending > 0
+      ? ` ${stillPending} still pending, click again for the next batch.`
+      : '';
+
+    // Name what went wrong — and who it went wrong for — instead of sending the
+    // Operator to a queue that does not hold what the toast just promised.
+    if (blank.length > 0 || dropped > 0) {
+      const why = [
+        blank.length > 0 ? `the AI returned an empty message for ${nameHandles(blank)}` : '',
+        dropped > 0 ? `${dropped} left the queue mid-batch` : '',
+      ].filter(Boolean).join(', and ');
+      toast.error(`Generated ${count(landed.length)} — ${why}.${nextBatch}`);
+      return;
+    }
+
     toast.success(stillPending > 0
-      ? `Generated ${generated.length} DMs — ${stillPending} still pending, click again for the next batch.`
-      : `Generated ${generated.length} DM${generated.length !== 1 ? 's' : ''} — review them in the Approval Queue.`);
+      ? `Generated ${count(landed.length)} —${nextBatch}`
+      : `Generated ${count(landed.length)} — review them in the Approval Queue.`);
   }, [config, filteredLeads, limits, dmUsed, toast, store]);
 
   /** Hand due follow-ups to the extension and stamp the step. The extension

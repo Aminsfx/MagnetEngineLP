@@ -18,6 +18,10 @@ interface SettingsPanelProps {
     onUpdateConfig: (config: AppConfig) => void;
 }
 
+/** Weekdays in a month — the horizon the daily cap is really spent over, since
+ *  the extension only sends while the Operator has Instagram open. */
+const WORKING_DAYS = 22;
+
 /**
  * Colour on this page follows one rule, because it is six near-identical
  * section cards and the eye needs something to group them by:
@@ -119,6 +123,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ onApply }) => {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig }) => {
     const { limits } = usePlan();
+    const dailyCap = config.dailySendCap ?? 40;
     const toast = useToast();
     const [wizardStep, setWizardStep] = useState<WizardStep>(
         config.onboardingComplete ? 4 : 1
@@ -515,7 +520,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                                 type="number"
                                 min={1}
                                 max={limits.maxDailyCap}
-                                value={config.dailySendCap ?? 40}
+                                value={dailyCap}
                                 onChange={e => {
                                     onUpdateConfig({ ...config, dailySendCap: Math.min(limits.maxDailyCap, Math.max(1, Number(e.target.value))) });
                                 }}
@@ -523,6 +528,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                             />
                             <span className="text-xs text-neutral-600">DMs per day</span>
                         </div>
+                        {/* Two meters, two different jobs: this cap is about not
+                            tripping Instagram, the monthly credits are about
+                            what the Owner pays the AI providers. They are not
+                            the same number and should not be merged into one —
+                            but the Operator picks the cap HERE, and until now
+                            nothing on this screen mentioned that a cap they are
+                            allowed to set can spend the month in two days. */}
+                        {dailyCap * WORKING_DAYS > limits.maxDMGenerations && (
+                            <p className="mt-2 text-[11px] text-caution-400/90 leading-relaxed">
+                                At {dailyCap}/day you would spend all {limits.maxDMGenerations} monthly DM credits in
+                                about {Math.max(1, Math.round(limits.maxDMGenerations / dailyCap))} days. Around{' '}
+                                <strong>{Math.floor(limits.maxDMGenerations / WORKING_DAYS)}/day</strong> lasts a full month.
+                            </p>
+                        )}
+                        <p className="mt-1.5 text-[11px] text-neutral-600 leading-relaxed">
+                            This cap paces sending so Instagram doesn't flag the account. Separately, your plan
+                            includes {limits.maxDMGenerations} AI-written DMs a month.
+                        </p>
                     </div>
                 </div>
             </div>

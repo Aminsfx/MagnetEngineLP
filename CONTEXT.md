@@ -49,6 +49,15 @@ sending.
 **Sent**:
 The extension has confirmed a DM actually reached Instagram. Never inferred
 from handing work to the extension — a Lead is Sent only on confirmation.
+The extension confirms by two routes: the receipt it returns after sending, and
+an outbound Message it later reads back out of Instagram's own inbox. Both are
+the same observer reporting the same fact, so both make a Lead Sent.
+
+A Booked Lead is also Sent. That is not a third confirmation route but the
+funnel being ordered: a booking cannot precede the message that caused it, and
+Booked is a confirmed event either way — the Operator clicked it, or the AI read
+it off a "yes, Tuesday works". Sent acquired this way carries no send date,
+because nothing observed when the send happened.
 _Avoid_: delivered, dispatched, queued
 
 **Send Cap**:
@@ -89,12 +98,17 @@ The mode in which the AI answers new inbound Messages without waiting for the
 operator to approve each reply.
 
 **Outcome**:
-What a Conversation reveals about the Lead behind it — that they replied, and
-whether they booked. The one path from the Inbox back into the Lead lifecycle.
-An Outcome is evidence that something happened, never that it didn't, so it only
-ever moves a Lead forwards. Interest as read by the AI is a judgement, not an
-Outcome: it colours the Inbox but does not move the funnel. Nor does an Outcome
-make a Lead Sent — that stays the extension's word alone.
+What a Conversation reveals about the Lead behind it — that we messaged them,
+that they replied, and whether they booked. The one path from the Inbox back
+into the Lead lifecycle. An Outcome is evidence that something happened, never
+that it didn't, so it only ever moves a Lead forwards. Interest as read by the
+AI is a judgement, not an Outcome: it colours the Inbox but does not move the
+funnel.
+
+A **Reply** is an answer to outreach, so an Outcome only reads one from an
+inbound Message that arrived after an outbound one. A prospect who writes first
+is an inbound lead, not a reply. That ordering is what keeps Replied a subset of
+Sent, and reply rate at or below 100%.
 _Avoid_: result, status, signal
 
 ### Access
