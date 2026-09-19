@@ -122,7 +122,7 @@ const QueuePager: React.FC<QueuePagerProps> = ({
                                 aria-current={p === page ? 'page' : undefined}
                                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                                     p === page
-                                        ? 'bg-brand-500/15 text-brand-400'
+                                        ? 'bg-white/15 text-white'
                                         : 'text-neutral-600 hover:text-white hover:bg-white/5'
                                 }`}
                             >
@@ -425,7 +425,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     disabled={isGenerating || leads.length === 0}
                     className="flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-neutral-900 border border-white/15 hover:border-white/25 text-white disabled:opacity-50 font-semibold rounded-xl transition-all text-sm"
                 >
-                    <Sparkles className="w-4 h-4 text-info-400" />
+                    <Sparkles className="w-4 h-4 text-white" />
                     {isGenerating ? 'Generating…' : 'Generate AI DMs'}
                 </button>
 
@@ -457,7 +457,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 {counts.ready > 0 && (
                     <button
                         onClick={handleApproveAllReady}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-brand-500/25 text-brand-400 font-medium rounded-xl transition-all text-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/25 text-white font-medium rounded-xl transition-all text-sm"
                     >
                         <CheckCircle className="w-4 h-4" />
                         Approve All ({counts.ready})
@@ -483,7 +483,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     decoration; it is what makes the terminal action findable. */}
                 <button
                     onClick={handleSendToExtension}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold rounded-xl shadow-[0_0_20px_theme(colors.brand.500/0.28)] hover:shadow-[0_0_28px_theme(colors.brand.500/0.42)] transition-all text-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl shadow-[0_0_20px_theme(colors.brand.500/0.28)] hover:shadow-[0_0_28px_theme(colors.brand.500/0.42)] transition-all text-sm"
                 >
                     <Send className="w-4 h-4" />
                     Send Approved to Extension
@@ -491,7 +491,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
                 {/* DM drip delay — random wait (minutes) between each DM */}
                 <div className="flex items-center gap-2 ml-auto px-3 py-1.5 bg-white/3 rounded-xl border border-white/5">
-                    <Timer className="w-3.5 h-3.5 text-brand-400" />
+                    <Timer className="w-3.5 h-3.5 text-white" />
                     <span className="text-[10px] text-neutral-600 uppercase tracking-wider font-medium">Delay</span>
                     <input
                         type="number"
@@ -499,7 +499,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         value={minDelay}
                         onChange={e => commitDelay(Number(e.target.value), maxDelay)}
                         title="Minimum minutes between DMs"
-                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-white/50"
                     />
                     <span className="text-xs text-neutral-600">–</span>
                     <input
@@ -508,7 +508,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         value={maxDelay}
                         onChange={e => commitDelay(minDelay, Number(e.target.value))}
                         title="Maximum minutes between DMs"
-                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+                        className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:ring-1 focus:ring-white/50"
                     />
                     <span className="text-[10px] text-neutral-600">min</span>
                 </div>
@@ -548,7 +548,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search by name or handle…"
-                        className="w-full pl-8 pr-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-300 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/30 transition-all"
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-300 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/40 focus:border-white/30 transition-all"
                     />
                 </div>
 
@@ -557,7 +557,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     <select
                         value={campaignFilter}
                         onChange={e => setCampaignFilter(e.target.value)}
-                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all max-w-[200px]"
+                        className="px-3 py-2 text-xs bg-white/3 border border-white/8 rounded-xl text-neutral-400 focus:outline-none focus:ring-1 focus:ring-white/40 transition-all max-w-[200px]"
                     >
                         <option value="all">All campaigns</option>
                         {campaigns.map(c => (
@@ -571,7 +571,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     onClick={() => setApplySettingsFilter(v => !v)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-xs rounded-xl border transition-all ${
                         applySettingsFilter
-                            ? 'border-brand-500/30 bg-brand-500/8 text-brand-400'
+                            ? 'border-white/30 bg-white/8 text-white'
                             : 'border-white/8 bg-white/3 text-neutral-500 hover:text-neutral-300'
                     }`}
                     title="Apply the keyword / follower / account-type filters configured in Settings"
@@ -608,7 +608,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                         aria-label="Rows per page"
                                         value={pageSize}
                                         onChange={e => changePageSize(Number(e.target.value) as QueuePageSize)}
-                                        className="bg-white/3 border border-white/8 rounded-lg px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-500/40 transition-all"
+                                        className="bg-white/3 border border-white/8 rounded-lg px-2 py-1 text-xs text-neutral-300 focus:outline-none focus:ring-1 focus:ring-white/40 transition-all"
                                     >
                                         {QUEUE_PAGE_SIZES.map(n => (
                                             <option key={n} value={n}>{n}</option>
@@ -643,7 +643,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                         checked={allFilteredSelected}
                                         onChange={toggleSelectAll}
                                         title="Select all"
-                                        className="w-4 h-4 rounded border-white/20 bg-transparent accent-brand-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-white/20 bg-transparent accent-white cursor-pointer"
                                     />
                                 </th>
                                 <th className={`${STICKY_TH} px-5 py-3.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest`}>Prospect</th>
@@ -663,7 +663,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                     editDraft={editingId === lead.id ? editDraft : null}
                                     showBattlecards={battlecardsFor === lead.id}
                                     isGenerating={isGenerating}
-                                    calendarLink={config.calendarLink}
+                                    ledger={config}
                                     canDelete={Boolean(onDeleteLead)}
                                     onToggleSelect={toggleSelect}
                                     onStartEdit={startEdit}

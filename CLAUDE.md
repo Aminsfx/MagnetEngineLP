@@ -6,8 +6,8 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 ## Tech Stack
 - **React 19 + TypeScript**
 - **Vite 6** — dev server on port 3000, env vars via `VITE_` prefix (`import.meta.env`)
-- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme, emerald/cyan/zinc palette on a near-black ground; colours come from the tokens in `docs/DESIGN-TOKENS.md`. Do NOT re-add the CDN `<script>`.
-- **React Router v7** — public: `/` (landing), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/follow-ups`, `/calculator`, `/settings`, `/profile`)
+- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. The public pages are orange / black / white; the dashboard is black and white, with `positive` (emerald) and `danger` (red) as its only two hues. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
+- **React Router v7** — public: `/` (landing), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
 - **Lucide React** — icons
@@ -34,7 +34,6 @@ src/
       AIAnalyst.tsx              # Rule-based insights from DashboardStats
       ConversionChart.tsx        # Last-7-days sends/replies chart (real data)
       OnboardingChecklist.tsx    # First-run checklist
-    calculator/RevenueCalculator.tsx
     settings/
       SettingsPanel.tsx          # AI Prompt Wizard + Lead Filtering Rules
     common/UpgradePrompt.tsx     # Plan-gate CTA
@@ -53,7 +52,8 @@ src/
     db.ts                        # Supabase adapter (row mapping, batching, subscriptions)
     storage.ts                   # Browser-local bits only (dev fallback, DM delay, queue page size)
     intake.ts                    # Lead intake — the only way a Lead is constructed
-    prompt.ts                    # DM + reply prompt construction (pure strings)
+    prompt.ts                    # DM + reply prompts, follow-up ladders, Offer Ledger
+    followups.ts                 # Which Leads are due a touch + the template renderer
     inbox.ts                     # Inbox log: hydration ordering + snapshot merging
     outcome.ts                   # What a Conversation reveals about its Lead
     extensionProtocol.ts         # App side of the app↔extension seam (typed)
@@ -69,7 +69,7 @@ supabase/
   migrations/0001_usage.sql      # dm_usage + usage_counters
 CONTEXT.md                       # Domain glossary — read before naming anything
 ```
-Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, root-level `components/` duplicates.
+Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, `src/components/calculator/*`, root-level `components/` duplicates.
 
 ## Seams (don't reach around these)
 - **Persistence** — call `createStore(userId)` and use the `WorkspaceStore`. Never
@@ -101,6 +101,25 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Never infer a send from anything else.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.
+- **The Offer Ledger** — the prompts refuse to state a number they were not
+  given, which is only enforceable because `OfferLedger` on `PromptIdentity` is
+  the one place a number can come from. `ledgerBlock` renders it into all three
+  prompts and declares the list closed; an *empty* Ledger renders an explicit
+  "you have been given NO result" rather than omitting the section, because a
+  prompt that simply does not mention proof reads as permission to supply some.
+  Never hand a figure to a prompt by any other route, and never list the
+  identity fields by hand at a call site — spread the whole `PromptIdentity`,
+  or the next field added is silently not persisted.
+- **Follow-ups are a Ladder, not a reminder** — every touch steps the ask DOWN
+  and brings a new reason to write. `buildFollowUpLadder` / `buildRescueLadder`
+  own the copy, and they pick which copy to use from what the Ledger actually
+  holds: a touch whose whole payload is a fact the Operator never entered
+  becomes a *different* touch, never the same touch with a hole in it.
+  `renderTemplate` enforces the other half — a missing name costs a word, a
+  missing fact costs its whole sentence. A ladder template may never use a
+  phrase `buildSystemPrompt` lists under `## HOW YOU GET SPOTTED`; the two are
+  locked together by a test, because they had already drifted once (the DM
+  prompt banned "circle back" while the default follow-up said "circling back").
 - **Model output → a message** — a completion becomes something a prospect can
   read only through `cleanCompletion` / `replyEnvelope` in
   `_shared/completion.ts`. Never write a second cleaner: generate-dm and
@@ -125,7 +144,18 @@ Lead {
   isPrivate, status ('cold'|'warm'|'won'),
   dmSent, replied, positiveReply, booked, followedUp,
   approved, rejected, dmContent, dmDate, replyDate,
-  followUp1Date, followUp2Date, followUp3Date, dealValue
+  followUp1Date, followUp2Date, followUp3Date, dealValue,
+  optedOut            // asked not to be contacted — suppression only, never a metric
+}
+
+FollowUpCondition = 'no_reply' | 'always' | 'replied_not_booked'
+// 'replied_not_booked' is the Rescue ladder's gate, and it anchors its first
+// step on replyDate rather than dmDate. Before it existed the engine skipped
+// every Lead the moment they answered.
+
+OfferLedger {        // on AppConfig and PromptIdentity; the ONLY source of a number
+  proofPoint, removedSacrifice, timeToResult, freeGive,
+  price, priceAnchor, guarantee, callLength, callPromise
 }
 
 DashboardStats {

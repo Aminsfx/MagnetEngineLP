@@ -134,8 +134,8 @@ function buildInsights(stats: DashboardStats): Insight[] {
 
 const insightStyle: Record<InsightType, string> = {
     critical: 'bg-danger-500/8 border-danger-500/20 text-danger-400',
-    warning:  'bg-caution-500/8 border-caution-500/20 text-caution-400',
-    tip:      'bg-info-500/8 border-info-500/20 text-info-400',
+    warning:  'bg-white/8 border-white/20 text-white',
+    tip:      'bg-white/8 border-white/20 text-white',
     success:  'bg-positive-500/8 border-positive-500/20 text-positive-400',
     info:     'bg-white/4 border-white/8 text-neutral-400',
 };
@@ -186,12 +186,12 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
                 style={CARD_BEZEL.inner}>
 
                 {/* Background glow */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-info-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-info-500/10 border border-info-500/20 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-info-400" />
+                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-white" />
                     </div>
                     <div>
                         <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">AI Engine</p>
@@ -201,10 +201,10 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
 
                 {/* Typewriter feed */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/3 border border-white/6 mb-4">
-                    <Zap className="w-3 h-3 text-brand-500 flex-shrink-0" />
+                    <Zap className="w-3 h-3 text-white flex-shrink-0" />
                     <span className="text-[11px] font-mono text-neutral-500 truncate">
                         {typedText}
-                        <span className="animate-pulse text-brand-500">|</span>
+                        <span className="animate-pulse text-white">|</span>
                     </span>
                 </div>
 

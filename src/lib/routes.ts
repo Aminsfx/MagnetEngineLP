@@ -4,7 +4,6 @@ import {
   Database,
   Inbox as InboxIcon,
   CalendarClock,
-  Calculator,
   Settings,
   UserCircle,
 } from 'lucide-react';
@@ -28,7 +27,6 @@ export const DASHBOARD_ROUTES = [
   { path: '/queue', label: 'Approval Queue', icon: Database },
   { path: '/inbox', label: 'Inbox', icon: InboxIcon },
   { path: '/follow-ups', label: 'Follow-ups', icon: CalendarClock },
-  { path: '/calculator', label: 'Calculator', icon: Calculator },
   { path: '/settings', label: 'Settings', icon: Settings },
   { path: '/profile', label: 'Profile', icon: UserCircle },
 ] as const;

@@ -378,7 +378,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     }
 
     const sentAt = new Date().toISOString();
-    const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt));
+    const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt, d.rescue));
     const byId = new Map(stamped.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
     await store.saveLeads(stamped);

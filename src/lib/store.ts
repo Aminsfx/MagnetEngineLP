@@ -1,4 +1,4 @@
-import type { AppConfig, Conversation, Lead, Message } from './types';
+import type { AppConfig, Conversation, FollowUpSequence, Lead, Message } from './types';
 import { db } from './db';
 import { storage } from './storage';
 
@@ -36,6 +36,16 @@ export interface WorkspaceStore {
   loadInbox(): Promise<{ conversations: Conversation[]; messages: Message[] }>;
   saveConversations(rows: Conversation[]): Promise<void>;
   saveMessages(rows: Message[]): Promise<void>;
+
+  /**
+   * Follow-up sequences. These reached the database through a direct `db`
+   * import inside FollowUpSequencer, with the component asking `useAuth()`
+   * whether there was a user — the exact conditional this seam exists to
+   * delete, and the reason sequences did not persist at all in the local
+   * fallback. Returns the saved row (Supabase assigns the id on insert).
+   */
+  loadSequences(): Promise<FollowUpSequence[]>;
+  saveSequence(sequence: FollowUpSequence): Promise<FollowUpSequence | null>;
 }
 
 // ─── Supabase adapter ────────────────────────────────────────────────────────
@@ -60,6 +70,9 @@ function supabaseStore(userId: string): WorkspaceStore {
     },
     saveConversations: (rows) => db.upsertConversations(rows, userId),
     saveMessages: (rows) => db.upsertMessages(rows, userId),
+
+    loadSequences: () => db.getSequences(userId),
+    saveSequence: (sequence) => db.upsertSequence(sequence, userId),
   };
 }
 
@@ -67,6 +80,7 @@ function supabaseStore(userId: string): WorkspaceStore {
 
 const LS_CONVOS = 'magnetengine_conversations';
 const LS_MESSAGES = 'magnetengine_messages';
+const LS_SEQUENCES = 'magnetengine_sequences';
 
 function readRows<T>(key: string): T[] {
   try {
@@ -133,6 +147,21 @@ function localStore(): WorkspaceStore {
     async saveMessages(rows) {
       if (rows.length === 0) return;
       writeRows(LS_MESSAGES, mergeById(readRows<Message>(LS_MESSAGES), rows));
+    },
+
+    async loadSequences() {
+      return readRows<FollowUpSequence>(LS_SEQUENCES);
+    },
+    async saveSequence(sequence) {
+      // The Supabase adapter mints an id on insert; locally 'new' is the only
+      // placeholder the editor ever sends, so give it one that survives a
+      // reload rather than writing every save to the same row.
+      const saved: FollowUpSequence =
+        sequence.id && sequence.id !== 'new'
+          ? sequence
+          : { ...sequence, id: `seq_${Date.now().toString(36)}` };
+      writeRows(LS_SEQUENCES, mergeById(readRows<FollowUpSequence>(LS_SEQUENCES), [saved]));
+      return saved;
     },
   };
 }

@@ -8,13 +8,14 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { alpha, CARD_BEZEL, CHANNEL } from '../lib/theme';
 import { PRICES, type BillingCycle } from '../lib/plans';
+import MagneticField from '../components/MagneticField';
 
 /**
  * The marketing landing page.
  *
  * Rendered in the dashboard's own visual language rather than a separate
  * landing-page one: `surface` grounds, `CARD_BEZEL` tiles on `surface-sunken`,
- * `positive-500/10` icon chips, emerald accents, Plus Jakarta Sans, and the
+ * `brand-500/10` icon chips, brand accents, Plus Jakarta Sans, and the
  * app's own Navbar and Footer. The page a visitor signs up from and the product
  * they land in are the same object, so the handoff at checkout has no seam.
  *
@@ -41,13 +42,31 @@ const SEATS_CLAIMED = 7;
 const SEATS_TOTAL = 100;
 const ANCHOR_PRICE = '$497';
 
+/**
+ * What a buyer is really choosing between. Both are market rates for the job
+ * this does by hand, not numbers about us — a buyer can check them in an hour,
+ * which is the only reason an anchor is worth printing.
+ */
+const COST_OF_A_HUMAN = '$2,400';
+const COST_OF_AN_AGENCY = '$3,000';
+
+
 // ─── Drawn imagery ────────────────────────────────────────────────────────────
 
-/** Deterministic avatar gradient, so the same handle always looks the same. */
+/**
+ * Deterministic avatar gradient, so the same handle always looks the same.
+ *
+ * Confined to the warm band: the hash picks a hue between 18° and 42° and a
+ * lightness, not a hue anywhere on the wheel. The old version walked all 360°,
+ * which put six unrelated colours on a page whose whole palette is orange,
+ * black and white.
+ */
 function avatarGradient(seed: string): string {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-    return `linear-gradient(135deg, hsl(${h} 55% 62%), hsl(${(h + 48) % 360} 60% 45%))`;
+    let n = 0;
+    for (let i = 0; i < seed.length; i++) n = (n * 31 + seed.charCodeAt(i)) % 997;
+    const hue = 18 + (n % 25);
+    const light = 46 + (n % 4) * 7;
+    return `linear-gradient(135deg, hsl(${hue} 78% ${light}%), hsl(${hue + 8} 62% ${light - 22}%))`;
 }
 
 const Avatar: React.FC<{ handle: string; size?: number }> = ({ handle, size = 34 }) => (
@@ -66,12 +85,12 @@ const LeadRow: React.FC<{ handle: string; meta: string; tag?: string }> = ({ han
         <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
                 <span className="text-[13px] font-semibold text-white truncate">@{handle}</span>
-                <BadgeCheck size={13} className="flex-shrink-0 text-positive-400" />
+                <BadgeCheck size={13} className="flex-shrink-0 text-brand-400" />
             </div>
             <div className="text-[11px] text-neutral-600 truncate">{meta}</div>
         </div>
         {tag && (
-            <span className="text-[10px] font-semibold px-2 py-1 rounded-md flex-shrink-0 bg-positive-500/10 border border-positive-500/15 text-positive-400">
+            <span className="text-[10px] font-semibold px-2 py-1 rounded-md flex-shrink-0 bg-brand-500/10 border border-brand-500/15 text-brand-400">
                 {tag}
             </span>
         )}
@@ -110,9 +129,9 @@ const DmThread: React.FC = () => (
                 </div>
             </div>
 
-            <div className="px-4 py-2.5 flex items-center gap-2 border-t border-white/6 bg-positive-500/6">
-                <span className="w-1.5 h-1.5 rounded-full bg-positive-400" />
-                <span className="text-[11px] font-medium text-positive-400">
+            <div className="px-4 py-2.5 flex items-center gap-2 border-t border-white/6 bg-brand-500/6">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                <span className="text-[11px] font-medium text-brand-400">
                     Reply logged · lead moved to Warm
                 </span>
             </div>
@@ -169,15 +188,23 @@ const Section: React.FC<{ children: React.ReactNode; id?: string; className?: st
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
 const HzHero: React.FC = () => (
-    <section className="relative overflow-hidden pt-36 pb-24 px-6 bg-surface">
-        {/* Ambient emerald bloom — the same atmosphere the Sidebar uses */}
+    // `isolate` matters: without a stacking context here the section's own
+    // opaque `bg-surface` paints over its negative-z children, and both the
+    // field and the bloom below it disappear.
+    <section className="relative isolate overflow-hidden pt-36 pb-24 px-6 bg-surface">
+        {/* The moving field. Behind the bloom, so the bloom softens its core. */}
+        <div aria-hidden className="absolute inset-0 -z-10 pointer-events-none">
+            <MagneticField />
+        </div>
+
+        {/* Ambient brand bloom — the same atmosphere the Sidebar uses */}
         <div
             aria-hidden
             className="absolute inset-x-0 top-0 pointer-events-none -z-10"
             style={{
                 bottom: '30%',
                 background:
-                    'radial-gradient(ellipse 80% 100% at 50% 100%, rgba(16,185,129,0.24) 0%, rgba(16,185,129,0.10) 35%, rgba(34,211,238,0.05) 65%, transparent 85%)',
+                    'radial-gradient(ellipse 80% 100% at 50% 100%, rgba(249,115,22,0.24) 0%, rgba(249,115,22,0.10) 35%, rgba(251,191,36,0.05) 65%, transparent 85%)',
                 filter: 'blur(70px)',
             }}
         />
@@ -187,7 +214,7 @@ const HzHero: React.FC = () => (
                 {/* A real, checkable number — not "V2.0 Now Live" */}
                 <div
                     className="inline-block p-px rounded-full mb-8"
-                    style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(16,185,129,0.22), rgba(255,255,255,0.04))' }}
+                    style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(249,115,22,0.22), rgba(255,255,255,0.04))' }}
                 >
                     <div
                         className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-surface"
@@ -215,7 +242,7 @@ const HzHero: React.FC = () => (
                     are already following{' '}
                     <span
                         style={{
-                            background: 'linear-gradient(135deg, #6ee7b7 0%, #34d399 40%, #22d3ee 100%)',
+                            background: 'linear-gradient(135deg, #fdba74 0%, #fb923c 40%, #fbbf24 100%)',
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
                             backgroundClip: 'text',
@@ -239,7 +266,7 @@ const HzHero: React.FC = () => (
                         href="#pricing"
                         className="group flex items-center gap-3 pl-6 pr-[7px] py-[7px] rounded-full bg-brand-500 hover:bg-brand-400 active:scale-[0.98]"
                         style={{
-                            boxShadow: '0 0 28px rgba(16,185,129,0.3), 0 0 80px rgba(16,185,129,0.08)',
+                            boxShadow: '0 0 28px rgba(249,115,22,0.3), 0 0 80px rgba(249,115,22,0.08)',
                             transition: 'all 700ms cubic-bezier(0.32,0.72,0,1)',
                         }}
                     >
@@ -370,8 +397,8 @@ const HzHowItWorks: React.FC = () => (
                 {STEPS.map(({ icon: Icon, step, title, body, stat }) => (
                     <Card key={step} className="p-7 flex flex-col">
                         <div className="flex items-start justify-between mb-6">
-                            <div className="w-9 h-9 rounded-xl border bg-positive-500/10 border-positive-500/15 flex items-center justify-center">
-                                <Icon className="w-4 h-4 text-positive-400" strokeWidth={2} />
+                            <div className="w-9 h-9 rounded-xl border bg-brand-500/10 border-brand-500/15 flex items-center justify-center">
+                                <Icon className="w-4 h-4 text-brand-400" strokeWidth={2} />
                             </div>
                             <span className="text-[11px] font-mono text-neutral-700">{step}</span>
                         </div>
@@ -514,16 +541,18 @@ const HzCompare: React.FC = () => {
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
 
+/** Outcome first, mechanism second. Nobody buys a scraper; they buy a full calendar. */
 const FEATURES = [
-    '500 ideal-client leads found for you every month',
-    'Every DM written individually — no templates, no "Hey! Love your page 🔥"',
-    'You approve messages in 10 minutes a day. We send the rest.',
-    'Follow-up sequences that run themselves (most replies come from #2 and #3)',
-    'Every reply in one inbox with an AI-drafted response ready to go',
-    'Your CRM updates itself — replies, bookings, deals, all tracked',
-    'No API keys, no AI accounts, no surprise bills. We pay for all of it.',
-    'Direct Slack access to me. I answer.',
+    '500 ideal-fit leads found and messaged every month',
+    'Every DM written for one person, no templates',
+    'Follow-ups 2 and 3 sent automatically',
+    'One inbox for every reply, with a response drafted',
+    'Pipeline tracking from reply to close',
+    'Direct support from the founder on Slack',
 ];
+
+/** Not a feature — the objection that "what else will this cost me?" raises. */
+const COSTS_INCLUDED = 'All AI and infrastructure costs included.';
 
 const HzPricing: React.FC = () => {
     const [billing, setBilling] = useState<BillingCycle>('annual');
@@ -534,7 +563,7 @@ const HzPricing: React.FC = () => {
                 <div className="text-center max-w-2xl mx-auto mb-14">
                     <Eyebrow>Pricing</Eyebrow>
                     <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15]">
-                        Cheaper than one cold-calling VA.<br />Works while you sleep.
+                        You are not buying software.<br />You are buying the hire you keep putting off.
                     </h2>
                 </div>
 
@@ -546,7 +575,7 @@ const HzPricing: React.FC = () => {
 
                     <div className="relative rounded-[1.75rem] p-8 bg-surface-raised border-2 border-brand-500/30 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col">
                         <div className="mb-6 flex items-center justify-between">
-                            <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-positive-500/10 border border-positive-500/15 text-positive-400">
+                            <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/10 border border-brand-500/15 text-brand-400">
                                 Founding Member
                             </span>
                             <span className="text-xs text-neutral-500 font-medium">
@@ -554,12 +583,31 @@ const HzPricing: React.FC = () => {
                             </span>
                         </div>
 
-                        {/* The anchor — the price they don't pay, shown first */}
-                        <div className="flex items-baseline gap-3 mb-5 pb-5 border-b border-white/6">
-                            <span className="text-neutral-600 text-sm">Standard price</span>
-                            <span className="text-neutral-500 text-xl font-semibold line-through">
-                                {ANCHOR_PRICE}/mo
-                            </span>
+{/* The anchor ladder: what the job costs elsewhere, then our own future
+                            price, then what they pay. Stepping down from a checkable outside
+                            number beats striking through one of ours — a buyer has no reason
+                            to believe a price we invented and then crossed out ourselves. */}
+                        <div className="mb-5 pb-5 border-b border-white/6 space-y-2">
+                            <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-neutral-500 text-sm">Hiring someone to do it</span>
+                                <span className="text-neutral-500 text-sm font-semibold line-through">
+                                    {COST_OF_A_HUMAN}/mo
+                                </span>
+                            </div>
+                            <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-neutral-500 text-sm">Paying an agency to do it</span>
+                                <span className="text-neutral-500 text-sm font-semibold line-through">
+                                    {COST_OF_AN_AGENCY}/mo
+                                </span>
+                            </div>
+                            <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-neutral-500 text-sm">
+                                    This, once the {SEATS_TOTAL} seats are gone
+                                </span>
+                                <span className="text-neutral-500 text-sm font-semibold line-through">
+                                    {ANCHOR_PRICE}/mo
+                                </span>
+                            </div>
                         </div>
 
                         <div className="flex gap-1 bg-white/3 border border-white/6 rounded-xl p-1 w-fit mb-6">
@@ -590,10 +638,6 @@ const HzPricing: React.FC = () => {
                                     </span>
                                 )}
                             </div>
-                            <p className="text-sm mt-2 text-neutral-400">
-                                Locked for life. When seat {SEATS_TOTAL} goes, the price is {ANCHOR_PRICE} — founding
-                                members keep this rate forever.
-                            </p>
                         </div>
 
                         <p className="text-sm font-semibold text-white mb-4">What you get:</p>
@@ -604,6 +648,9 @@ const HzPricing: React.FC = () => {
                                     <span className="text-sm font-light leading-relaxed text-neutral-300">{f}</span>
                                 </div>
                             ))}
+                            <p className="text-sm font-light leading-relaxed text-neutral-500 pt-1">
+                                {COSTS_INCLUDED}
+                            </p>
                         </div>
 
                         {/* One guarantee — the 7-day refund that already exists in Terms */}
@@ -612,12 +659,12 @@ const HzPricing: React.FC = () => {
                                 <Shield className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
                                 <div>
                                     <p className="text-sm text-white font-semibold mb-1">
-                                        7-day money-back guarantee.
+                                        7-day money-back guarantee
                                     </p>
                                     <p className="text-sm font-light leading-relaxed text-neutral-400">
-                                        Give it a real shot in your first week — finish the setup, launch a campaign,
-                                        send some approved DMs. If it's not for you, email us within 7 days of your
-                                        first payment and we refund you in full. Full conditions in the Terms.
+                                        Launch a campaign and send real DMs. If it's not for you, email us
+                                        within 7 days of your first payment for a full refund. No call, no
+                                        form. See Terms.
                                     </p>
                                 </div>
                             </div>
@@ -627,10 +674,10 @@ const HzPricing: React.FC = () => {
                             to="/login?mode=signup"
                             className="w-full py-4 rounded-xl font-semibold text-sm text-center block bg-brand-500 hover:bg-brand-400 text-brand-950 transition-all duration-300"
                         >
-                            Claim seat {SEATS_CLAIMED + 1} of {SEATS_TOTAL}
+                            Take a founding seat
                         </Link>
                         <p className="text-center text-neutral-600 text-xs mt-4">
-                            Cancel anytime, one email. No contract, no call to get out.
+                            First DMs go out within 48 hours. Cancel anytime, no contract.
                         </p>
                     </div>
                 </div>
@@ -744,7 +791,7 @@ const HzCTA: React.FC = () => (
             <div className="flex flex-col items-center gap-7">
                 <a
                     href="#pricing"
-                    className="group inline-flex items-center gap-3 px-10 py-4 rounded-full bg-brand-500 hover:bg-brand-400 text-brand-950 text-lg font-semibold shadow-[0_0_30px_-5px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_0px_rgba(16,185,129,0.6)] hover:-translate-y-1 transition-all duration-300"
+                    className="group inline-flex items-center gap-3 px-10 py-4 rounded-full bg-brand-500 hover:bg-brand-400 text-brand-950 text-lg font-semibold shadow-[0_0_30px_-5px_rgba(249,115,22,0.4)] hover:shadow-[0_0_40px_0px_rgba(249,115,22,0.6)] hover:-translate-y-1 transition-all duration-300"
                 >
                     Claim a founding seat
                     <ArrowUpRight size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />

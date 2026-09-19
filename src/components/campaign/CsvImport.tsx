@@ -75,7 +75,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
     return (
         <div className="bg-surface-raised border border-white/5 rounded-2xl p-6 space-y-5">
             <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-brand-400" />
+                <FileSpreadsheet className="w-4 h-4 text-white" />
                 <h3 className="text-sm font-semibold text-white">Import Leads from CSV</h3>
             </div>
 
@@ -100,7 +100,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
             )}
 
             {imported !== null && (
-                <div className="flex items-center gap-2 text-brand-400 text-sm">
+                <div className="flex items-center gap-2 text-white text-sm">
                     <CheckCircle className="w-4 h-4" />
                     ✓ {imported} leads added to the Approval Queue
                     {note && <span className="text-neutral-500 text-xs ml-2">{note}</span>}
@@ -114,13 +114,13 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                         {FIELD_LABELS.map(({ field, label, required }) => (
                             <div key={field}>
                                 <label className="block text-[10px] font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
-                                    {label}{required && <span className="text-brand-400"> *</span>}
+                                    {label}{required && <span className="text-white"> *</span>}
                                 </label>
                                 <div className="relative">
                                     <select
                                         value={mapping[field] ?? ''}
                                         onChange={e => setMapping(prev => ({ ...prev, [field]: e.target.value || undefined }))}
-                                        className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-3 pr-8 py-2.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-brand-500/50 cursor-pointer"
+                                        className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-3 pr-8 py-2.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
                                     >
                                         <option value="">— not in file —</option>
                                         {headers.map(h => (
@@ -166,7 +166,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                         <button
                             onClick={handleAdd}
                             disabled={!mapping.handle || previewLeads.length === 0}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 hover:bg-brand-400 disabled:opacity-50 disabled:cursor-not-allowed text-brand-950 font-semibold rounded-xl transition-all text-sm"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold rounded-xl transition-all text-sm"
                         >
                             Add {previewLeads.length} to Queue
                         </button>

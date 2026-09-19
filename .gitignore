@@ -35,3 +35,10 @@ magnetengine-extension.zip
 
 # Perf harness output (src/perf/perf.budgets.test.tsx)
 perf-report.txt
+
+# Claude Code agent worktrees — live git worktrees, never version-controlled
+.claude/worktrees/
+
+# Business strategy / GTM planning — local working notes, not part of the product
+HORMOZI-BRIEF.md
+ROAD-TO-100-USERS.md

@@ -83,20 +83,20 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
   return (
     <div
       className="rounded-[1.5rem] p-[1px] mb-6"
-      style={{ background: `linear-gradient(135deg, ${alpha(CHANNEL.brand, 0.15)} 0%, ${alpha(CHANNEL.white, 0.04)} 60%, ${alpha(CHANNEL.info, 0.08)} 100%)` }}
+      style={{ background: `linear-gradient(135deg, ${alpha(CHANNEL.white, 0.15)} 0%, ${alpha(CHANNEL.white, 0.04)} 60%, ${alpha(CHANNEL.white, 0.08)} 100%)` }}
     >
       <div
         className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 relative overflow-hidden"
         style={CARD_BEZEL.inner}
       >
         {/* Background accent glow */}
-        <div className="absolute top-0 right-0 w-64 h-32 bg-brand-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-64 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Header */}
         <div className="flex items-start justify-between mb-5 relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
-              <Rocket className="w-4 h-4 text-brand-400" />
+            <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+              <Rocket className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">Quick Start</p>
@@ -118,7 +118,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
         {/* Progress bar */}
         <div className="h-1 bg-white/5 rounded-full mb-5 overflow-hidden relative z-10">
           <div
-            className="h-full bg-gradient-to-r from-brand-500 to-accent-500 rounded-full transition-all duration-700"
+            className="h-full bg-gradient-to-r from-white to-neutral-400 rounded-full transition-all duration-700"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -151,7 +151,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
                 <Link
                   to={step.path}
                   id={`onboarding-step-${step.id}`}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-500 hover:text-brand-400 transition-colors pl-5"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-white hover:text-white transition-colors pl-5"
                 >
                   {step.linkText}
                   <ChevronRight className="w-2.5 h-2.5" />

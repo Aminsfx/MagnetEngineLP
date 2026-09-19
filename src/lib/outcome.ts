@@ -31,6 +31,21 @@ export interface Outcome {
   /** When they first did. */
   repliedAt?: string;
   booked: boolean;
+  /**
+   * They asked to be left alone.
+   *
+   * This is the one place an AI judgement is allowed through, and it is allowed
+   * because of the direction it points. `interested` is kept out of the funnel
+   * because a misread inflates a metric and fires a webhook the Operator cannot
+   * unsend. A misread `not_interested` costs one follow-up that nobody was
+   * owed. Everything it touches is suppression: no metric moves, no webhook
+   * fires, and `detectTransitions` does not know the field exists.
+   *
+   * The cost of the opposite default is not symmetrical either. Auto-DMing
+   * someone who said "not interested" twelve days later is how an Instagram
+   * account gets actioned, and there is no apology that takes it back.
+   */
+  optedOut: boolean;
 }
 
 /** Read a Conversation and its Messages as an Outcome. Pure. */
@@ -63,6 +78,7 @@ export function readOutcome(conversation: Conversation, messages: Message[]): Ou
     // is a confirmed event, whether the Operator clicked it or the model read
     // it off a "yes, Tuesday works".
     booked: conversation.status === 'booked' || conversation.intent === 'booked',
+    optedOut: conversation.intent === 'not_interested' || conversation.status === 'closed',
   };
 }
 
@@ -98,6 +114,15 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
   if (outcome.replied && !lead.replied) {
     next.replied = true;
     next.replyDate = lead.replyDate ?? outcome.repliedAt;
+    changed = true;
+  }
+
+  // Forward-only like everything else here: an Outcome is evidence that
+  // something happened, never that it didn't, so a later poll of a thread whose
+  // intent has drifted back to "neutral" cannot re-open a Lead to outreach they
+  // already declined.
+  if (outcome.optedOut && !lead.optedOut) {
+    next.optedOut = true;
     changed = true;
   }
 

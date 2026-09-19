@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readOutcome, applyOutcome, type Outcome } from './outcome';
+import { detectTransitions } from './webhooks';
 import type { Conversation, Lead, Message } from './types';
 
 const conversation = (over: Partial<Conversation> = {}): Conversation => ({
@@ -25,6 +26,7 @@ describe('readOutcome', () => {
       replied: true,
       repliedAt: '2026-09-03T11:00:00.000Z',
       booked: false,
+      optedOut: false,
     });
   });
 
@@ -118,7 +120,7 @@ const lead = (over: Partial<Lead> = {}): Lead => ({
 });
 
 const outcome = (over: Partial<Outcome> = {}): Outcome => ({
-  handle: 'founder_one', sent: false, replied: false, booked: false, ...over,
+  handle: 'founder_one', sent: false, replied: false, booked: false, optedOut: false, ...over,
 });
 
 describe('applyOutcome', () => {
@@ -191,5 +193,44 @@ describe('applyOutcome', () => {
     const won = lead({ replied: true, positiveReply: true, booked: true, status: 'won' });
 
     expect(applyOutcome(won, outcome())).toBeNull();
+  });
+});
+
+/**
+ * The opt-out is the one AI judgement allowed through to a Lead, and it is
+ * allowed because of the direction it points: everything it touches is
+ * suppression. `interested` stays out of the funnel because a misread inflates
+ * a metric and fires a webhook nobody can unsend; a misread `not_interested`
+ * costs one follow-up that was never owed.
+ */
+describe('opting out', () => {
+  it('reads a clear no off the thread', () => {
+    expect(readOutcome(conversation({ intent: 'not_interested' }), []).optedOut).toBe(true);
+    expect(readOutcome(conversation({ status: 'closed' }), []).optedOut).toBe(true);
+    expect(readOutcome(conversation({ intent: 'interested' }), []).optedOut).toBe(false);
+  });
+
+  it('stamps it on the Lead', () => {
+    const updated = applyOutcome(lead(), outcome({ optedOut: true }));
+    expect(updated?.optedOut).toBe(true);
+  });
+
+  it('moves no metric and fires no webhook', () => {
+    const before = lead();
+    const after = applyOutcome(before, outcome({ optedOut: true }));
+    expect(after).not.toBeNull();
+    // Nothing the funnel counts has changed — only the permission to contact.
+    expect(after).toMatchObject({ replied: false, status: 'cold' });
+    expect(after?.booked).toBeFalsy();
+    expect(after?.positiveReply).toBeFalsy();
+    expect(detectTransitions(before, after!)).toEqual([]);
+  });
+
+  it('cannot be taken back by a later poll', () => {
+    // Ingestion re-reads every Conversation each poll, and an AI that reclassifies
+    // a thread as neutral next week must not reopen someone to outreach they
+    // already declined.
+    const gone = { ...lead(), optedOut: true };
+    expect(applyOutcome(gone, outcome({ optedOut: false }))).toBeNull();
   });
 });

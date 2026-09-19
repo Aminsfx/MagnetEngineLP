@@ -32,8 +32,8 @@ const AUTO_DISMISS_MS = 4500;
 
 /**
  * Variant → role. `success` and `error` are the data's state, so `positive`
- * and `danger`. `info` is deliberately NOT the `info` role: cyan is reserved
- * for AI and generation affordances (docs/DESIGN-TOKENS.md), and a toast
+ * and `danger`. `info` is deliberately NOT the `info` role: that role is
+ * reserved for AI and generation affordances (docs/DESIGN-TOKENS.md), and a toast
  * saying "Campaign queued" is app chatter, not something the AI produced.
  * Chatter is chrome, so it takes `neutral` — which also keeps the two toasts
  * that *do* carry meaning the only coloured ones on screen.

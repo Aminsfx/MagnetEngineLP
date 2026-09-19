@@ -37,15 +37,15 @@ const FAQItem: React.FC<{ question: string; answer: string }> = ({ question, ans
                 className="flex w-full items-center justify-between text-left focus:outline-none transition-colors"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className={`text-[17px] font-medium transition-colors duration-300 ${isOpen ? 'text-emerald-400' : 'text-zinc-200 group-hover:text-white'}`}>{question}</span>
-                <span className={`p-1.5 rounded-full transition-colors duration-300 flex-shrink-0 ${isOpen ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-zinc-400 group-hover:bg-white/10 group-hover:text-white'}`}>
+                <span className={`text-[17px] font-medium transition-colors duration-300 ${isOpen ? 'text-brand-400' : 'text-neutral-200 group-hover:text-white'}`}>{question}</span>
+                <span className={`p-1.5 rounded-full transition-colors duration-300 flex-shrink-0 ${isOpen ? 'bg-brand-500/10 text-brand-400' : 'bg-white/5 text-neutral-400 group-hover:bg-white/10 group-hover:text-white'}`}>
                     {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </span>
             </button>
             <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-48 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}
             >
-                <div className="text-zinc-400 font-light leading-relaxed pr-8 text-[15px]">
+                <div className="text-neutral-400 font-light leading-relaxed pr-8 text-[15px]">
                     {answer}
                 </div>
             </div>
@@ -55,14 +55,14 @@ const FAQItem: React.FC<{ question: string; answer: string }> = ({ question, ans
 
 const FAQ = () => {
     return (
-        <section id="faq" className="py-24 px-4 sm:px-6 lg:px-8 relative z-10 bg-[#030604]">
+        <section id="faq" className="py-24 px-4 sm:px-6 lg:px-8 relative z-10 bg-surface">
             <div className="max-w-3xl mx-auto">
                 <div className="text-center mb-16 space-y-4">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">FAQ</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500 mb-2">FAQ</div>
                     <h2 className="text-3xl sm:text-4xl font-semibold text-white tracking-tight drop-shadow-md">
                         Frequently Asked Questions
                     </h2>
-                    <p className="text-zinc-400 font-light text-lg">
+                    <p className="text-neutral-400 font-light text-lg">
                         Everything you need to know about MagnetEngine.
                     </p>
                 </div>

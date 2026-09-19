@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Lead } from '../../lib/types';
 import { ReplyBattlecards } from './ReplyBattlecards';
+import type { TemplateContext } from '../../lib/followups';
 
 function formatFollowers(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -18,19 +19,19 @@ function formatFollowers(n: number): string {
  * Written out rather than built from a role name because Tailwind's content
  * scanner only sees literal class strings — an interpolated
  * `hover:text-${role}-400` compiles to nothing. Spelling them once instead of
- * nine times is what makes the role map auditable: `info` is cyan, and cyan
- * means the AI made it (docs/DESIGN-TOKENS.md), so anything not in that row
- * must not reach for it.
+ * nine times is what makes the role map auditable: `info` means the AI made
+ * it (docs/DESIGN-TOKENS.md), so anything not in that row must not reach for
+ * it.
  */
 const ICON_BTN = {
     neutral: 'p-1.5 rounded-lg text-neutral-600 hover:text-neutral-400 hover:bg-neutral-500/10 transition-all',
-    brand: 'p-1.5 rounded-lg text-neutral-600 hover:text-brand-400 hover:bg-brand-500/10 transition-all',
+    brand: 'p-1.5 rounded-lg text-neutral-600 hover:text-white hover:bg-white/10 transition-all',
     danger: 'p-1.5 rounded-lg text-neutral-600 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
     /** Delete only: it rests one step dimmer than Reject, since it is the
         irreversible one and should not be what the eye lands on first. */
     dangerQuiet: 'p-1.5 rounded-lg text-neutral-700 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
     /** AI generation only. */
-    info: 'p-1.5 rounded-lg text-neutral-600 hover:text-info-400 hover:bg-info-500/10 transition-all',
+    info: 'p-1.5 rounded-lg text-neutral-600 hover:text-white hover:bg-white/10 transition-all',
 } as const;
 
 export interface QueueRowProps {
@@ -41,7 +42,8 @@ export interface QueueRowProps {
     editDraft: string | null;
     showBattlecards: boolean;
     isGenerating: boolean;
-    calendarLink?: string;
+    /** Offer Ledger + booking link, for the reply battlecards. `AppConfig` fits. */
+    ledger?: TemplateContext;
     canDelete: boolean;
     onToggleSelect: (id: string) => void;
     onStartEdit: (lead: Lead) => void;
@@ -75,7 +77,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
     editDraft,
     showBattlecards,
     isGenerating,
-    calendarLink,
+    ledger,
     canDelete,
     onToggleSelect,
     onStartEdit,
@@ -97,14 +99,14 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
 
     return (
         <>
-            <tr className={`transition-colors hover:bg-white/[0.02] ${isSelected ? 'bg-brand-500/[0.06]' : rowClass}`}>
+            <tr className={`transition-colors hover:bg-white/[0.02] ${isSelected ? 'bg-white/[0.06]' : rowClass}`}>
                 {/* Select */}
                 <td className="pl-5 pr-2 py-4 align-top">
                     <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => onToggleSelect(lead.id)}
-                        className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-brand-500 cursor-pointer"
+                        className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-white cursor-pointer"
                     />
                 </td>
                 {/* Prospect */}
@@ -124,7 +126,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                         ) : (
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-600 to-accent-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-white to-neutral-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                                 {(lead.name || lead.handle)[0]?.toUpperCase()}
                             </div>
                         )}
@@ -135,7 +137,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 <Users className="w-3 h-3" />
                                 {formatFollowers(lead.followers)}
                                 {lead.businessAccount && (
-                                    <span className="bg-caution-500/10 text-caution-500 px-1 py-0.5 rounded">Biz</span>
+                                    <span className="bg-white/10 text-white px-1 py-0.5 rounded">Biz</span>
                                 )}
                             </div>
                             {/* `neutral`, not an accent: which campaign a Lead came
@@ -171,11 +173,11 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onChange={e => onEditDraftChange(e.target.value)}
                                 rows={4}
                                 autoFocus
-                                className="w-full bg-surface border border-brand-500/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500/50 resize-none"
+                                className="w-full bg-surface border border-white/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/50 resize-none"
                             />
                             <div className="flex gap-2">
                                 <button onClick={() => onSaveEdit(lead.id)}
-                                    className="flex items-center gap-1 px-3 py-1 bg-brand-500/20 text-brand-400 rounded-lg text-xs hover:bg-brand-500/30 transition-colors">
+                                    className="flex items-center gap-1 px-3 py-1 bg-white/20 text-white rounded-lg text-xs hover:bg-white/30 transition-colors">
                                     <Check className="w-3 h-3" /> Save
                                 </button>
                                 <button onClick={onCancelEdit}
@@ -205,7 +207,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             <XCircle className="w-3 h-3" /> Rejected
                         </span>
                     ) : lead.dmContent ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-info-500/10 text-info-400 border border-info-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-white/10 text-white border border-white/20">
                             <MessageSquare className="w-3 h-3" /> Ready
                         </span>
                     ) : (
@@ -332,7 +334,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                     <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
                         <ReplyBattlecards
                             lead={lead}
-                            calendarLink={calendarLink}
+                            ledger={ledger}
                             onUpdateLead={onUpdateLead}
                         />
                     </td>

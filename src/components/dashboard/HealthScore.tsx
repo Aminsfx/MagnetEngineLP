@@ -76,7 +76,7 @@ export function computeHealth(leads: Lead[], now: Date = new Date()): {
 
 const RAG_STYLE: Record<Rag, string> = {
     green: 'text-positive-400 bg-positive-500/8 border-positive-500/20',
-    yellow: 'text-caution-400 bg-caution-500/8 border-caution-500/20',
+    yellow: 'text-white bg-white/8 border-white/20',
     red: 'text-danger-400 bg-danger-500/8 border-danger-500/20',
 };
 
@@ -100,8 +100,8 @@ export const HealthScore: React.FC<{ leads: Lead[] }> = ({ leads }) => {
             >
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
-                            <Activity className="w-4 h-4 text-brand-400" />
+                        <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-white" />
                         </div>
                         <div>
                             <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">This Week</p>

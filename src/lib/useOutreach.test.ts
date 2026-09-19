@@ -76,6 +76,8 @@ function fakeStore(kind: WorkspaceStore['kind'] = 'supabase') {
     loadInbox: async () => ({ conversations: [], messages: [] }),
     saveConversations: async () => {},
     saveMessages: async () => {},
+    loadSequences: async () => [],
+    saveSequence: async (sequence) => sequence,
   };
   return { store, saved, removed };
 }
@@ -382,7 +384,7 @@ describe('sendFollowUps', () => {
     let count = 0;
     await act(async () => {
       count = await result.current.sendFollowUps([
-        { lead: target, stepIndex: 0, message: 'still keen?' },
+        { lead: target, stepIndex: 0, rescue: false, message: 'still keen?' },
       ]);
     });
 
@@ -416,7 +418,7 @@ describe('sendFollowUps', () => {
     let count = 0;
     await act(async () => {
       count = await result.current.sendFollowUps([
-        { lead: target, stepIndex: 0, message: 'still keen?' },
+        { lead: target, stepIndex: 0, rescue: false, message: 'still keen?' },
       ]);
     });
 
@@ -427,7 +429,7 @@ describe('sendFollowUps', () => {
 
 describe('recordOutcomes', () => {
   const outcome = (over: Partial<Outcome> = {}): Outcome => ({
-    handle: 'founder_one', sent: false, replied: false, booked: false, ...over,
+    handle: 'founder_one', sent: false, replied: false, booked: false, optedOut: false, ...over,
   });
 
   it('reflects an Inbox reply on the Lead behind the handle', async () => {

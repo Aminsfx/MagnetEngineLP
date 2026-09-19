@@ -8,7 +8,6 @@ import { OnboardingChecklist } from '../components/dashboard/OnboardingChecklist
 import { CampaignBuilder } from '../components/campaign/CampaignBuilder';
 import { ApprovalQueue } from '../components/campaign/ApprovalQueue';
 import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
-import { RevenueCalculator } from '../components/calculator/RevenueCalculator';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
 import { InboxView } from '../components/inbox/InboxView';
 import ProfilePage from './ProfilePage';
@@ -44,7 +43,7 @@ import { CHANNEL, alpha } from '../lib/theme';
  * so a token swap had to land five times and stayed right only by luck.
  *
  * Two more copies live outside this file — InboxView and ProfilePage — and are
- * not this unit's to touch, so they still say `zinc-500` where these say
+ * not this unit's to touch, so they still spell the hue where these say
  * `neutral-500`. Same pixels, split vocabulary: when someone owns all seven,
  * this wants to be a shared `<PageEyebrow>` rather than a local constant.
  */
@@ -59,7 +58,7 @@ const PAGE_EYEBROW =
  */
 function usagePillTone(fraction: number): string {
   if (fraction >= 1) return 'text-danger-400 border-danger-500/30 bg-danger-500/8';
-  if (fraction >= 0.8) return 'text-caution-400 border-caution-500/30 bg-caution-500/8';
+  if (fraction >= 0.8) return 'text-white border-white/30 bg-white/8';
   return 'text-neutral-500 border-white/8 bg-white/3';
 }
 
@@ -379,7 +378,7 @@ const DashboardShell: React.FC = () => {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="flex items-center gap-3 text-neutral-600">
-          <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+          <Loader2 className="w-5 h-5 animate-spin text-white" />
           <span className="text-sm font-mono">Loading your pipeline…</span>
         </div>
       </div>
@@ -477,11 +476,14 @@ const DashboardShell: React.FC = () => {
             Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
           </p>
         </div>
-        <FollowUpSequencer leads={outreach.leads} onSendFollowUps={outreach.sendFollowUps} />
+        <FollowUpSequencer
+          leads={outreach.leads}
+          config={config}
+          store={store}
+          onSendFollowUps={outreach.sendFollowUps}
+        />
       </div>
     ),
-
-    '/calculator': <div className="p-8 max-w-7xl"><RevenueCalculator /></div>,
 
     '/settings': (
       <div className="p-8 max-w-4xl">
@@ -498,7 +500,7 @@ const DashboardShell: React.FC = () => {
     <div className="flex min-h-screen bg-surface relative overflow-hidden">
       {/* Global ambient glow — the brand wash the whole shell sits in. */}
       <div className="fixed bottom-0 left-0 lg:left-64 right-0 h-[400px] pointer-events-none z-0"
-        style={{ background: `radial-gradient(ellipse at 50% 100%, ${alpha(CHANNEL.brand, 0.07)} 0%, transparent 70%)` }}
+        style={{ background: `radial-gradient(ellipse at 50% 100%, ${alpha(CHANNEL.white, 0.035)} 0%, transparent 70%)` }}
       />
       {/* Noise overlay */}
       <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.025]"
@@ -560,16 +562,16 @@ const DashboardShell: React.FC = () => {
                 </div>
               );
             })()}
-            {/* User avatar with email tooltip. The gradient was emerald→cyan;
-                a decorative avatar is not an AI affordance and cyan is reserved
-                for those, so it stays inside the brand ramp. */}
+            {/* User avatar with email tooltip. The gradient once ran brand→info;
+                a decorative avatar is not an AI affordance and `info` is reserved
+                for those, so it takes `accent` instead. */}
             <div
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-accent-500 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-white to-neutral-400 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
               title={user?.email ?? ''}
             >
               {headerAvatar
                 ? <img src={headerAvatar} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-[10px] font-bold text-brand-950 uppercase">{user?.email?.[0] ?? 'U'}</span>
+                : <span className="text-[10px] font-bold text-surface uppercase">{user?.email?.[0] ?? 'U'}</span>
               }
             </div>
           </div>

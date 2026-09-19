@@ -42,16 +42,17 @@ interface MetricCardProps {
     benchmark?: { text: string; tone: 'good' | 'bad' };
 }
 
-// A tile reports a number, so its classes speak `positive` rather than `brand`.
-// The glow says `brand` for the same emerald: CHANNEL carries one entry per hue,
-// and `positive` is an alias of it rather than a colour of its own.
+// A tile reports a number, so its classes speak `positive` — which is now a
+// colour of its own (emerald) rather than an alias of `brand`, because green
+// and red are the only two hues left in the dashboard. The hover orb behind it
+// is decoration, not a state, so it stays white.
 const MetricCard: React.FC<MetricCardProps> = ({
     title,
     value,
     subtext,
     change,
     icon,
-    glowColor = alpha(CHANNEL.brand, 0.15),
+    glowColor = alpha(CHANNEL.white, 0.15),
     iconBg = 'bg-positive-500/10 border-positive-500/15',
     delay = 0,
     benchmark,
@@ -111,13 +112,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
 
                 {/* Benchmark overlay */}
                 {benchmark && (
-                    <p className={`text-[10px] mt-1 font-medium ${benchmark.tone === 'good' ? 'text-positive-400' : 'text-caution-400'}`}>
+                    <p className={`text-[10px] mt-1 font-medium ${benchmark.tone === 'good' ? 'text-positive-400' : 'text-white'}`}>
                         {benchmark.text}
                     </p>
                 )}
 
                 {/* Bottom accent */}
-                <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-brand-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </div>
         </div>
     );
@@ -136,7 +137,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={stats.approvedLeads.toLocaleString()}
                 subtext={`of ${stats.totalLeads} scraped`}
                 icon={<Users className="w-4.5 h-4.5 text-positive-400" />}
-                glowColor={alpha(CHANNEL.brand, 0.2)}
+                glowColor={alpha(CHANNEL.white, 0.2)}
                 iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={0}
             />
@@ -144,9 +145,9 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 title="DMs Sent"
                 value={stats.dmsSent.toLocaleString()}
                 subtext={`of ${stats.totalLeads} leads contacted`}
-                icon={<MessageSquare className="w-4.5 h-4.5 text-info-400" />}
-                glowColor={alpha(CHANNEL.info, 0.2)}
-                iconBg="bg-info-500/10 border-info-500/15"
+                icon={<MessageSquare className="w-4.5 h-4.5 text-white" />}
+                glowColor={alpha(CHANNEL.white, 0.2)}
+                iconBg="bg-white/10 border-white/15"
                 delay={60}
             />
             <MetricCard
@@ -155,7 +156,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 subtext="any reply to DM sent"
                 benchmark={benchmarkFor('replyRate', stats.replyRate)}
                 icon={<TrendingUp className="w-4.5 h-4.5 text-positive-400" />}
-                glowColor={alpha(CHANNEL.brand, 0.15)}
+                glowColor={alpha(CHANNEL.white, 0.15)}
                 iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={120}
             />
@@ -176,9 +177,9 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={`${stats.bookingRate}%`}
                 subtext="positive replies → booked call"
                 benchmark={benchmarkFor('bookingRate', stats.bookingRate)}
-                icon={<Calendar className="w-4.5 h-4.5 text-caution-400" />}
-                glowColor={alpha(CHANNEL.caution, 0.15)}
-                iconBg="bg-caution-500/10 border-caution-500/15"
+                icon={<Calendar className="w-4.5 h-4.5 text-white" />}
+                glowColor={alpha(CHANNEL.white, 0.15)}
+                iconBg="bg-white/10 border-white/15"
                 delay={240}
             />
             <MetricCard
@@ -204,7 +205,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ stats }) => {
                 value={stats.activeCampaigns}
                 subtext="distinct campaign runs"
                 icon={<Layers className="w-4.5 h-4.5 text-positive-400" />}
-                glowColor={alpha(CHANNEL.brand, 0.18)}
+                glowColor={alpha(CHANNEL.white, 0.18)}
                 iconBg="bg-positive-500/10 border-positive-500/15"
                 delay={420}
             />

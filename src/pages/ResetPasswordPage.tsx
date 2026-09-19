@@ -55,7 +55,7 @@ const ResetPasswordPage: React.FC = () => {
     const shell = (content: React.ReactNode) => (
         <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-emerald-900/10 to-black pointer-events-none z-0" />
+            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
             <div className="relative z-10 w-full max-w-md">{content}</div>
         </div>
     );
@@ -63,8 +63,8 @@ const ResetPasswordPage: React.FC = () => {
     // Still resolving the recovery session
     if (loading || (!user && !waited)) {
         return shell(
-            <div className="text-center text-zinc-500">
-                <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mx-auto mb-4" />
+            <div className="text-center text-neutral-500">
+                <Loader2 className="w-6 h-6 animate-spin text-brand-500 mx-auto mb-4" />
                 <p className="text-sm">Verifying reset link…</p>
             </div>
         );
@@ -78,10 +78,10 @@ const ResetPasswordPage: React.FC = () => {
                     <AlertCircle className="w-8 h-8 text-red-400" />
                 </div>
                 <h1 className="text-2xl font-bold text-white mb-3">Link expired or invalid</h1>
-                <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+                <p className="text-neutral-400 text-sm leading-relaxed mb-6">
                     This password-reset link is no longer valid. Request a new one from the sign-in page.
                 </p>
-                <Link to="/login" className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors">
+                <Link to="/login" className="text-sm text-brand-500 hover:text-brand-400 transition-colors">
                     ← Back to sign in
                 </Link>
             </div>
@@ -91,11 +91,11 @@ const ResetPasswordPage: React.FC = () => {
     if (done) {
         return shell(
             <div className="text-center">
-                <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-6">
-                    <CheckCircle className="w-8 h-8 text-emerald-400" />
+                <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 mb-6">
+                    <CheckCircle className="w-8 h-8 text-brand-400" />
                 </div>
                 <h1 className="text-2xl font-bold text-white mb-3">Password updated</h1>
-                <p className="text-zinc-400 text-sm">Taking you to your dashboard…</p>
+                <p className="text-neutral-400 text-sm">Taking you to your dashboard…</p>
             </div>
         );
     }
@@ -104,23 +104,23 @@ const ResetPasswordPage: React.FC = () => {
         <>
             <Link
                 to="/login"
-                className="inline-flex items-center text-sm text-zinc-500 hover:text-white transition-colors mb-8 group"
+                className="inline-flex items-center text-sm text-neutral-500 hover:text-white transition-colors mb-8 group"
             >
                 <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
                 Back to sign in
             </Link>
 
-            <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
+            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
                 <div className="text-center mb-6">
                     <h1 className="text-2xl font-bold text-white mb-1">Choose a new password</h1>
-                    <p className="text-zinc-500 text-sm">for {user.email}</p>
+                    <p className="text-neutral-500 text-sm">for {user.email}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">New Password</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">New Password</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
                             <input
                                 type="password"
                                 required
@@ -128,15 +128,15 @@ const ResetPasswordPage: React.FC = () => {
                                 value={newPw}
                                 onChange={e => setNewPw(e.target.value)}
                                 placeholder="Min. 6 characters"
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Confirm New Password</label>
+                        <label className="block text-sm font-medium text-neutral-400 mb-2">Confirm New Password</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
                             <input
                                 type="password"
                                 required
@@ -144,7 +144,7 @@ const ResetPasswordPage: React.FC = () => {
                                 value={confirmPw}
                                 onChange={e => setConfirmPw(e.target.value)}
                                 placeholder="Repeat password"
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/30 transition-all"
+                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
                             />
                         </div>
                     </div>
@@ -159,7 +159,7 @@ const ResetPasswordPage: React.FC = () => {
                     <button
                         type="submit"
                         disabled={isSaving}
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold py-3 rounded-full transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
+                        className="w-full bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold py-3 rounded-full transition-all shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Password'}
                     </button>

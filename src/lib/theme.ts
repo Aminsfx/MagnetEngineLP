@@ -11,9 +11,9 @@ import type { CSSProperties } from 'react';
  * needs are why the literals were copy-pasted — the bezel pair alone appeared
  * verbatim at 16 sites — so they live here once instead of being re-derived.
  *
- * Values mirror Tailwind's ramps exactly, so swapping a literal for a token is
- * a no-op on screen. Hex is lowercase throughout; the repo previously spelled
- * the same emerald six ways.
+ * Values mirror Tailwind's ramps exactly, so a token is always interchangeable
+ * with the ramp it names. Hex is lowercase throughout; the repo previously
+ * spelled the same accent six ways.
  *
  * See docs/DESIGN-TOKENS.md for what each role means.
  */
@@ -21,49 +21,49 @@ import type { CSSProperties } from 'react';
 /** The four dark grounds. Mirrors `theme.extend.colors.surface`. */
 export const SURFACE = {
   /** App background. */
-  base: '#030604',
+  base: '#050505',
   /** Cards on the app background. */
-  raised: '#050a08',
+  raised: '#0e0e0e',
   /** Dashboard cards. */
-  sunken: '#030a06',
+  sunken: '#0a0a0a',
   /** Menus, popovers, dropdowns. */
-  overlay: '#0a1510',
+  overlay: '#171717',
 } as const;
 
-/** The brand emerald ramp, one canonical spelling. Mirrors Tailwind's emerald. */
+/** The brand orange ramp, one canonical spelling. Mirrors Tailwind's orange. */
 export const BRAND = {
-  50: '#ecfdf5',
-  100: '#d1fae5',
-  200: '#a7f3d0',
-  300: '#6ee7b7',
-  400: '#34d399',
-  500: '#10b981',
-  600: '#059669',
-  700: '#047857',
-  800: '#065f46',
-  900: '#064e3b',
-  950: '#022c22',
+  50: '#fff7ed',
+  100: '#ffedd5',
+  200: '#fed7aa',
+  300: '#fdba74',
+  400: '#fb923c',
+  500: '#f97316',
+  600: '#ea580c',
+  700: '#c2410c',
+  800: '#9a3412',
+  900: '#7c2d12',
+  950: '#431407',
 } as const;
 
 /**
  * Role hues as `r,g,b` channel triples, for the alpha washes Tailwind's
  * `/opacity` syntax cannot express in an inline style. Roughly 24 distinct
- * `rgba(16,185,129,α)` values existed across the repo; `alpha()` replaces the
+ * hand-typed `rgba(…)` values existed across the repo; `alpha()` replaces the
  * guessing with a token plus a number.
  */
 export const CHANNEL = {
-  brand: '16,185,129',    // emerald-500
-  info: '6,182,212',      // cyan-500
-  caution: '245,158,11',  // amber-500
+  brand: '249,115,22',    // orange-500
+  info: '245,158,11',     // amber-500
+  caution: '234,179,8',   // yellow-500
   danger: '239,68,68',    // red-500
-  neutral: '161,161,170', // zinc-400
+  neutral: '163,163,163', // neutral-400
   white: '255,255,255',
 } as const;
 
 /** A `CHANNEL` value. Narrow, so a hand-typed triple won't type-check. */
 export type Channel = (typeof CHANNEL)[keyof typeof CHANNEL];
 
-/** `alpha(CHANNEL.brand, 0.2)` → `'rgba(16,185,129,0.2)'`. */
+/** `alpha(CHANNEL.brand, 0.2)` → `'rgba(249,115,22,0.2)'`. */
 export function alpha(channel: Channel, opacity: number): string {
   return `rgba(${channel},${opacity})`;
 }
@@ -83,28 +83,39 @@ export const CARD_BEZEL: { outer: CSSProperties; inner: CSSProperties } = {
   inner: { boxShadow: `inset 0 1px 1px ${alpha(CHANNEL.white, 0.04)}` },
 };
 
-/** The bezel tinted brand — a card the operator is meant to act in (AdminPage). */
-export const CARD_BEZEL_BRAND: { outer: CSSProperties; inner: CSSProperties } = {
-  outer: { background: `linear-gradient(135deg, ${alpha(CHANNEL.brand, 0.12)} 0%, ${alpha(CHANNEL.white, 0.02)} 100%)` },
+/**
+ * A bezel brighter than its neighbours — a card the Operator is meant to act
+ * in (AdminPage). It was tinted brand; the dashboard carries no brand colour
+ * now, so the emphasis is a stronger white edge instead.
+ */
+export const CARD_BEZEL_STRONG: { outer: CSSProperties; inner: CSSProperties } = {
+  outer: { background: `linear-gradient(135deg, ${alpha(CHANNEL.white, 0.16)} 0%, ${alpha(CHANNEL.white, 0.03)} 100%)` },
   inner: CARD_BEZEL.inner,
 };
 
 /** The bezel tinted danger — a destructive zone (ProfilePage). */
 export const CARD_BEZEL_DANGER: { outer: CSSProperties; inner: CSSProperties } = {
-  outer: { background: `linear-gradient(135deg, ${alpha(CHANNEL.danger, 0.08)} 0%, ${alpha(CHANNEL.white, 0.02)} 100%)` },
+  outer: { background: `linear-gradient(135deg, ${alpha(CHANNEL.danger, 0.1)} 0%, ${alpha(CHANNEL.white, 0.02)} 100%)` },
   inner: CARD_BEZEL.inner,
 };
 
-/** Recharts props: the chart's series, chrome and grid. */
+/**
+ * Recharts props: the chart's series, chrome and grid.
+ *
+ * The chart only renders inside the dashboard, which is black and white apart
+ * from `positive` and `danger`. Sends are an action, so they are white;
+ * replies are the good outcome the chart exists to show, so they take the
+ * green. The two series stay tellable apart by hue and by lightness.
+ */
 export const CHART = {
   /** DMs sent — the primary series. */
-  sent: BRAND[500],
-  /** Replies — an outcome, not an action, so it reads as `info`. */
-  replies: '#06b6d4', // cyan-500
+  sent: '#ffffff',
+  /** Replies — the outcome, so it reads as `positive`. */
+  replies: '#10b981', // emerald-500
   /** Axis tick labels. */
-  axisTick: '#52525b', // zinc-600
+  axisTick: '#525252', // neutral-600
   /** Legend text. */
-  legendText: '#71717a', // zinc-500
+  legendText: '#737373', // neutral-500
   /** Cartesian grid lines. */
   grid: alpha(CHANNEL.white, 0.04),
   /** Hover cursor wash behind a column. */

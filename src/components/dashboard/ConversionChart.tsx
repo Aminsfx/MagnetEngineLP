@@ -78,7 +78,7 @@ export const ConversionChart: React.FC<ConversionChartProps> = ({ leads }) => {
             {/* Inner core */}
             <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 relative overflow-hidden" style={CARD_BEZEL.inner}>
                 {/* Background glow — planet horizon echo */}
-                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-brand-500/5 to-transparent pointer-events-none" />
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white/5 to-transparent pointer-events-none" />
 
                 {/* Header */}
                 <div className="mb-6">

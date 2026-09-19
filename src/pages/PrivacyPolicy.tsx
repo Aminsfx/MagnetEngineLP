@@ -6,7 +6,7 @@ import { Logo } from '../components/Logo';
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div className="mb-10">
         <h2 className="text-xl font-semibold text-white mb-3 border-b border-white/10 pb-2">{title}</h2>
-        <div className="text-zinc-400 text-sm leading-relaxed space-y-3">{children}</div>
+        <div className="text-neutral-400 text-sm leading-relaxed space-y-3">{children}</div>
     </div>
 );
 
@@ -14,12 +14,12 @@ const PrivacyPolicy: React.FC = () => {
     return (
         <div className="relative min-h-screen bg-black text-white overflow-hidden">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-blue-900/10 to-black pointer-events-none z-0" />
+            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 max-w-3xl mx-auto px-6 py-16">
                 <Link
                     to="/login"
-                    className="inline-flex items-center text-sm text-zinc-500 hover:text-white transition-colors mb-10 group"
+                    className="inline-flex items-center text-sm text-neutral-500 hover:text-white transition-colors mb-10 group"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
                     Back
@@ -31,12 +31,12 @@ const PrivacyPolicy: React.FC = () => {
                         <Logo size="sm" linkTo="/" />
                     </div>
                     <h1 className="text-4xl font-bold text-white mb-3">Privacy Policy</h1>
-                    <p className="text-zinc-500 text-sm">
+                    <p className="text-neutral-500 text-sm">
                         Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: February 27, 2026
                     </p>
                 </div>
 
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-10 text-sm text-blue-300">
+                <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-4 mb-10 text-sm text-brand-300">
                     <strong>Summary:</strong> MagnetEngine does not sell your personal data. You never need to enter any API keys or third-party credentials — all AI and data services are provided and managed by us as part of your subscription.
                 </div>
 
@@ -137,7 +137,7 @@ const PrivacyPolicy: React.FC = () => {
                     </ul>
                     <p>
                         To exercise any of these rights, contact us at{' '}
-                        <a href="mailto:privacy@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">
+                        <a href="mailto:privacy@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">
                             privacy@magnetengine.xyz
                         </a>.
                     </p>
@@ -159,16 +159,16 @@ const PrivacyPolicy: React.FC = () => {
                     <p>
                         If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us at:
                     </p>
-                    <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-4 mt-2">
+                    <div className="bg-neutral-900/50 border border-white/10 rounded-xl p-4 mt-2">
                         <p className="text-white font-medium">MagnetEngine</p>
-                        <p>Email: <a href="mailto:privacy@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">privacy@magnetengine.xyz</a></p>
-                        <p>Legal inquiries: <a href="mailto:legal@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">legal@magnetengine.xyz</a></p>
+                        <p>Email: <a href="mailto:privacy@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">privacy@magnetengine.xyz</a></p>
+                        <p>Legal inquiries: <a href="mailto:legal@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">legal@magnetengine.xyz</a></p>
                     </div>
                 </Section>
 
-                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-600">
+                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-600">
                     <span>© 2026 MagnetEngine. All rights reserved.</span>
-                    <Link to="/terms" className="text-blue-500 hover:text-blue-400 transition-colors">Terms of Service →</Link>
+                    <Link to="/terms" className="text-brand-500 hover:text-brand-400 transition-colors">Terms of Service →</Link>
                 </div>
             </div>
         </div>

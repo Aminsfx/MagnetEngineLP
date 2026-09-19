@@ -27,11 +27,11 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
   return (
     <div
       role="status"
-      className="mx-4 sm:mx-8 mt-4 flex items-start gap-3 rounded-2xl border border-caution-500/25 bg-caution-500/[0.07] px-4 py-3"
+      className="mx-4 sm:mx-8 mt-4 flex items-start gap-3 rounded-2xl border border-white/25 bg-white/[0.07] px-4 py-3"
     >
-      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-caution-400" />
+      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-white" />
       <div className="text-[13px] leading-relaxed">
-        <p className="font-medium text-caution-200">
+        <p className="font-medium text-white">
           {absent
             ? 'Extension not detected'
             : 'Your MagnetEngine extension is out of date'}

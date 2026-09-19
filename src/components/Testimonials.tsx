@@ -8,8 +8,8 @@ const testimonials = [
     company: 'Elevate Growth Agency',
     photo: 'https://randomuser.me/api/portraits/women/44.jpg',
     initials: 'SM',
-    gradient: 'from-emerald-500 to-teal-600',
-    accentColor: 'text-emerald-400',
+    gradient: 'from-brand-500 to-brand-600',
+    accentColor: 'text-brand-400',
     quote:
       "We went from booking 4 discovery calls a week to 22 in just 6 weeks. MagnetEngine doesn't just send messages — it sends the right message, to the right person, at the right time. Our entire prospecting workflow is now fully on autopilot.",
     metric: '+450%',
@@ -21,8 +21,8 @@ const testimonials = [
     company: 'Apex Digital Partners',
     photo: 'https://randomuser.me/api/portraits/men/32.jpg',
     initials: 'JO',
-    gradient: 'from-cyan-500 to-blue-600',
-    accentColor: 'text-cyan-400',
+    gradient: 'from-info-500 to-brand-600',
+    accentColor: 'text-info-400',
     quote:
       "I was skeptical about AI outreach — I'd been burned by spammy tools before. MagnetEngine is completely different. The personalization is genuinely impressive. We signed three new retainer clients within the first month alone.",
     metric: '3 clients',
@@ -34,8 +34,8 @@ const testimonials = [
     company: 'ScalePeak Studio',
     photo: 'https://randomuser.me/api/portraits/women/67.jpg',
     initials: 'PS',
-    gradient: 'from-violet-500 to-purple-600',
-    accentColor: 'text-violet-400',
+    gradient: 'from-neutral-500 to-neutral-600',
+    accentColor: 'text-neutral-400',
     quote:
       "Our SDR team was spending 60% of their time just researching and writing personalized messages. MagnetEngine cut that to near zero. Now they spend their time actually closing deals. It's a complete game-changer for our pipeline.",
     metric: '60%',
@@ -47,8 +47,8 @@ const testimonials = [
     company: 'LeadForge Solutions',
     photo: 'https://randomuser.me/api/portraits/men/55.jpg',
     initials: 'CM',
-    gradient: 'from-orange-500 to-amber-500',
-    accentColor: 'text-amber-400',
+    gradient: 'from-accent-500 to-brand-600',
+    accentColor: 'text-accent-400',
     quote:
       "The ROI was obvious within the first two weeks. MagnetEngine found prospects we never would have targeted manually, and crafted messages that actually got responses. Our reply rate jumped from 3% to 19% — almost overnight.",
     metric: '19%',
@@ -60,8 +60,8 @@ const testimonials = [
     company: 'Northstar Creative Agency',
     photo: 'https://randomuser.me/api/portraits/women/24.jpg',
     initials: 'ET',
-    gradient: 'from-pink-500 to-rose-500',
-    accentColor: 'text-pink-400',
+    gradient: 'from-brand-400 to-accent-600',
+    accentColor: 'text-brand-300',
     quote:
       "As a creative agency, I didn't think we needed an outreach tool. I was wrong. MagnetEngine helped us land our biggest client ever — a $12k/month retainer — within 45 days of getting started. It literally paid for itself 60 times over.",
     metric: '$12k/mo',
@@ -110,17 +110,17 @@ const Testimonials: React.FC = () => {
   const t = testimonials[current];
 
   return (
-    <section className="py-32 px-6 relative bg-[#030604] border-t border-white/5">
+    <section className="py-32 px-6 relative bg-surface border-t border-white/5">
       <div className="max-w-6xl mx-auto space-y-16">
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto space-y-6">
-          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full border border-white/10 bg-white/[0.02] text-zinc-400 text-[10px] font-semibold uppercase tracking-widest">
+          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full border border-white/10 bg-white/[0.02] text-neutral-400 text-[10px] font-semibold uppercase tracking-widest">
             Client Results
           </div>
           <h2 className="text-4xl md:text-5xl font-medium text-white tracking-tight drop-shadow-md">
             Agencies Winning With<br className="hidden md:block" /> MagnetEngine
           </h2>
-          <p className="text-zinc-400 font-light text-lg">
+          <p className="text-neutral-400 font-light text-lg">
             Real results from real agencies that automated their outreach.
           </p>
         </div>
@@ -130,7 +130,7 @@ const Testimonials: React.FC = () => {
           <div
             className={`transition-opacity duration-300 ${fade ? 'opacity-100' : 'opacity-0'}`}
           >
-            <div className="bg-[#050A08] border border-white/5 rounded-3xl p-8 md:p-14 relative overflow-hidden">
+            <div className="bg-surface-raised border border-white/5 rounded-3xl p-8 md:p-14 relative overflow-hidden">
               {/* Top accent line */}
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
 
@@ -156,17 +156,17 @@ const Testimonials: React.FC = () => {
                   {/* Stars */}
                   <div className="flex gap-0.5">
                     {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={13} className="text-amber-400 fill-amber-400" />
+                      <Star key={i} size={13} className="text-accent-400 fill-accent-400" />
                     ))}
                   </div>
                   {/* Metric card */}
-                  <div className="text-center bg-[#030604] border border-white/5 rounded-2xl p-4 w-full">
+                  <div className="text-center bg-surface border border-white/5 rounded-2xl p-4 w-full">
                     <div
                       className={`text-xl font-bold bg-gradient-to-br ${t.gradient} bg-clip-text text-transparent leading-tight`}
                     >
                       {t.metric}
                     </div>
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest mt-1 leading-snug">
+                    <div className="text-[9px] text-neutral-500 uppercase tracking-widest mt-1 leading-snug">
                       {t.metricLabel}
                     </div>
                   </div>
@@ -178,15 +178,15 @@ const Testimonials: React.FC = () => {
                   <div className="text-8xl text-white/[0.04] font-serif leading-none select-none -mb-6">
                     "
                   </div>
-                  <p className="text-lg md:text-xl text-zinc-300 font-light leading-relaxed">
+                  <p className="text-lg md:text-xl text-neutral-300 font-light leading-relaxed">
                     {t.quote}
                   </p>
                   <div className="pt-4 border-t border-white/5">
                     <div className="text-white font-medium">{t.name}</div>
-                    <div className="text-zinc-500 text-sm mt-0.5">
+                    <div className="text-neutral-500 text-sm mt-0.5">
                       {t.title}
                       <span className="text-white/20 mx-1.5">·</span>
-                      <span className="text-zinc-400">{t.company}</span>
+                      <span className="text-neutral-400">{t.company}</span>
                     </div>
                   </div>
                 </div>
@@ -198,7 +198,7 @@ const Testimonials: React.FC = () => {
           <div className="flex items-center justify-center gap-5 mt-8">
             <button
               onClick={() => handleNav(current - 1)}
-              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white hover:border-white/25 transition-all duration-200"
+              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/25 transition-all duration-200"
               aria-label="Previous testimonial"
             >
               <ChevronLeft size={16} />
@@ -213,7 +213,7 @@ const Testimonials: React.FC = () => {
                   aria-label={`Go to testimonial ${i + 1}`}
                   className={`rounded-full transition-all duration-300 ${
                     i === current
-                      ? 'w-6 h-2 bg-emerald-400'
+                      ? 'w-6 h-2 bg-brand-400'
                       : 'w-2 h-2 bg-white/20 hover:bg-white/40'
                   }`}
                 />
@@ -222,7 +222,7 @@ const Testimonials: React.FC = () => {
 
             <button
               onClick={() => handleNav(current + 1)}
-              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white hover:border-white/25 transition-all duration-200"
+              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/25 transition-all duration-200"
               aria-label="Next testimonial"
             >
               <ChevronRight size={16} />

@@ -9,8 +9,13 @@ import {
   PROMPT_VERSION,
   TONE_LIBRARY,
   TONE_OPTIONS,
+  buildFollowUpLadder,
+  buildRescueLadder,
+  migrateSequence,
   type PromptIdentity,
 } from './prompt';
+import { renderTemplate } from './followups';
+import type { FollowUpSequence, FollowUpStep, Lead } from './types';
 
 const marcus: PromptIdentity = {
   founderName: 'Marcus',
@@ -21,6 +26,19 @@ const marcus: PromptIdentity = {
   valueProposition: '$3-5 back for every $1 spent',
   exampleDM: '',
   dmTone: 'bold',
+};
+
+/** Marcus, with an Offer Ledger filled in. */
+const stocked: PromptIdentity = {
+  ...marcus,
+  proofPoint: '9 booked calls in 3 weeks for a 2-person agency in Leeds',
+  removedSacrifice: 'without hiring a VA',
+  freeGive: 'the 3-line audit I run on a profile before I write anything',
+  price: '$197/mo',
+  priceAnchor: '$497/mo',
+  guarantee: '7 days, money back',
+  callLength: '15 minutes',
+  callPromise: 'map your first 30 days on the call',
 };
 
 describe('buildSystemPrompt', () => {
@@ -110,16 +128,32 @@ describe('buildReplySystemPrompt', () => {
   });
 
   it('never lets the model quote a price or a result it was not given', () => {
-    const prompt = buildReplySystemPrompt(marcus);
+    const flat = buildReplySystemPrompt(marcus).replace(/\s+/g, ' ');
     // Asserted without the line wrapping — the rule is the point, and pinning
     // the newline made an unrelated reflow of this paragraph fail the suite.
-    expect(prompt.replace(/\s+/g, ' ')).toContain('Never quote a number you were not given');
-    expect(prompt).toContain('never claim a number you were not given');
+    expect(flat).toContain('Never estimate, never give a range you invented');
+    expect(flat).toContain('never claim a number you were not given');
+
+    // v4's version of the same rule, and the one that finally has teeth: the
+    // Ledger is closed, so "a number you were not given" is a decidable
+    // question rather than an appeal to the model's conscience.
+    const stockedFlat = buildReplySystemPrompt(stocked).replace(/\s+/g, ' ');
+    expect(stockedFlat).toContain('A fact that is not on this list does not exist');
+    expect(stockedFlat).toContain('$197/mo');
+
+    // And the half that matters more, because it is the default state of every
+    // new Operator: an empty Ledger must say the absence out loud. A prompt
+    // that simply omits the section reads, to a model, as permission to supply
+    // the missing proof itself.
+    expect(flat).toContain('You have been given NO result, NO number, NO price and NO guarantee');
+    expect(flat).not.toContain('A fact that is not on this list does not exist');
   });
 
   it('anchors the whole price before naming ways to pay it', () => {
-    expect(buildReplySystemPrompt(marcus))
-      .toContain('never the cheapest\n  option first');
+    const flat = buildReplySystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toContain('Anchor before you name a number');
+    expect(flat).toContain('name the whole figure before you name the ways to pay it');
+    expect(flat).toContain('a cheap opener makes everything that follows read as an upsell');
   });
 
   it('states no output format, because its consumer wraps it in one', () => {
@@ -143,7 +177,10 @@ describe('the offer math', () => {
     expect(prompt).toMatch(
       /DREAM OUTCOME[\s\S]*PERCEIVED LIKELIHOOD[\s\S]*TIME DELAY[\s\S]*EFFORT AND SACRIFICE/,
     );
-    expect(prompt).toContain('Pick TWO.');
+    expect(prompt).toContain('Pick TWO');
+    // v4: both levers must come out of the Ledger, which is what stops the
+    // model supplying its own proof when the Operator supplied none.
+    expect(prompt.replace(/\s+/g, ' ')).toContain('Pick TWO, and both must come out of WHAT YOU ACTUALLY KNOW');
   });
 
   it('bans the claim that is too big to be believed', () => {
@@ -266,5 +303,150 @@ describe('prompt versioning', () => {
       .replace(`<!-- prompt-version: ${PROMPT_VERSION} -->`, `<!-- prompt-version: ${PROMPT_VERSION + 1} -->`);
 
     expect(isLegacyGeneratedPrompt(newer)).toBe(false);
+  });
+});
+
+describe('the follow-up ladders', () => {
+  const emptyLedger: PromptIdentity = marcus;
+
+  it('runs day 3 / 7 / 14, every step gated on no reply', () => {
+    const ladder = buildFollowUpLadder(stocked);
+    expect(ladder.map((s) => s.delayDays)).toEqual([3, 7, 14]);
+    expect(ladder.every((s) => s.condition === 'no_reply')).toBe(true);
+  });
+
+  it('runs the rescue ladder off the reply, gated on replied-not-booked', () => {
+    const ladder = buildRescueLadder(stocked);
+    expect(ladder.map((s) => s.delayDays)).toEqual([2, 5, 12]);
+    expect(ladder.every((s) => s.condition === 'replied_not_booked')).toBe(true);
+  });
+
+  /**
+   * The give is the only touch with nothing to answer, and that is the whole
+   * mechanism: a message that does not need a reply is the one a busy person
+   * replies to. A question mark here would turn it back into a third ask.
+   */
+  it('asks for nothing on the give', () => {
+    expect(buildFollowUpLadder(stocked)[1].messageTemplate).not.toContain('?');
+  });
+
+  it('ends on the takeaway, the only touch where silence costs them something', () => {
+    expect(buildFollowUpLadder(stocked)[2].messageTemplate).toContain('closing your file');
+  });
+
+  it('steps the rescue ask down instead of repeating it', () => {
+    const [times, inThread, dated] = buildRescueLadder(stocked).map((s) => s.messageTemplate);
+    expect(times).toContain('send a couple of times');
+    expect(inThread).toContain('no call needed');
+    expect(dated).toContain('check back in 90 days');
+  });
+
+  it('carries the Ledger when it has one', () => {
+    expect(buildFollowUpLadder(stocked)[0].messageTemplate).toContain('{{proof}}');
+    expect(buildFollowUpLadder(stocked)[1].messageTemplate).toContain('{{give}}');
+    expect(buildRescueLadder(stocked)[1].messageTemplate).toContain('{{price}}');
+  });
+
+  /**
+   * The half that matters more. A touch whose entire payload is a fact the
+   * Operator never entered has to become a DIFFERENT touch, not the same touch
+   * with a hole in it — so every template must still render to real words
+   * against a completely empty Ledger.
+   */
+  it('still writes a real message when the Ledger is empty', () => {
+    const anonymous = { id: 'l1', handle: 'founder_one', followers: 0, isPrivate: false, status: 'cold', dmSent: true, replied: false } as Lead;
+    for (const ladder of [buildFollowUpLadder(emptyLedger), buildRescueLadder(emptyLedger)]) {
+      for (const step of ladder) {
+        const rendered = renderTemplate(step.messageTemplate, anonymous, {});
+        expect(rendered.length).toBeGreaterThan(20);
+        expect(rendered).not.toContain('{{');
+      }
+    }
+  });
+});
+
+/**
+ * The two files used to contradict each other in production: `buildSystemPrompt`
+ * listed "circle back" as a tell that gets your DM ignored, and the follow-up
+ * templates three files away opened with "circling back on this!".
+ *
+ * Asserting both halves against one list is what makes that stay fixed. Delete a
+ * phrase from the prompt and this fails; reintroduce one in a ladder and this
+ * fails. Neither file can drift without the other noticing.
+ */
+describe('the ladders do not undo the opener', () => {
+  const TELLS = [
+    'circling back',
+    'circle back',
+    'just following up',
+    'bumping this',
+    'did you get a chance',
+    'i noticed',
+    'reach out',
+  ];
+
+  it.each(TELLS)('names "%s" as a tell in the DM prompt', (tell) => {
+    expect(buildSystemPrompt(marcus).toLowerCase()).toContain(tell);
+  });
+
+  it.each(TELLS)('never uses "%s" in a follow-up', (tell) => {
+    const templates = [...buildFollowUpLadder(stocked), ...buildRescueLadder(stocked)]
+      .map((s) => s.messageTemplate.toLowerCase());
+    for (const template of templates) expect(template).not.toContain(tell);
+  });
+
+  it('never quotes their @handle back at them', () => {
+    const templates = [...buildFollowUpLadder(stocked), ...buildRescueLadder(stocked)];
+    for (const step of templates) expect(step.messageTemplate).not.toContain('{{handle}}');
+  });
+});
+
+describe('migrateSequence', () => {
+  const legacy = 'Hi {{name}}, circling back on this! Would love to show you what we\'ve been doing for similar businesses. Worth a quick chat?';
+
+  const seq = (steps: FollowUpStep[]): FollowUpSequence => ({ id: 'seq1', steps, active: true });
+  const step = (messageTemplate: string, condition: FollowUpStep['condition'] = 'no_reply'): FollowUpStep =>
+    ({ id: 's', delayDays: 3, condition, messageTemplate });
+
+  it('recognises all three templates the product used to hardcode', () => {
+    // Verified against git HEAD's FollowUpSequencer.DEFAULT_TEMPLATES by
+    // evaluating both arrays as real JS — a transcription slip in any one of
+    // these is silent, and its only symptom is an Operator keeping the old
+    // "circling back" copy forever.
+    const before = [
+      'Hey {{handle}} \u{1F44B} Just wanted to follow up on my last message — did you get a chance to see it?',
+      "Hi {{name}}, circling back on this! Would love to show you what we've been doing for similar businesses. Worth a quick chat?",
+      `{{handle}}, last follow-up from me — I'll leave the door open. Just reply "interested" if you'd like to connect.`,
+    ];
+    const migrated = migrateSequence(seq(before.map((t) => step(t))), stocked);
+    const ladder = buildFollowUpLadder(stocked);
+    expect(migrated.steps.map((s) => s.messageTemplate))
+      .toEqual(ladder.map((s) => s.messageTemplate));
+  });
+
+  it('replaces copy the product wrote, in place', () => {
+    const migrated = migrateSequence(seq([step(legacy)]), stocked);
+    expect(migrated.steps[0].messageTemplate).toBe(buildFollowUpLadder(stocked)[0].messageTemplate);
+    // Their delay and their condition are theirs, and survive.
+    expect(migrated.steps[0].delayDays).toBe(3);
+  });
+
+  it('leaves copy the Operator wrote alone', () => {
+    const mine = seq([step('oi marcus, you still after more calls or did you sort it?')]);
+    expect(migrateSequence(mine, stocked)).toBe(mine);
+  });
+
+  it('fills a blank step rather than leaving it unsendable', () => {
+    expect(migrateSequence(seq([step('   ')]), stocked).steps[0].messageTemplate).not.toBe('   ');
+  });
+
+  it('migrates a rescue sequence to the rescue ladder, not the cold one', () => {
+    const migrated = migrateSequence(seq([step(legacy, 'replied_not_booked')]), stocked);
+    expect(migrated.steps[0].messageTemplate).toBe(buildRescueLadder(stocked)[0].messageTemplate);
+  });
+
+  it('is idempotent', () => {
+    const once = migrateSequence(seq([step(legacy)]), stocked);
+    expect(migrateSequence(once, stocked)).toBe(once);
   });
 });

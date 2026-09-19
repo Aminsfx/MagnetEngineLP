@@ -32,6 +32,15 @@ _Avoid_: import, ingestion (reserved for the Inbox), mapping
 
 ### Outreach
 
+**Offer Ledger**:
+The facts the Operator has earned the right to state — one real result, the
+removed sacrifice, the price, the anchor, the guarantee, what the call gives
+away for free. Closed by construction: a number that is not in the Ledger does
+not reach a prospect, because every prompt is told the Ledger is the whole of
+what is true. An empty Ledger says so out loud rather than going unmentioned,
+since a prompt that omits the subject reads as permission to invent one.
+_Avoid_: offer, claims, value prop (reserved for the single outcome line)
+
 **DM**:
 The first message sent to a Lead. Written by the AI from the operator's system
 prompt, then approved by a human.
@@ -68,6 +77,21 @@ _Avoid_: rate limit, throttle
 **Follow-up**:
 A later scheduled touch to a Lead that already received a DM. Distinct from a
 reply, which the Lead initiates.
+
+**Ladder**:
+An ordered set of follow-up touches in which each touch steps the ask DOWN and
+brings a new reason to write. A touch that repeats the previous ask is the same
+message arriving louder, and is not a rung. Two ladders exist: the cold one,
+for a Lead who never answered, and the Rescue ladder below.
+_Avoid_: drip, cadence, sequence of messages
+
+**Rescue**:
+The ladder for a Lead who replied and never booked. It counts from their reply
+rather than from the DM, because a stalled conversation is measured from the
+last thing that actually happened. Until it existed the engine skipped every
+Lead the moment they answered, so the warmest segment in the workspace received
+nothing at all.
+_Avoid_: re-engagement, nurture, win-back
 
 **Handshake**:
 What the installed extension tells the dashboard about itself — the wire-protocol
@@ -110,6 +134,19 @@ inbound Message that arrived after an outbound one. A prospect who writes first
 is an inbound lead, not a reply. That ordering is what keeps Replied a subset of
 Sent, and reply rate at or below 100%.
 _Avoid_: result, status, signal
+
+**Opted Out**:
+A Lead who asked not to be contacted again. Suppression only: it stops every
+follow-up condition including "always", moves no metric, and fires no webhook —
+`detectTransitions` does not know the field exists.
+
+This is the one place an AI judgement is allowed onto a Lead, and it is allowed
+because of the direction it points. Interest is kept out of the funnel because a
+misread inflates a number and fires a webhook nobody can unsend; a misread
+opt-out costs one follow-up that was never owed. Like every other flag it only
+moves forwards, so a thread the AI later reclassifies cannot reopen someone to
+outreach they already declined.
+_Avoid_: unsubscribed, blacklisted, suppressed
 
 ### Access
 

@@ -12,10 +12,47 @@
  * without rendering anything.
  */
 
+import type { FollowUpCondition, FollowUpSequence, FollowUpStep } from './types';
+
 export type DmTone = 'casual' | 'professional' | 'friendly' | 'bold';
 
+/**
+ * The facts the Operator has earned the right to say.
+ *
+ * Both system prompts already refuse to invent numbers — "never claim a number
+ * you were not given", "never quote a number you were not given" — and until
+ * this existed nothing ever gave them one. The instruction was unenforceable
+ * and the model did the only thing left: it wrote around the value line, or it
+ * made the number up.
+ *
+ * Every field is optional and every field is a sentence fragment in the
+ * Operator's own words, not a structured figure. `ledgerBlock` turns whichever
+ * ones are filled into the one section of the prompt that may contain a
+ * number, and declares the list closed.
+ */
+export interface OfferLedger {
+  /** One proximate, ordinary-sounding result. "9 booked calls in 3 weeks for a 2-person agency in Leeds" */
+  proofPoint?: string;
+  /** What they do NOT have to do. "without hiring a VA" */
+  removedSacrifice?: string;
+  /** How soon. "inside 30 days" */
+  timeToResult?: string;
+  /** The one useful thing handed over free — the entire payload of follow-up touch 2. */
+  freeGive?: string;
+  /** What it costs. "$197/mo" */
+  price?: string;
+  /** What it normally costs, named first so the price lands as a discount. "$497/mo" */
+  priceAnchor?: string;
+  /** Risk reversal, deployed only against a stated doubt. "7 days, money back" */
+  guarantee?: string;
+  /** "15 minutes" */
+  callLength?: string;
+  /** What they walk away with whether or not they ever buy. */
+  callPromise?: string;
+}
+
 /** Everything the prompts need to know about the Operator. */
-export interface PromptIdentity {
+export interface PromptIdentity extends OfferLedger {
   founderName: string;
   founderRole: string;
   businessName: string;
@@ -36,7 +73,7 @@ export interface PromptIdentity {
  * replacing — which is what the old marker list required, and why the previous
  * improvement reached new sign-ups and nobody else.
  */
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 const VERSION_TAG = /<!--\s*prompt-version:\s*(\d+)\s*-->/;
 
@@ -94,6 +131,70 @@ export const TONE_LIBRARY: Record<DmTone, string> = {
 - Never imply they are failing.`,
 };
 
+/** The Ledger with blanks dropped, so callers can test truthiness once. */
+function resolveLedger(identity: Partial<OfferLedger>): OfferLedger {
+  const keys: (keyof OfferLedger)[] = [
+    'proofPoint', 'removedSacrifice', 'timeToResult', 'freeGive',
+    'price', 'priceAnchor', 'guarantee', 'callLength', 'callPromise',
+  ];
+  const out: OfferLedger = {};
+  for (const key of keys) {
+    const value = identity[key]?.trim();
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * The only section of any prompt that may contain a number.
+ *
+ * Shared by all three builders on purpose. generate-dm and generate-reply each
+ * used to carry their own half-stated version of "don't make things up", they
+ * disagreed, and neither was enforceable because neither was ever handed a
+ * fact. One block, one rule, three consumers.
+ *
+ * The empty case is not the same as omitting the section. A prompt that simply
+ * says nothing about proof reads, to a model, as permission to supply some —
+ * so the empty ledger states the absence out loud and says what to write
+ * instead.
+ */
+function ledgerBlock(ledger: OfferLedger): string {
+  const facts = [
+    ledger.proofPoint && `- RESULT YOU HAVE ACTUALLY PRODUCED: ${ledger.proofPoint}`,
+    ledger.removedSacrifice && `- WHAT THEY DO NOT HAVE TO DO: ${ledger.removedSacrifice}`,
+    ledger.timeToResult && `- HOW LONG IT TAKES: ${ledger.timeToResult}`,
+    ledger.freeGive && `- WHAT YOU CAN HAND OVER FREE: ${ledger.freeGive}`,
+    ledger.price && `- PRICE: ${ledger.price}`,
+    ledger.priceAnchor && `- WHAT IT NORMALLY COSTS: ${ledger.priceAnchor}`,
+    ledger.guarantee && `- GUARANTEE: ${ledger.guarantee}`,
+    ledger.callLength && `- HOW LONG THE CALL IS: ${ledger.callLength}`,
+    ledger.callPromise && `- WHAT THEY GET ON THE CALL EVEN IF THEY NEVER BUY: ${ledger.callPromise}`,
+  ].filter(Boolean);
+
+  if (facts.length === 0) {
+    return `## WHAT YOU ACTUALLY KNOW
+
+You have been given NO result, NO number, NO price and NO guarantee.
+
+That is not a gap for you to fill. Say what they do not have to do — the
+removed work — and say nothing that implies a figure, a timeframe or a
+comparison. A vague line is survivable. An invented one ends the conversation
+the moment they ask you to back it up, and it ends it on a lie.`;
+  }
+
+  return `## WHAT YOU ACTUALLY KNOW
+
+These are the only facts you have. Every number, name, price and claim you
+write must come from this list — word for word, or rounded down. Nothing else
+in the world is true to you.
+
+${facts.join('\n')}
+
+Rounding down is allowed. Rounding up is lying. A fact that is not on this list
+does not exist, however reasonable it sounds and however much better the
+message would read with it.`;
+}
+
 /** Blank fields are normal — the wizard can be half-filled. */
 function resolve(identity: Partial<PromptIdentity>) {
   const businessName = identity.businessName?.trim() || 'our business';
@@ -103,6 +204,7 @@ function resolve(identity: Partial<PromptIdentity>) {
     businessName,
     founderRole,
     founderName,
+    ledger: resolveLedger(identity),
     // "You are Marcus, founder at Apex." with a name; "You are the founder of
     // Apex." without one — which is what the old hand-written default said.
     opening: founderName
@@ -133,6 +235,14 @@ function resolve(identity: Partial<PromptIdentity>) {
  * very bottom into the NEVER list, and restates OUTPUT positively. The DMs that
  * arrived as "Here is the DM: hey..." were obeying a prompt that mentioned
  * preamble once, last, in the weakest position available.
+ *
+ * v4 feeds it. THE OFFER MATH has asked for a proximate proof and an ordinary
+ * number since v2, and NEVER has forbidden "a number you were not given" for
+ * just as long — with no field anywhere in the product through which an
+ * Operator could give one. Every run of this prompt was a model choosing
+ * between writing a value line with nothing in it and inventing the contents.
+ * `ledgerBlock` is the missing half, and it is placed directly above THE OFFER
+ * MATH so the rule and its inputs read as one instruction.
  */
 export function buildSystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
@@ -173,6 +283,9 @@ Usually three short lines. Under 40 words total. Exactly one question mark.
    you has a reason; a stranger who noticed something about you and does not
    say why is running a list. The rest of the message rests on this: a question
    that arrives with no reason attached gets no answer, however good it is.
+   ONE variable per hook. The detail you noticed, and nothing else. A hook that
+   names two things about them names neither — a reader can feel the difference
+   between someone who looked at their profile and someone reading off a file.
 2. VALUE HINT — one line that makes a result sound both desirable and
    plausible, WITHOUT explaining how. The explanation is what the conversation
    is for. What belongs in that line is decided below, under THE OFFER MATH.
@@ -182,6 +295,8 @@ Usually three short lines. Under 40 words total. Exactly one question mark.
 The user message names a structure for this particular DM. Follow it. It exists
 because you cannot see the other messages in this batch, and two hundred DMs
 with an identical skeleton read as a batch even when each one reads well alone.
+
+${ledgerBlock(r.ledger)}
 
 ## THE OFFER MATH
 
@@ -202,10 +317,11 @@ fit in a DM:
    "without posting every day". Removing work persuades harder than adding
    results, because adding results is the thing they have already tried.
 
-Pick TWO. Usually a proximate proof plus a removed sacrifice. Never all four —
-four is a sales page, and this is a DM. And never inflate: a claim that sounds
-too good is read as a scam, which costs you the reply a smaller, duller,
-believable claim would have earned.
+Pick TWO, and both must come out of WHAT YOU ACTUALLY KNOW. Usually the
+proximate proof plus the removed sacrifice. Never all four — four is a sales
+page, and this is a DM. And never inflate: a claim that sounds too good is read
+as a scam, which costs you the reply a smaller, duller, believable claim would
+have earned. Sell the destination, not the transport.
 
 ## HOW YOU GET SPOTTED
 
@@ -227,6 +343,11 @@ otherwise good message.
 - Flawless punctuation and capitalisation in every single sentence.
 - An emoji doing work a word should be doing.
 - Beginning "Hey [name]," every time.
+- "Circling back", "just following up", "bumping this", "did you get a chance
+  to see it". Every one of them says the same thing out loud: the last message
+  was not worth answering, and this is that message again.
+- Any sentence whose only content is that you sent a previous message. The fact
+  that you wrote before is not a reason for them to write back.
 
 ## NEVER IN THE FIRST DM
 
@@ -290,6 +411,15 @@ You are not answering me. You are writing to them.`;
  * to the prospect. The persona owns the voice; the consumer owns the wire.
  * v3 also anchors price before naming options, since a range is heard as its
  * top number and a cheap opener makes everything after it feel like an upsell.
+ *
+ * v4 gives it the two things it needed to actually close. THE GAP, because a
+ * prospect buys the distance between where they are and where they want to be,
+ * and the sentence that closes is that distance read back in their own words.
+ * And THE ONLY TWO ENDINGS, because every rule in here governed the message in
+ * front of it and none governed how a conversation is allowed to finish — so
+ * the AI would handle an objection beautifully and then let the thread go
+ * quiet, which is exactly the state nothing in the product could see until
+ * `replied_not_booked` existed. v4 also finally has a price to anchor with.
  */
 export function buildReplySystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
@@ -316,6 +446,8 @@ hands the conversation back to a stranger and it dies there. A message that
 only advances is a pitch, and they can feel it. Answer first — briefly — then
 advance.
 
+${ledgerBlock(r.ledger)}
+
 ## DIAGNOSE BEFORE YOU OFFER
 You cannot make an offer worth taking until you know three things:
 1. CURRENT — what they are doing about this today.
@@ -326,6 +458,16 @@ have all three, the call stops being a favour you are asking for and becomes
 the obvious next step — so name it as one.
 Never diagnose for more than about three exchanges. A prospect who answers
 questions forever is a prospect who never got asked.
+
+## THE GAP
+People buy the gap, not the product. Once you have all three, say the gap back
+to them in their own words — and then stop. One beat. Then offer the call.
+
+"so you're at 3 calls a month, you want 10, and nobody's doing the outreach"
+
+That sentence closes more calls than any pitch you could write, because they
+wrote it. Never add a line explaining it, and never add a line selling against
+it. Explaining the gap hands it back to you; left alone it belongs to them.
 
 ## ASSUME THE CLOSE
 When they are warm, do not ask permission to sell. Offer the call as the
@@ -339,11 +481,8 @@ The second one makes them do the work of deciding. They won't.
 An objection is interest with a condition attached. Never argue, and never
 repeat the pitch louder. Name it honestly, answer it in one sentence, then
 offer something smaller than what they just declined.
-- "how much is it" → a price with no context always sounds high, and a range is
-  heard as its top number. Never quote a number you were not given: say what it
-  depends on and put the specifics on the call. If you were given a price, name
-  the whole figure first and the ways to pay it second — never the cheapest
-  option first, because everything after it then reads as an upsell.
+- "how much is it" → see PRICE below. Answer it; never dodge it. A dodged price
+  question is heard as an expensive one.
 - "no time" → agree with them, then shrink the ask to 10 minutes and say what
   they get out of those 10 minutes whether or not they ever buy.
 - "already have someone / already using X" → good, do not attack it. Ask what
@@ -353,7 +492,21 @@ offer something smaller than what they just declined.
 - "not right now" → do not push. Book the future instead: get a month out of
   them, and permission to come back then.
 - "does this actually work" → do not get defensive. One proximate,
-  ordinary-sounding result, then offer to show them how it was done.
+  ordinary-sounding result, then offer to show them how it was done. This is
+  the ONLY place a guarantee belongs, and only if WHAT YOU ACTUALLY KNOW holds
+  one. Never volunteer it: a guarantee offered before anyone doubted you
+  installs the doubt it answers.
+
+## PRICE
+Anchor before you name a number, and name the whole figure before you name the
+ways to pay it. Say what it normally costs, then say what it costs. A range is
+heard as its top number, and a cheap opener makes everything that follows read
+as an upsell.
+
+If no price appears in WHAT YOU ACTUALLY KNOW then you do not have one. Say
+what it depends on, say you would rather quote them properly than guess, and
+put the number on the call. Never estimate, never give a range you invented,
+and never answer a price question with a question.
 
 ## THE STEP-DOWN LADDER
 When they decline, step down one rung. Never re-offer the rung they just
@@ -365,6 +518,16 @@ Only the bottom rung, refused, ends the conversation.
 If they say stop, no, or not interested with no condition attached — thank them,
 wish them well, and stop. No last pitch, no "just one more thing". A clean no is
 worth more than a fake maybe.
+
+## THE ONLY TWO ENDINGS
+Every conversation you are in ends booked, or ends with a date. It never ends
+in silence, and you never leave the last message sitting on their side with
+nothing in it for them to answer.
+
+If they will not book now, get a month out of them and say you will come back
+then. That is a close, not a failure. A thread that stops because neither of
+you had anything left to say is the one outcome with no next step in it, and it
+is the difference between a pipeline and a graveyard.
 
 ## BOOKING
 When they are interested or agree to talk, share the booking link naturally
@@ -445,6 +608,152 @@ export function migrateStoredPrompts<
     ...config,
     ...(dmStale ? { systemPrompt: buildSystemPrompt(config) } : {}),
     ...(replyStale ? { replySystemPrompt: buildReplySystemPrompt(config) } : {}),
+  };
+}
+
+// ─── The follow-up ladders ───────────────────────────────────────────────────
+
+/**
+ * The rule both ladders obey, and the reason they exist at all.
+ *
+ * A follow-up that repeats the ask is the same message arriving louder. Every
+ * touch below steps the ask DOWN and brings a NEW reason to write, because the
+ * only thing a second message can add is a reason — the personalisation already
+ * happened in touch one and cannot happen again.
+ *
+ * These replace three hardcoded strings that lived in FollowUpSequencer.tsx,
+ * one of which opened "circling back on this!" while `buildSystemPrompt` listed
+ * "circle back" under HOW YOU GET SPOTTED. One file banned the phrase and the
+ * next file sent it to the prospect three days later.
+ *
+ * Copy is chosen against the Ledger rather than written once and token-dropped:
+ * a touch whose entire payload is a fact the Operator never entered should be a
+ * different touch, not the same touch with a hole in it.
+ */
+function step(id: string, delayDays: number, condition: FollowUpCondition, messageTemplate: string): FollowUpStep {
+  return { id, delayDays, condition, messageTemplate };
+}
+
+/**
+ * Days 3 / 7 / 14 for a Lead who never answered.
+ *
+ * NEW ANGLE → THE GIVE → THE TAKEAWAY. The middle touch deliberately carries no
+ * question mark: a message with nothing to answer is the only kind a busy
+ * person answers. The last one is the only touch where silence costs them
+ * something, which is why it outperforms everything above it.
+ */
+export function buildFollowUpLadder(identity: Partial<PromptIdentity>): FollowUpStep[] {
+  const l = resolveLedger(identity);
+
+  const newAngle = l.proofPoint
+    ? `{{firstName}} — forgot to say the useful part. {{proof}}, {{sacrifice}}. want me to send how?`
+    : `{{firstName}} — one thing i should have led with. the fix here is usually smaller than people expect, and it isn't posting more. want the short version?`;
+
+  const give = l.freeGive
+    ? `not chasing you {{firstName}} — here's the thing i'd do first if i were you: {{give}}. no reply needed, just thought it'd be useful.`
+    : `not chasing you {{firstName}} — the thing i see most often is people scaling the outreach before the message is right. costs more than it looks. no reply needed, just thought it was worth saying.`;
+
+  return [
+    step('fu-angle', 3, 'no_reply', newAngle),
+    step('fu-give', 7, 'no_reply', give),
+    step(
+      'fu-takeaway',
+      14,
+      'no_reply',
+      `{{firstName}} — closing your file so i stop cluttering your inbox. if {{outcome}} is still on the list this quarter, say "open" and i'll leave it open. otherwise all good, genuinely.`,
+    ),
+  ];
+}
+
+/**
+ * The ladder for a Lead who replied and never booked — the segment the engine
+ * could not reach at all before `replied_not_booked` existed, and the warmest
+ * one in the workspace.
+ *
+ * Every rung steps down the ask the same way `buildReplySystemPrompt`'s
+ * STEP-DOWN LADDER does: a call becomes a couple of times, times become
+ * answering it right here, and answering it here becomes a date. Only the
+ * bottom rung, refused, ends the conversation.
+ */
+export function buildRescueLadder(identity: Partial<PromptIdentity>): FollowUpStep[] {
+  const l = resolveLedger(identity);
+
+  const times = l.callPromise
+    ? `{{firstName}} — think my last one got buried. easiest version: {{callLength}} and i'll {{callPromise}}, whether or not you ever buy anything. want me to send a couple of times?`
+    : `{{firstName}} — think my last one got buried. want me to send a couple of times, or is it easier if i just answer it here?`;
+
+  const inThread = l.price
+    ? `no call needed {{firstName}} — what's the actual thing stopping you? if it's {{price}}, say so and i'll tell you straight whether it's worth it for you.`
+    : `no call needed {{firstName}} — what's the actual thing stopping you? say it straight and i'll tell you honestly whether this is even the right fit.`;
+
+  return [
+    step('rescue-times', 2, 'replied_not_booked', times),
+    step('rescue-thread', 5, 'replied_not_booked', inThread),
+    step(
+      'rescue-date',
+      12,
+      'replied_not_booked',
+      `{{firstName}} — last one from me. want me to check back in 90 days, or is this a no? either answer is fine, "no" included.`,
+    ),
+  ];
+}
+
+/**
+ * The three templates FollowUpSequencer hardcoded before the ladders existed.
+ *
+ * A step still holding one of these verbatim was never touched by an Operator
+ * and is ours to replace — the same doctrine as UNSTAMPED_FINGERPRINTS above,
+ * for the same reason: improving the copy has to reach the Operators who
+ * already saved a sequence, and it must not overwrite anybody's own words.
+ *
+ * This list is closed. Future ladders are identified by the sequence's own
+ * version stamp, not by adding strings here.
+ */
+const LEGACY_FOLLOWUP_TEMPLATES = [
+  'Hey {{handle}} 👋 Just wanted to follow up on my last message — did you get a chance to see it?',
+  "Hi {{name}}, circling back on this! Would love to show you what we've been doing for similar businesses. Worth a quick chat?",
+  `{{handle}}, last follow-up from me — I'll leave the door open. Just reply "interested" if you'd like to connect.`,
+];
+
+/** True when this step's copy is still one the product wrote for the Operator. */
+export function isLegacyFollowUpTemplate(template: string | undefined): boolean {
+  const text = template?.trim();
+  if (!text) return true;
+  return LEGACY_FOLLOWUP_TEMPLATES.some((legacy) => legacy.trim() === text);
+}
+
+/**
+ * Bring a saved sequence forward to the current ladder.
+ *
+ * Sequences are rows in `follow_up_sequences`, not strings on the config, so
+ * `migrateStoredPrompts` cannot reach them — and without this, improving the
+ * copy would reach brand-new Operators and literally nobody else, which is the
+ * exact failure the prompt version stamp was introduced to fix.
+ *
+ * Only steps still carrying a legacy template (or nothing at all) are rewritten,
+ * position by position. An Operator who typed their own follow-up keeps it,
+ * along with their delay and their condition.
+ *
+ * Returns the same object when there is nothing to do, so callers can use
+ * identity to decide whether to persist.
+ */
+export function migrateSequence<T extends FollowUpSequence>(
+  sequence: T,
+  identity: Partial<PromptIdentity>,
+): T {
+  const ladder = sequence.steps.some((s) => s.condition === 'replied_not_booked')
+    ? buildRescueLadder(identity)
+    : buildFollowUpLadder(identity);
+
+  if (!sequence.steps.some((s) => isLegacyFollowUpTemplate(s.messageTemplate))) return sequence;
+
+  return {
+    ...sequence,
+    steps: sequence.steps.map((s, i) =>
+      isLegacyFollowUpTemplate(s.messageTemplate) && ladder[i]
+        ? { ...s, messageTemplate: ladder[i].messageTemplate }
+        : s,
+    ),
   };
 }
 

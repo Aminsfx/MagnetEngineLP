@@ -21,12 +21,33 @@ export interface Lead {
     followedUp?: boolean;
     approved?: boolean;
     rejected?: boolean;
+    /**
+     * They asked not to be contacted again — read off the Inbox as an
+     * `Outcome`, or set by the Operator. Suppression only: it stops every
+     * follow-up condition, fires no webhook and moves no metric. A judgement
+     * that only ever silences outreach fails safe in the one direction that
+     * matters, which is why it is allowed to come from the AI at all.
+     */
+    optedOut?: boolean;
     dmContent?: string;
     dmDate?: string; // ISO date string
     replyDate?: string; // ISO date string
     followUp1Date?: string; // ISO date string
     followUp2Date?: string; // ISO date string
     followUp3Date?: string; // ISO date string
+    /**
+     * The Rescue ladder's own three slots.
+     *
+     * Separate from followUpN because the two ladders can both run over one
+     * Lead's lifetime: a prospect who got a cold touch on day 3 and replied on
+     * day 4 has followUp1Date set, and sharing the slots would drop them into
+     * the rescue ladder at rung two — skipping the one rung written for exactly
+     * their situation. A Lead is stored as jsonb, so three more fields cost
+     * nothing at the database.
+     */
+    rescue1Date?: string;
+    rescue2Date?: string;
+    rescue3Date?: string;
     dealValue?: number;
     campaignId?: string;
     campaignName?: string;
@@ -61,6 +82,20 @@ export interface AppConfig {
     valueProposition?: string; // maps to the "core outcome" you deliver
     exampleDM?: string;
     dmTone?: 'casual' | 'professional' | 'friendly' | 'bold';
+    // ─── The Offer Ledger ───────────────────────────────────────────────────
+    // The facts the prompts are allowed to state. Both system prompts refuse to
+    // invent a number ("never claim a number you were not given") and until
+    // these existed nothing ever gave them one. Mirrors `OfferLedger` in
+    // src/lib/prompt.ts, which is where they are turned into prompt text.
+    proofPoint?: string;
+    removedSacrifice?: string;
+    timeToResult?: string;
+    freeGive?: string;
+    price?: string;
+    priceAnchor?: string;
+    guarantee?: string;
+    callLength?: string;
+    callPromise?: string;
     // Booking/Calendly link inserted into reply battlecards
     calendarLink?: string;
     // AI reply assistant (inbox) — persona for answering inbound DMs & booking
@@ -134,11 +169,20 @@ export interface Message {
 }
 
 // Follow-up sequencer types
+/**
+ * When a follow-up step is allowed to fire.
+ *
+ * `replied_not_booked` is the one that was missing. Until it existed the engine
+ * skipped every Lead the moment they answered, so the warmest segment in the
+ * workspace — replied, interested, never booked — received nothing, ever.
+ */
+export type FollowUpCondition = 'no_reply' | 'always' | 'replied_not_booked';
+
 export interface FollowUpStep {
     id: string;
     delayDays: number;          // days after previous message (or initial DM for step 1)
-    messageTemplate: string;    // supports {{handle}} and {{name}} tokens
-    condition: 'no_reply' | 'always';
+    messageTemplate: string;    // supports the tokens in src/lib/followups.ts
+    condition: FollowUpCondition;
 }
 
 export interface FollowUpSequence {

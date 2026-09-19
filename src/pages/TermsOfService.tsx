@@ -6,7 +6,7 @@ import { Logo } from '../components/Logo';
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div className="mb-10">
         <h2 className="text-xl font-semibold text-white mb-3 border-b border-white/10 pb-2">{title}</h2>
-        <div className="text-zinc-400 text-sm leading-relaxed space-y-3">{children}</div>
+        <div className="text-neutral-400 text-sm leading-relaxed space-y-3">{children}</div>
     </div>
 );
 
@@ -14,12 +14,12 @@ const TermsOfService: React.FC = () => {
     return (
         <div className="relative min-h-screen bg-black text-white overflow-hidden">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-blue-900/10 to-black pointer-events-none z-0" />
+            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 max-w-3xl mx-auto px-6 py-16">
                 <Link
                     to="/login"
-                    className="inline-flex items-center text-sm text-zinc-500 hover:text-white transition-colors mb-10 group"
+                    className="inline-flex items-center text-sm text-neutral-500 hover:text-white transition-colors mb-10 group"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
                     Back
@@ -31,12 +31,12 @@ const TermsOfService: React.FC = () => {
                         <Logo size="sm" linkTo="/" />
                     </div>
                     <h1 className="text-4xl font-bold text-white mb-3">Terms of Service</h1>
-                    <p className="text-zinc-500 text-sm">
+                    <p className="text-neutral-500 text-sm">
                         Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: July 10, 2026
                     </p>
                 </div>
 
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-10 text-sm text-blue-300">
+                <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-4 mb-10 text-sm text-brand-300">
                     <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding AI Services, Section 7 regarding Refunds, and Section 9 regarding Limitation of Liability.
                 </div>
 
@@ -103,7 +103,7 @@ const TermsOfService: React.FC = () => {
                         <li><strong className="text-white">Real outreach attempted:</strong> You must have approved and sent at least twenty (20) DMs through the platform during the 7-day period.</li>
                         <li><strong className="text-white">First-time customers only:</strong> The guarantee applies once per customer, on your first subscription payment only. Renewals, reactivations, and repeat purchases are not eligible.</li>
                         <li><strong className="text-white">No abuse:</strong> Accounts that exhaust their monthly quotas (e.g., bulk-scraping leads or bulk-generating messages for export) and then request a refund are not eligible, at our reasonable discretion.</li>
-                        <li><strong className="text-white">How to request:</strong> Email <a href="mailto:support@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">support@magnetengine.xyz</a> from your account email with the subject "Refund request".</li>
+                        <li><strong className="text-white">How to request:</strong> Email <a href="mailto:support@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">support@magnetengine.xyz</a> from your account email with the subject "Refund request".</li>
                     </ul>
                     <p>
                         Approved refunds are issued to the original payment method within 5–10 business days, and your access ends when the refund is issued. Except as stated in this section, all payments are final and non-refundable, including partial billing periods after cancellation.
@@ -152,15 +152,15 @@ const TermsOfService: React.FC = () => {
                 <Section title="14. Contact">
                     <p>
                         If you have any questions about these Terms, please contact us at:{' '}
-                        <a href="mailto:legal@magnetengine.xyz" className="text-blue-500 hover:text-blue-400 transition-colors">
+                        <a href="mailto:legal@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">
                             legal@magnetengine.xyz
                         </a>
                     </p>
                 </Section>
 
-                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-600">
+                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-600">
                     <span>© 2026 MagnetEngine. All rights reserved.</span>
-                    <Link to="/privacy" className="text-blue-500 hover:text-blue-400 transition-colors">Privacy Policy →</Link>
+                    <Link to="/privacy" className="text-brand-500 hover:text-brand-400 transition-colors">Privacy Policy →</Link>
                 </div>
             </div>
         </div>

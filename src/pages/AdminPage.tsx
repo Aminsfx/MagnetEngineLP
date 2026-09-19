@@ -12,7 +12,7 @@ import {
     type AdminUserRow,
     type AdminUsersResponse,
 } from '../lib/adminApi';
-import { CARD_BEZEL, CARD_BEZEL_BRAND } from '../lib/theme';
+import { CARD_BEZEL, CARD_BEZEL_STRONG } from '../lib/theme';
 
 /** Owner-only business console — gated by RequireAdmin in App.tsx and
  *  enforced server-side by the admin-api Edge Function (ADMIN_EMAILS secret). */
@@ -87,28 +87,28 @@ const AdminPage: React.FC = () => {
         // earn `info`. See docs/DESIGN-TOKENS.md.
         { icon: Users, label: 'Total signups', value: String(overview.totalUsers), color: 'text-neutral-400' },
         { icon: CheckCircle, label: 'Active members', value: String(overview.subscriptions.active), color: 'text-positive-400' },
-        { icon: Clock, label: 'Pending payment', value: String(overview.subscriptions.pending), color: 'text-caution-400' },
+        { icon: Clock, label: 'Pending payment', value: String(overview.subscriptions.pending), color: 'text-white' },
         { icon: XCircle, label: 'Cancelled', value: String(overview.subscriptions.cancelled), color: 'text-danger-400' },
         { icon: DollarSign, label: 'Est. MRR', value: `$${overview.estMRR.toLocaleString()}`, color: 'text-positive-400' },
-        { icon: Sparkles, label: 'DMs this month', value: String(overview.dmsThisMonth), color: 'text-info-400' },
+        { icon: Sparkles, label: 'DMs this month', value: String(overview.dmsThisMonth), color: 'text-white' },
     ] : [];
 
     const statusBadge = (status: string) => {
         if (status === 'active') return 'bg-positive-500/10 border-positive-500/20 text-positive-400';
         if (status === 'cancelled') return 'bg-danger-500/10 border-danger-500/20 text-danger-400';
-        return 'bg-caution-500/10 border-caution-500/20 text-caution-400';
+        return 'bg-white/10 border-white/20 text-white';
     };
 
     return (
         <div className="relative min-h-screen bg-surface overflow-hidden">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/8 to-black pointer-events-none z-0" />
+            <div className="fixed inset-0 bg-gradient-to-b from-black via-white/8 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 max-w-6xl mx-auto px-6 py-12">
                 {/* Header */}
                 <div className="flex items-start justify-between flex-wrap gap-4 mb-10">
                     <div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-500/20 bg-brand-500/8 text-[10px] font-semibold tracking-[0.2em] text-brand-400 uppercase mb-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/20 bg-white/8 text-[10px] font-semibold tracking-[0.2em] text-white uppercase mb-3">
                             <Shield className="w-3 h-3" /> Owner Console
                         </div>
                         <h1 className="text-2xl font-semibold text-white tracking-tight">Admin</h1>
@@ -213,7 +213,7 @@ const AdminPage: React.FC = () => {
                                                             onClick={() => setStatus(u.email, 'activate')}
                                                             disabled={rowBusy === u.email}
                                                             title="Activate"
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-400 text-[11px] font-medium hover:bg-brand-500/20 transition-all disabled:opacity-50"
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-[11px] font-medium hover:bg-white/20 transition-all disabled:opacity-50"
                                                         >
                                                             {rowBusy === u.email ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
                                                             Activate
@@ -242,7 +242,7 @@ const AdminPage: React.FC = () => {
                                     {loading && users.length === 0 && (
                                         <tr>
                                             <td colSpan={6} className="px-6 py-10 text-center">
-                                                <Loader2 className="w-5 h-5 animate-spin text-brand-500 mx-auto" />
+                                                <Loader2 className="w-5 h-5 animate-spin text-white mx-auto" />
                                             </td>
                                         </tr>
                                     )}
@@ -254,11 +254,11 @@ const AdminPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* ── Activate a customer ─────────────────────────────── */}
-                    <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL_BRAND.outer}>
-                        <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 h-full" style={CARD_BEZEL_BRAND.inner}>
+                    <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL_STRONG.outer}>
+                        <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 h-full" style={CARD_BEZEL_STRONG.inner}>
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
-                                    <UserPlus className="w-4 h-4 text-brand-400" />
+                                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+                                    <UserPlus className="w-4 h-4 text-white" />
                                 </div>
                                 <div>
                                     <h2 className="text-sm font-semibold text-white">Activate a customer</h2>
@@ -273,12 +273,12 @@ const AdminPage: React.FC = () => {
                                     onChange={e => { setManualEmail(e.target.value); setManualResult(null); }}
                                     placeholder="customer@email.com"
                                     required
-                                    className="flex-1 bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+                                    className="flex-1 bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50"
                                 />
                                 <button
                                     type="submit"
                                     disabled={manualBusy}
-                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 disabled:opacity-60 text-brand-950 font-semibold rounded-xl transition-all text-sm"
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-neutral-200 disabled:opacity-60 text-surface font-semibold rounded-xl transition-all text-sm"
                                 >
                                     {manualBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
                                     Activate
@@ -323,7 +323,7 @@ const AdminPage: React.FC = () => {
                                 <p>
                                     <span className="text-neutral-300 font-medium">Money flow:</span>{' '}
                                     customer signs up → pays $197/mo or $1,970/yr via the embedded Whop checkout on
-                                    /activate → Whop fires a webhook → <code className="text-brand-400/90">whop-webhook</code>{' '}
+                                    /activate → Whop fires a webhook → <code className="text-white/90">whop-webhook</code>{' '}
                                     matches by email and flips their subscription to active → dashboard unlocks.
                                     Cancellations revoke automatically the same way.
                                 </p>

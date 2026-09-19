@@ -34,9 +34,9 @@ type Filter = 'all' | 'needs_reply' | 'interested' | 'booked';
  *   because it closes the Conversation rather than leaving it open.
  */
 const INTENT_META: Record<ConversationIntent, { label: string; cls: string }> = {
-  interested:     { label: 'Interested',     cls: 'text-info-300 border-info-500/30 bg-info-500/10' },
+  interested:     { label: 'Interested',     cls: 'text-white border-white/30 bg-white/10' },
   booked:         { label: 'Booked',         cls: 'text-positive-300 border-positive-500/30 bg-positive-500/10' },
-  objection:      { label: 'Objection',      cls: 'text-caution-300 border-caution-500/30 bg-caution-500/10' },
+  objection:      { label: 'Objection',      cls: 'text-white border-white/30 bg-white/10' },
   not_interested: { label: 'Not interested', cls: 'text-neutral-500 border-white/10 bg-white/5' },
   neutral:        { label: 'Neutral',        cls: 'text-neutral-300 border-neutral-500/30 bg-neutral-500/10' },
 };
@@ -173,7 +173,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
           onClick={toggleAutopilot}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-medium transition-colors flex-shrink-0 ${
             config.autopilot
-              ? 'text-brand-300 border-brand-500/40 bg-brand-500/10'
+              ? 'text-white border-white/40 bg-white/10'
               : 'text-neutral-400 border-white/10 bg-white/5 hover:text-white'
           }`}
           title="When on, the AI auto-replies to new inbound DMs while this tab is open"
@@ -184,10 +184,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
       </div>
 
       {config.autopilot && (
-        <div className="mb-3 px-3.5 py-2 rounded-xl border border-brand-500/25 bg-brand-500/[0.08] text-brand-300/90 text-[12px] flex items-center gap-2 flex-shrink-0">
+        <div className="mb-3 px-3.5 py-2 rounded-xl border border-white/25 bg-white/[0.08] text-white/90 text-[12px] flex items-center gap-2 flex-shrink-0">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brand-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neutral-200 opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
           </span>
           Autopilot is replying automatically while this tab stays open. Close it to pause.
         </div>
@@ -205,7 +205,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search @handle or name"
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40"
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/40"
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -215,7 +215,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   onClick={() => setFilter(t.key)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
                     filter === t.key
-                      ? 'text-brand-300 border-brand-500/30 bg-brand-500/10'
+                      ? 'text-white border-white/30 bg-white/10'
                       : 'text-neutral-500 border-white/[0.08] bg-transparent hover:text-white'
                   }`}
                 >
@@ -242,7 +242,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     key={c.id}
                     onClick={() => openConversation(c)}
                     className={`w-full text-left px-3 py-3 border-b border-white/[0.04] flex gap-3 transition-colors ${
-                      active ? 'bg-brand-500/[0.08]' : 'hover:bg-white/[0.03]'
+                      active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.03]'
                     }`}
                   >
                     <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
@@ -258,7 +258,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                       <p className="text-[12px] text-neutral-500 truncate mt-0.5">{c.lastMessageText ?? ''}</p>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {c.needsReply && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-caution-300 border border-caution-500/30 bg-caution-500/10 font-medium">Needs reply</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white border border-white/30 bg-white/10 font-medium">Needs reply</span>
                         )}
                         {c.intent && (
                           <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium ${INTENT_META[c.intent].cls}`}>{INTENT_META[c.intent].label}</span>
@@ -295,7 +295,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     : <span className="text-[10px] font-bold text-neutral-400 uppercase">{selected.handle[0] ?? '?'}</span>}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <a href={`https://instagram.com/${selected.handle}`} target="_blank" rel="noreferrer" className="text-sm text-white font-medium hover:text-brand-300 truncate block">@{selected.handle}</a>
+                  <a href={`https://instagram.com/${selected.handle}`} target="_blank" rel="noreferrer" className="text-sm text-white font-medium hover:text-white truncate block">@{selected.handle}</a>
                   {selected.name && <p className="text-[11px] text-neutral-600 truncate">{selected.name}</p>}
                 </div>
                 {selected.intent && (
@@ -304,7 +304,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 {selected.status !== 'booked' && (
                   // Chrome, not `positive`: the control is the Operator's click,
                   // while the pill it produces is the funnel state. Colouring both
-                  // emerald put a second accent beside the composer's one CTA.
+                  // it `positive` put a second accent beside the composer's one CTA.
                   <button onClick={setBooked} className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:border-white/20 transition-colors">
                     <Calendar className="w-3 h-3" /> Booked
                   </button>
@@ -328,7 +328,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   className="text-[11px] bg-transparent border-none focus:outline-none text-neutral-300 placeholder:text-neutral-600 w-20"
                 />
                 {QUICK_LABELS.filter((q) => !(selected.labels ?? []).some((l) => l.toLowerCase() === q.toLowerCase())).slice(0, 3).map((q) => (
-                  <button key={q} onClick={() => addLabel(q)} className="text-[10px] px-1.5 py-0.5 rounded-full text-neutral-600 border border-dashed border-white/10 hover:text-brand-300 hover:border-brand-500/30">+ {q}</button>
+                  <button key={q} onClick={() => addLabel(q)} className="text-[10px] px-1.5 py-0.5 rounded-full text-neutral-600 border border-dashed border-white/10 hover:text-white hover:border-white/30">+ {q}</button>
                 ))}
               </div>
 
@@ -338,11 +338,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
                       m.direction === 'out'
-                        ? 'bg-brand-500/15 text-brand-50 border border-brand-500/20 rounded-br-md'
+                        ? 'bg-white/15 text-white border border-white/20 rounded-br-md'
                         : 'bg-white/5 text-neutral-200 border border-white/[0.08] rounded-bl-md'
                     }`}>
                       {m.text}
-                      <div className={`text-[9px] mt-1 ${m.direction === 'out' ? 'text-brand-300/50' : 'text-neutral-600'}`}>{timeAgo(m.createdAt)}</div>
+                      <div className={`text-[9px] mt-1 ${m.direction === 'out' ? 'text-white/50' : 'text-neutral-600'}`}>{timeAgo(m.createdAt)}</div>
                     </div>
                   </div>
                 ))}
@@ -358,21 +358,21 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={2}
                   placeholder="Write a reply, or let the AI draft one…"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-brand-500/40 resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/40 resize-none"
                 />
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleGenerate}
                     disabled={generating}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-neutral-300 text-xs font-medium hover:text-white hover:border-info-500/30 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-neutral-300 text-xs font-medium hover:text-white hover:border-white/30 transition-colors disabled:opacity-50"
                   >
-                    {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin text-info-400" /> : <Sparkles className="w-3.5 h-3.5 text-info-400" />}
+                    {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}
                     {generating ? 'Drafting…' : 'AI draft'}
                   </button>
                   <button
                     onClick={handleSend}
                     disabled={!draft.trim()}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-500 text-brand-950 text-xs font-semibold hover:bg-brand-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white text-surface text-xs font-semibold hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Send className="w-3.5 h-3.5" /> Approve &amp; Send
                   </button>

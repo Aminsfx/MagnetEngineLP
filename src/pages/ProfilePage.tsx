@@ -116,12 +116,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                         {/* Avatar */}
                         <div className="relative flex-shrink-0 group">
                             <div
-                                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-400 to-brand-600 flex items-center justify-center shadow-[0_0_24px] shadow-brand-500/25 overflow-hidden cursor-pointer"
+                                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-white to-neutral-400 flex items-center justify-center shadow-[0_0_24px] shadow-white/25 overflow-hidden cursor-pointer"
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 {avatarUrl
                                     ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                                    : <span className="text-2xl font-bold text-brand-950">{initial}</span>
+                                    : <span className="text-2xl font-bold text-surface">{initial}</span>
                                 }
                                 <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     {avatarUploading
@@ -173,7 +173,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                                 <button
                                     onClick={handleCopyId}
                                     title="Copy full ID"
-                                    className="text-neutral-600 hover:text-brand-400 transition-colors"
+                                    className="text-neutral-600 hover:text-white transition-colors"
                                 >
                                     {copied
                                         ? <Check className="w-3.5 h-3.5 text-positive-400" />
@@ -210,7 +210,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                                 onChange={e => setNewPw(e.target.value)}
                                 placeholder="Min. 6 characters"
                                 required
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
+                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
                             />
                         </div>
                         <div>
@@ -221,7 +221,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                                 onChange={e => setConfirmPw(e.target.value)}
                                 placeholder="Repeat password"
                                 required
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
+                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
                             />
                         </div>
 
@@ -241,7 +241,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
                         <button
                             type="submit"
                             disabled={pwLoading}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm font-medium hover:bg-brand-500/20 hover:border-brand-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-medium hover:bg-white/20 hover:border-white/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {pwLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                             Update Password
