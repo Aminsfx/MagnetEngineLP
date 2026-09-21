@@ -19,8 +19,8 @@ const faqData = [
         answer: "Safety is the whole point of how we built this. Messages go out one at a time with natural gaps of 15 to 45 minutes, the way a real person sends, and there's a daily cap you control. Nothing sends without your approval. Everything runs from your own browser too, so we never see or store your Instagram password."
     },
     {
-        question: "How does the 7-day money-back guarantee work?",
-        answer: "Give it a real shot in your first week: finish the 5-minute setup wizard, launch a campaign and send at least 20 approved DMs. If it's not for you, email support@magnetengine.xyz within 7 days of your first payment and we refund you in full, back on your card within 5 to 10 business days. It covers your first payment, once per customer. The full conditions are in our Terms."
+        question: "How does the 3-day free trial work?",
+        answer: "You start the trial with a card on file and get the full product straight away — setup wizard, a live campaign, real DMs. Cancel any time in the first three days and you are charged nothing. If you do nothing, the first payment is taken on day 4 and the subscription runs monthly from there. You can cancel in one click from your account page at any point."
     },
     {
         question: "Am I locked into a contract?",

@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     ArrowRight, ArrowUpRight, Check, X, Plus, Minus,
-    Search, PenLine, Send, Shield, BadgeCheck,
+    Search, PenLine, Send, BadgeCheck,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { alpha, CARD_BEZEL, CHANNEL } from '../lib/theme';
-import { PRICES, type BillingCycle } from '../lib/plans';
+import { PRICES } from '../lib/plans';
 import MagneticField from '../components/MagneticField';
 
 /**
@@ -27,10 +27,12 @@ import MagneticField from '../components/MagneticField';
  *  - No customer logos. The previous hero carried four invented company names
  *    under "Trusted by scaling agencies & global teams"; a buyer who googles one
  *    and finds nothing is gone. A real, owner-maintained seat count replaces it.
- *  - One guarantee: the 7-day refund that exists in Terms. Nothing here promises
- *    a reply count or a result, because nothing here controls one.
+ *  - One risk reversal: the 3-day trial that Terms section 7 defines. Nothing
+ *    here promises a reply count or a result, because nothing here controls one.
+ *    The charge date is printed under the button on purpose — a trial that hides
+ *    when it bills reads as a trap, and the chargeback costs more than the sale.
  *  - The Instagram-safety answer states plainly that automated DMs breach IG's
- *    terms. That loses the buyers who would have refunded anyway and keeps the
+ *    terms. That loses the buyers who would have cancelled anyway and keeps the
  *    ones who were going to read the Terms regardless.
  *
  * Claims are checked against the code — send pacing and the 40/day default come
@@ -543,20 +545,23 @@ const HzCompare: React.FC = () => {
 
 /** Outcome first, mechanism second. Nobody buys a scraper; they buy a full calendar. */
 const FEATURES = [
-    '500 ideal-fit leads found and messaged every month',
-    'Every DM written for one person, no templates',
-    'Follow-ups 2 and 3 sent automatically',
-    'One inbox for every reply, with a response drafted',
-    'Pipeline tracking from reply to close',
-    'Direct support from the founder on Slack',
+    '1,500 personalised DMs per month',
+    'Automated follow-ups',
+    'Reply and booked-call tracking',
 ];
 
 /** Not a feature — the objection that "what else will this cost me?" raises. */
 const COSTS_INCLUDED = 'All AI and infrastructure costs included.';
 
-const HzPricing: React.FC = () => {
-    const [billing, setBilling] = useState<BillingCycle>('annual');
+/**
+ * The trial is the only risk reversal on this page. It replaced a 7-day refund:
+ * a refund asks for money first and trust later, and every word of it is about
+ * the exit. The charge date is stated on the button itself because a trial that
+ * hides when it bills is the thing buyers have been burned by.
+ */
+const TRIAL_LINE = 'Cancel anytime before it ends and you pay nothing.';
 
+const HzPricing: React.FC = () => {
     return (
         <Section id="pricing" className="overflow-hidden">
             <div className="max-w-7xl mx-auto relative z-10">
@@ -610,34 +615,19 @@ const HzPricing: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex gap-1 bg-white/3 border border-white/6 rounded-xl p-1 w-fit mb-6">
-                            {(['monthly', 'annual'] as BillingCycle[]).map((c) => (
-                                <button
-                                    key={c}
-                                    onClick={() => setBilling(c)}
-                                    className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize transition-all ${
-                                        billing === c
-                                            ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
-                                            : 'text-neutral-600 hover:text-neutral-400 border border-transparent'
-                                    }`}
-                                >
-                                    {c}
-                                </button>
-                            ))}
-                        </div>
-
                         <div className="mb-8">
                             <div className="flex items-baseline gap-2 flex-wrap">
                                 <span className="text-5xl font-bold tracking-tight text-white">
-                                    {PRICES[billing].label}
+                                    {PRICES.monthly.label}
                                 </span>
-                                <span className="text-xl font-semibold text-white">{PRICES[billing].suffix}</span>
-                                {billing === 'annual' && (
-                                    <span className="px-2.5 py-1 rounded-full bg-brand-500/15 border border-brand-500/25 text-brand-400 text-[11px] font-semibold">
-                                        2 months free
-                                    </span>
-                                )}
+                                <span className="text-xl font-semibold text-white">{PRICES.monthly.suffix}</span>
+                                <span className="px-2.5 py-1 rounded-full bg-brand-500/15 border border-brand-500/25 text-brand-400 text-[11px] font-semibold">
+                                    3-day free trial
+                                </span>
                             </div>
+                            <p className="text-sm font-light leading-relaxed text-neutral-400 mt-3">
+                                {TRIAL_LINE}
+                            </p>
                         </div>
 
                         <p className="text-sm font-semibold text-white mb-4">What you get:</p>
@@ -653,31 +643,14 @@ const HzPricing: React.FC = () => {
                             </p>
                         </div>
 
-                        {/* One guarantee — the 7-day refund that already exists in Terms */}
-                        <div className="rounded-2xl bg-brand-500/8 border border-brand-500/20 p-5 mb-8">
-                            <div className="flex items-start gap-3">
-                                <Shield className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-white font-semibold mb-1">
-                                        7-day money-back guarantee
-                                    </p>
-                                    <p className="text-sm font-light leading-relaxed text-neutral-400">
-                                        Launch a campaign and send real DMs. If it's not for you, email us
-                                        within 7 days of your first payment for a full refund. No call, no
-                                        form. See Terms.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
                         <Link
                             to="/login?mode=signup"
                             className="w-full py-4 rounded-xl font-semibold text-sm text-center block bg-brand-500 hover:bg-brand-400 text-brand-950 transition-all duration-300"
                         >
-                            Take a founding seat
+                            Start my 3-day trial
                         </Link>
                         <p className="text-center text-neutral-600 text-xs mt-4">
-                            First DMs go out within 48 hours. Cancel anytime, no contract.
+                            Card required. You are charged {PRICES.monthly.label} on day 4 unless you cancel.
                         </p>
                     </div>
                 </div>
@@ -707,7 +680,7 @@ const faqData = [
     {
         question: 'What if my niche does not work?',
         answer:
-            "Find out before you pay: book the 15-minute call and I'll run a live scrape on your exact target list while you watch. If the leads come back thin, I'll tell you and we're done — I'd rather lose the sale than take your money for a list that won't convert. If you're already in and it isn't landing, message me on Slack. Targeting is the usual culprit and it's fixable in about half an hour. And the 7-day money-back guarantee covers you either way.",
+            "Find out before you pay: book the 15-minute call and I'll run a live scrape on your exact target list while you watch. If the leads come back thin, I'll tell you and we're done — I'd rather lose the sale than take your money for a list that won't convert. If you're already in and it isn't landing, message me on Slack. Targeting is the usual culprit and it's fixable in about half an hour. And the 3-day trial means you can see it run on your own list before you are charged anything.",
     },
     {
         question: 'Do I need my own AI account or API keys?',

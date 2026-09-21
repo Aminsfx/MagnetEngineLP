@@ -28,8 +28,8 @@ export const WHOP_PLAN_IDS: Record<BillingCycle, string> = {
 
 /** Single source of truth for displayed prices (landing page + /activate). */
 export const PRICES: Record<BillingCycle, { amount: number; label: string; suffix: string }> = {
-    monthly: { amount: 197, label: '$197', suffix: '/month' },
-    annual: { amount: 1970, label: '$1,970', suffix: '/year' },
+    monthly: { amount: 147, label: '$147', suffix: '/month' },
+    annual: { amount: 1470, label: '$1,470', suffix: '/year' },
 };
 
 /**

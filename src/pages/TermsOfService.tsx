@@ -37,7 +37,7 @@ const TermsOfService: React.FC = () => {
                 </div>
 
                 <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-4 mb-10 text-sm text-brand-300">
-                    <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding AI Services, Section 7 regarding Refunds, and Section 9 regarding Limitation of Liability.
+                    <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding AI Services, Section 7 regarding the Free Trial and Billing, and Section 9 regarding Limitation of Liability.
                 </div>
 
                 <Section title="1. Acceptance of Terms">
@@ -93,20 +93,20 @@ const TermsOfService: React.FC = () => {
                     </ul>
                 </Section>
 
-                <Section title="7. Refunds — 7-Day Money-Back Guarantee">
+                <Section title="7. Free Trial, Billing and Cancellation">
                     <p>
-                        We offer a 7-day money-back guarantee on your first payment. To qualify for a refund, all of the following conditions must be met:
+                        New subscriptions begin with a three (3) day free trial. The terms of the trial are as follows:
                     </p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong className="text-white">Timing:</strong> Your refund request must be received within seven (7) calendar days of your first payment. Requests received after day 7 are not eligible.</li>
-                        <li><strong className="text-white">Genuine use:</strong> You must have completed the AI setup wizard and launched at least one campaign. The guarantee exists for people who tried the product, not for accounts that never used it.</li>
-                        <li><strong className="text-white">Real outreach attempted:</strong> You must have approved and sent at least twenty (20) DMs through the platform during the 7-day period.</li>
-                        <li><strong className="text-white">First-time customers only:</strong> The guarantee applies once per customer, on your first subscription payment only. Renewals, reactivations, and repeat purchases are not eligible.</li>
-                        <li><strong className="text-white">No abuse:</strong> Accounts that exhaust their monthly quotas (e.g., bulk-scraping leads or bulk-generating messages for export) and then request a refund are not eligible, at our reasonable discretion.</li>
-                        <li><strong className="text-white">How to request:</strong> Email <a href="mailto:support@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">support@magnetengine.xyz</a> from your account email with the subject "Refund request".</li>
+                        <li><strong className="text-white">Card required:</strong> A valid payment method is required to start the trial. You are not charged to begin it.</li>
+                        <li><strong className="text-white">Full access:</strong> The trial gives you the complete product, including lead scraping, AI message generation and sending, subject to the same quotas as a paid subscription.</li>
+                        <li><strong className="text-white">Cancel before day 4 and pay nothing:</strong> If you cancel at any point during the three-day trial period, you are charged nothing and your access ends at the close of the trial.</li>
+                        <li><strong className="text-white">Automatic billing:</strong> If you do not cancel, your card is charged the then-current subscription price on day 4, and on the same date of each following month until you cancel.</li>
+                        <li><strong className="text-white">How to cancel:</strong> Cancel in one click from your account page, or email <a href="mailto:support@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">support@magnetengine.xyz</a> from your account email before the trial ends.</li>
+                        <li><strong className="text-white">One trial per customer:</strong> The free trial is available once per customer. Repeat signups, reactivations and additional accounts are not eligible.</li>
                     </ul>
                     <p>
-                        Approved refunds are issued to the original payment method within 5–10 business days, and your access ends when the refund is issued. Except as stated in this section, all payments are final and non-refundable, including partial billing periods after cancellation.
+                        Cancelling stops all future charges and your access continues until the end of the period you have already paid for. Except where required by law, payments already taken are final and non-refundable, including partial billing periods after cancellation. We do not offer a money-back guarantee on paid periods — the free trial exists so that you can evaluate the product before paying.
                     </p>
                 </Section>
 

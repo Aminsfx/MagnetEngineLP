@@ -83,7 +83,7 @@ const Pricing: React.FC = () => {
                                 )}
                             </div>
                             <p className="text-sm mt-2 text-neutral-300">
-                                Cancel anytime. 7-day money-back guarantee.
+                                3-day free trial. Cancel anytime before it ends and you pay nothing.
                             </p>
                         </div>
 
@@ -125,7 +125,7 @@ const Pricing: React.FC = () => {
                     <div className="inline-flex items-center gap-3 px-6 py-3 bg-surface-raised border border-white/5 rounded-2xl">
                         <Shield size={20} className="text-brand-400" />
                         <span className="text-neutral-300 text-sm">
-                            <strong className="text-white">7-Day Money-Back Guarantee.</strong> Give it a real shot and if it's not for you, full refund. See Terms for details.
+                            <strong className="text-white">3-day free trial.</strong> Cancel any time before it ends and you pay nothing. See Terms for details.
                         </span>
                     </div>
 

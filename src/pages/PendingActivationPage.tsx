@@ -175,7 +175,7 @@ const PendingActivationPage: React.FC = () => {
                             </span>
                         )}
                     </div>
-                    <p className="text-xs text-neutral-500 mb-5">Cancel anytime. 7-day money-back guarantee.</p>
+                    <p className="text-xs text-neutral-500 mb-5">3-day free trial. Cancel before it ends and you pay nothing.</p>
 
                     {/* Features */}
                     <p className="text-xs font-semibold text-white mb-3">What's included:</p>
