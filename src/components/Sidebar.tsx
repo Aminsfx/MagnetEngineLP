@@ -1,28 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LogOut, Zap, Shield } from 'lucide-react';
+import { LogOut, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEmail } from '../lib/plans';
-import { DASHBOARD_ROUTES } from '../lib/routes';
+import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
 import Logo from './Logo';
 
+/**
+ * The dashboard's left rail.
+ *
+ * Operate register: the visitor came to do a job, so the chrome recedes. Rows
+ * are compact and quiet, the active state is a flat wash plus a rail marker
+ * rather than a glow, and the only colour in here is `danger` on sign-out —
+ * the dashboard carries no brand accent by design (docs/DESIGN-TOKENS.md).
+ *
+ * The ambient bloom, the shadowed indicator and the live clock that used to sit
+ * at the bottom belonged to the previous visual world; a clock in a sidebar
+ * reports nothing the operator needs. The account row replaced it because it
+ * answers a question the operator actually has — which account am I in.
+ */
 interface SidebarProps {
     onLogout?: () => void;
     /** Mobile: whether the slide-in sidebar is visible (always visible ≥ lg) */
     isOpen?: boolean;
     /** Mobile: called after a nav link is clicked so the parent can close the drawer */
     onNavigate?: () => void;
+    /**
+     * Work waiting behind a page — drafts to review, conversations to answer.
+     * The count is the same one the home page's Today panel shows.
+     */
+    badges?: Partial<Record<DashboardPath, number>>;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNavigate }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNavigate, badges = {} }) => {
     const location = useLocation();
     const { user } = useAuth();
-    const [time, setTime] = useState(new Date());
-
-    useEffect(() => {
-        const t = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(t);
-    }, []);
 
     const navItems = [
         ...DASHBOARD_ROUTES,
@@ -32,72 +44,78 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
     ];
 
     return (
-        <aside className={`w-64 h-screen bg-surface border-r border-white/5 flex flex-col fixed left-0 top-0 overflow-hidden z-40 transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            {/* Ambient glow matching landing page */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[200%] h-[300px] rounded-[100%] bg-gradient-to-t from-white/10 via-transparent to-transparent blur-[60px] pointer-events-none" />
-
-            <div className="p-6 flex flex-col h-full relative z-10">
-                {/* Logo */}
-                <div className="mb-6">
+        <aside
+            className={`w-60 h-screen bg-surface border-r border-white/8 flex flex-col fixed left-0 top-0 z-40 transform transition-transform duration-300 lg:translate-x-0 ${
+                isOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+        >
+            <div className="px-3 pt-5 pb-3">
+                <div className="px-2">
                     <Logo subtitle="AI Lead Automation" />
                 </div>
+            </div>
 
-                {/* Nav */}
-                <nav className="space-y-0.5 flex-1">
-                    {navItems.map((item) => {
-                        const isActive = location.pathname === item.path;
-                        return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                onClick={onNavigate}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden ${
-                                    isActive
-                                        ? 'text-white'
-                                        : 'text-neutral-500 hover:text-white'
-                                }`}
-                            >
-                                {/* Active background */}
+            <nav className="flex-1 px-3 space-y-px overflow-y-auto">
+                {navItems.map((item) => {
+                    const isActive = location.pathname === item.path;
+                    const badge = badges[item.path as DashboardPath] ?? 0;
+                    return (
+                        <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={onNavigate}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={`relative flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-meta font-medium transition-colors duration-200 ${
+                                isActive
+                                    ? 'text-white bg-white/8'
+                                    : 'text-neutral-400 hover:text-white hover:bg-white/4'
+                            }`}
+                        >
+                            {isActive && (
                                 <span
-                                    className={`absolute inset-0 rounded-xl transition-all duration-300 ${
-                                        isActive
-                                            ? 'bg-white/10 border border-white/20'
-                                            : 'bg-transparent group-hover:bg-white/5'
-                                    }`}
+                                    aria-hidden
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-r bg-white"
                                 />
-                                {/* Active indicator line */}
-                                {isActive && (
-                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-white rounded-r-full shadow-[0_0_8px_theme(colors.brand.500/0.8)]" />
-                                )}
-                                <item.icon className={`w-4 h-4 relative z-10 transition-transform duration-300 ${isActive ? '' : 'group-hover:scale-110'}`} />
-                                <span className="relative z-10 flex-1">{item.label}</span>
-                            </Link>
-                        );
-                    })}
-                </nav>
+                            )}
+                            <item.icon
+                                size={15}
+                                strokeWidth={2}
+                                className={isActive ? 'text-white' : 'text-neutral-400'}
+                                aria-hidden
+                            />
+                            <span className="truncate">{item.label}</span>
+                            {badge > 0 && (
+                                <span className="ml-auto min-w-[1.25rem] px-1.5 py-0.5 rounded-full bg-white text-surface text-label font-semibold text-center tabular-nums">
+                                    {badge}
+                                    <span className="sr-only"> waiting</span>
+                                </span>
+                            )}
+                        </Link>
+                    );
+                })}
+            </nav>
 
-                {/* Bottom section */}
-                <div className="space-y-3 pt-4 border-t border-white/5">
-                    {/* Live clock */}
-                    <div className="px-4 py-2 flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-600 font-mono tracking-widest uppercase">
-                            {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <Zap className="w-3 h-3 text-neutral-400" />
-                    </div>
-
-                    <button
-                        onClick={async () => {
-                            // Await sign-out before any navigation so the session is
-                            // actually cleared (App's onLogout handles the redirect)
-                            await onLogout?.();
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-neutral-600 hover:text-danger-400 hover:bg-danger-400/8 transition-all duration-300 group"
+            <div className="px-3 py-3 border-t border-white/8">
+                {user?.email && (
+                    <p
+                        className="px-2.5 pb-2 text-label text-neutral-400 truncate"
+                        title={user.email}
                     >
-                        <LogOut className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-300" />
-                        Logout
-                    </button>
-                </div>
+                        {user.email}
+                    </p>
+                )}
+                <button
+                    type="button"
+                    onClick={async () => {
+                        // Await sign-out before any navigation so the session is
+                        // actually cleared (App's onLogout handles the redirect)
+                        await onLogout?.();
+                    }}
+                    className="w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-meta font-medium text-neutral-400 hover:text-danger-400 hover:bg-danger-500/10 transition-colors duration-200"
+                >
+                    <LogOut size={15} strokeWidth={2} aria-hidden />
+                    Sign out
+                </button>
             </div>
         </aside>
     );

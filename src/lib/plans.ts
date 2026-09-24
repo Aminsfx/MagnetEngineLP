@@ -69,9 +69,12 @@ export interface PlanLimits {
  */
 export const PLAN_LIMITS: PlanLimits = {
     maxDailyCap: 200,
-    maxDMGenerations: 500,
-    maxLeadsPerMonth: 500,
-    maxCampaignsPerMonth: 3,
+    maxDMGenerations: 1500,
+    maxLeadsPerMonth: 1500,
+    // 6 x the 250-profile search cap = 1,500, so the lead quota is reachable.
+    maxCampaignsPerMonth: 6,
 };
 
-export const UPGRADE_CONTACT = 'mailto:support@magnetengine.xyz?subject=Upgrade%20Plan';
+/** The one support address. Every mailto in the app is built from it. */
+export const SUPPORT_EMAIL = 'amine@magnetengine.xyz';
+export const UPGRADE_CONTACT = `mailto:${SUPPORT_EMAIL}?subject=Upgrade%20Plan`;

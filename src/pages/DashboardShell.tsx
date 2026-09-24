@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
-import { MetricsGrid } from '../components/dashboard/MetricsGrid';
+import { TodayPanel } from '../components/dashboard/TodayPanel';
+import { Pipeline } from '../components/dashboard/Pipeline';
 import { ConversionChart } from '../components/dashboard/ConversionChart';
 import { AIAnalyst } from '../components/dashboard/AIAnalyst';
 import { OnboardingChecklist } from '../components/dashboard/OnboardingChecklist';
@@ -11,7 +12,6 @@ import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
 import { InboxView } from '../components/inbox/InboxView';
 import ProfilePage from './ProfilePage';
-import { HealthScore } from '../components/dashboard/HealthScore';
 import { ExtensionNotice } from '../components/common/ExtensionNotice';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
@@ -21,6 +21,7 @@ import { aiAPI, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { readOutcome } from '../lib/outcome';
 import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
+import { todayCounts, headline } from '../lib/today';
 import {
   EXT_TO_APP,
   onExtensionMessage,
@@ -35,21 +36,7 @@ import { AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../components/common/Toast';
-import { Loader2, Sparkles, Menu } from 'lucide-react';
-import { CHANNEL, alpha } from '../lib/theme';
-
-/**
- * The eyebrow above every page title. Five pages here spelled it out verbatim,
- * so a token swap had to land five times and stayed right only by luck.
- *
- * Two more copies live outside this file — InboxView and ProfilePage — and are
- * not this unit's to touch, so they still spell the hue where these say
- * `neutral-500`. Same pixels, split vocabulary: when someone owns all seven,
- * this wants to be a shared `<PageEyebrow>` rather than a local constant.
- */
-const PAGE_EYEBROW =
-  'inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 ' +
-  'text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3';
+import { Loader2, Sparkles, Menu, Send } from 'lucide-react';
 
 /**
  * How a usage pill reads at `used / cap`. The two thresholds already existed as
@@ -59,8 +46,15 @@ const PAGE_EYEBROW =
 function usagePillTone(fraction: number): string {
   if (fraction >= 1) return 'text-danger-400 border-danger-500/30 bg-danger-500/8';
   if (fraction >= 0.8) return 'text-white border-white/30 bg-white/8';
-  return 'text-neutral-500 border-white/8 bg-white/3';
+  return 'text-neutral-300 border-white/10 bg-white/3';
 }
+
+/**
+ * Every standard page's frame: centred, so a wide monitor doesn't leave a dead
+ * band on the right, and padded to the viewport instead of a fixed 2rem that
+ * ate a sixth of a phone's width.
+ */
+const PAGE = 'px-4 py-6 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full';
 
 /** Time-aware greeting for the dashboard header */
 function getGreeting(): string {
@@ -377,65 +371,67 @@ const DashboardShell: React.FC = () => {
   if (dataLoading) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="flex items-center gap-3 text-neutral-600">
-          <Loader2 className="w-5 h-5 animate-spin text-white" />
-          <span className="text-sm font-mono">Loading your pipeline…</span>
+        <div className="flex items-center gap-3 text-neutral-400" role="status">
+          <Loader2 className="w-5 h-5 animate-spin text-white" aria-hidden />
+          <span className="text-sm">Loading your pipeline…</span>
         </div>
       </div>
     );
   }
+
+  // Only a name the Operator gave us. The email's local part is not a name:
+  // "Good evening, mohamed.a.1987" reads as a bug, not a welcome.
+  const firstName = (user?.user_metadata?.first_name as string | undefined)?.trim();
+  const today = todayCounts(outreach.leads, conversations);
 
   // Keyed by DashboardPath, so a page declared in the routes manifest without
   // an element here (or an element with no route) fails to compile instead of
   // 404ing at runtime.
   const pages: Record<DashboardPath, React.ReactNode> = {
     '/dashboard': (
-      <div className="p-8 space-y-6 max-w-7xl">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className={PAGE_EYEBROW}>
-              Overview
-            </div>
-            <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">
-              {getGreeting()}{(() => {
-                const first = user?.user_metadata?.first_name;
-                const last = user?.user_metadata?.last_name;
-                const full = [first, last].filter(Boolean).join(' ');
-                return full ? `, ${full}` : user?.email ? `, ${user.email.split('@')[0]}` : '';
-              })()}
-            </h1>
-            <p className="text-neutral-600 text-sm mt-1.5">Your pipeline is live and running.</p>
-          </div>
-        </div>
+      <div className={PAGE}>
+        {/* The page opens on one sentence — the most important thing waiting —
+            instead of a greeting over a grid of numbers. */}
+        <header>
+          <p className="text-meta text-neutral-400">
+            {getGreeting()}{firstName ? `, ${firstName}` : ''} · {outreach.leads.length} {outreach.leads.length === 1 ? 'lead' : 'leads'} in your pipeline
+          </p>
+          <h1
+            className="mt-2 font-semibold text-white tracking-[-0.035em] leading-[1.05] text-balance max-w-[24ch]"
+            style={{ fontSize: 'clamp(1.75rem, 3.2vw, 2.6rem)' }}
+          >
+            {headline(today, outreach.leads.length > 0)}
+          </h1>
+        </header>
         <OnboardingChecklist leads={outreach.leads} config={config} />
-        <HealthScore leads={outreach.leads} />
-        <MetricsGrid stats={outreach.stats} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <ConversionChart leads={outreach.leads} />
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-x-12 gap-y-10 pt-2">
+          <div className="space-y-10 min-w-0">
+            <TodayPanel counts={today} hasLeads={outreach.leads.length > 0} />
+            <Pipeline leads={outreach.leads} />
           </div>
-          <AIAnalyst stats={outreach.stats} />
+          <div className="space-y-10 min-w-0">
+            <ConversionChart leads={outreach.leads} />
+            <AIAnalyst stats={outreach.stats} />
+          </div>
         </div>
       </div>
     ),
 
     '/campaign': (
-      <div className="p-8 space-y-6 max-w-7xl">
+      <div className={PAGE}>
         <div>
-          <div className={PAGE_EYEBROW}>Outreach</div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
-          <p className="text-neutral-600 text-sm mt-1.5">Search Instagram for prospects and add them to your outreach queue</p>
+          <p className="text-neutral-400 text-sm mt-1.5">Search Instagram for leads and add them to your Approval Queue.</p>
         </div>
         <CampaignBuilder onLeadsScraped={outreach.addLeads} />
       </div>
     ),
 
     '/queue': (
-      <div className="p-8 space-y-6 max-w-7xl">
+      <div className={PAGE}>
         <div>
-          <div className={PAGE_EYEBROW}>Review</div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Approval Queue</h1>
-          <p className="text-neutral-600 text-sm mt-1.5">Review and approve AI-generated DMs before sending to the extension</p>
+          <p className="text-neutral-400 text-sm mt-1.5">Read each DM, edit it if it needs it, then approve or reject it. Nothing sends until you press Send.</p>
         </div>
         <ApprovalQueue
           leads={outreach.leads}
@@ -446,6 +442,8 @@ const DashboardShell: React.FC = () => {
           onDeleteLeads={outreach.removeMany}
           onApproveLead={outreach.approve}
           onApproveLeads={outreach.approveMany}
+          onUnapproveLeads={outreach.unapproveMany}
+          onMarkHandedOff={outreach.markHandedOff}
           onRejectLead={outreach.reject}
           onUpdateDM={outreach.updateDM}
           onUpdateLead={outreach.update}
@@ -454,7 +452,7 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/inbox': (
-      <div className="p-4 sm:p-8 max-w-7xl h-[calc(100vh-3.5rem)]">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full h-[calc(100dvh-3.5rem)]">
         <InboxView
           conversations={conversations}
           messages={messages}
@@ -468,11 +466,10 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/follow-ups': (
-      <div className="p-8 max-w-7xl">
-        <div className="mb-6">
-          <div className={PAGE_EYEBROW}>Automation</div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Follow-Up Sequencer</h1>
-          <p className="text-neutral-600 text-sm mt-1.5">
+      <div className={PAGE}>
+        <div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Follow-ups</h1>
+          <p className="text-neutral-400 text-sm mt-1.5">
             Build automated follow-up sequences — most deals close on the 2nd or 3rd touch
           </p>
         </div>
@@ -486,8 +483,7 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/settings': (
-      <div className="p-8 max-w-4xl">
-        <div className={PAGE_EYEBROW}>Configuration</div>
+      <div className="px-4 py-6 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full">
         <h1 className="text-2xl font-semibold text-white tracking-tight mb-6">Settings</h1>
         <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} />
       </div>
@@ -497,15 +493,10 @@ const DashboardShell: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-surface relative overflow-hidden">
-      {/* Global ambient glow — the brand wash the whole shell sits in. */}
-      <div className="fixed bottom-0 left-0 lg:left-64 right-0 h-[400px] pointer-events-none z-0"
-        style={{ background: `radial-gradient(ellipse at 50% 100%, ${alpha(CHANNEL.white, 0.035)} 0%, transparent 70%)` }}
-      />
-      {/* Noise overlay */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.025]"
-        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '256px 256px' }}
-      />
+    <div className="flex min-h-screen bg-surface relative overflow-hidden selection:bg-white/25 selection:text-white">
+      {/* No ambient wash and no noise plate: the Operate register keeps the
+          ground flat so the data on top of it is the only thing with texture.
+          Both devices belonged to the previous visual world. */}
 
       {/* Mobile backdrop when sidebar is open */}
       {sidebarOpen && (
@@ -515,11 +506,16 @@ const DashboardShell: React.FC = () => {
         />
       )}
 
-      <Sidebar onLogout={handleLogout} isOpen={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
+      <Sidebar
+        onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onNavigate={() => setSidebarOpen(false)}
+        badges={{ '/queue': today.toReview, '/inbox': today.toAnswer }}
+      />
 
-      <div className="flex-1 ml-0 lg:ml-64 flex flex-col relative z-10">
+      <div className="flex-1 min-w-0 ml-0 lg:ml-60 flex flex-col relative z-10">
         {/* Top header */}
-        <header className="h-14 border-b border-white/5 bg-surface/80 backdrop-blur-xl flex items-center justify-between lg:justify-end px-4 sm:px-8 sticky top-0 z-20">
+        <header className="h-14 border-b border-white/8 bg-surface flex items-center justify-between lg:justify-end px-4 sm:px-8 sticky top-0 z-20">
           {/* Mobile menu button */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -540,13 +536,11 @@ const DashboardShell: React.FC = () => {
               const color = usagePillTone(pct);
               return (
                 <div
-                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}
-                  title="DMs actually sent by the extension today"
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-label tabular-nums ${color}`}
+                  title="DMs the extension has confirmed sending today, against your Send Cap"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                  {sent} / {cap} DMs today
+                  <Send className="w-3 h-3" aria-hidden />
+                  {sent}/{cap}<span className="hidden sm:inline">&nbsp;sent today</span>
                 </div>
               );
             })()}
@@ -556,9 +550,12 @@ const DashboardShell: React.FC = () => {
               const pct = outreach.dmUsed / limit;
               const color = usagePillTone(pct);
               return (
-                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-mono ${color}`}>
-                  <Sparkles className="w-3 h-3" />
-                  {outreach.dmUsed} / {limit} DM credits
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-label tabular-nums ${color}`}
+                  title="DMs written this month, against your monthly allowance"
+                >
+                  <Sparkles className="w-3 h-3" aria-hidden />
+                  {outreach.dmUsed}/{limit}<span className="hidden sm:inline">&nbsp;written this month</span>
                 </div>
               );
             })()}
@@ -566,12 +563,12 @@ const DashboardShell: React.FC = () => {
                 a decorative avatar is not an AI affordance and `info` is reserved
                 for those, so it takes `accent` instead. */}
             <div
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-white to-neutral-400 border border-white/15 shadow-[0_0_12px_theme(colors.brand.500/0.3)] flex items-center justify-center cursor-default overflow-hidden"
+              className="w-8 h-8 rounded-full bg-neutral-200 border border-white/15 flex items-center justify-center cursor-default overflow-hidden"
               title={user?.email ?? ''}
             >
               {headerAvatar
-                ? <img src={headerAvatar} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-[10px] font-bold text-surface uppercase">{user?.email?.[0] ?? 'U'}</span>
+                ? <img src={headerAvatar} alt="" className="w-full h-full object-cover" />
+                : <span className="text-label font-bold text-surface uppercase">{user?.email?.[0] ?? 'U'}</span>
               }
             </div>
           </div>

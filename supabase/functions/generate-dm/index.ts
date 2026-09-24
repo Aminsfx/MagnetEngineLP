@@ -80,7 +80,7 @@ function buildUserPrompt(lead: any): string {
 }
 
 /** Monthly DM-generation allowance. Must match PLAN_LIMITS.maxDMGenerations. */
-const MONTHLY_DM_LIMIT = Number(Deno.env.get("MONTHLY_DM_LIMIT")) || 500;
+const MONTHLY_DM_LIMIT = Number(Deno.env.get("MONTHLY_DM_LIMIT")) || 1500;
 
 const monthKey = () => new Date().toISOString().slice(0, 7);
 

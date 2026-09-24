@@ -212,7 +212,10 @@ describe('ApprovalQueue pagination', () => {
         const posted = vi.spyOn(window, 'postMessage');
         renderQueue(leads);
 
-        await user.click(screen.getByRole('button', { name: /Send Approved to Extension/ }));
+        await user.click(screen.getByRole('button', { name: 'Send 2 approved DMs' }));
+        // Nothing leaves before the Operator confirms.
+        expect(posted.mock.calls.some(([m]) => (m as { type?: string })?.type === 'MAGNET_ENGINE_CAMPAIGN')).toBe(false);
+        await user.click(screen.getByRole('button', { name: 'Send 2 DMs' }));
 
         const payload = posted.mock.calls
             .map(([msg]) => msg as { type?: string; payload?: { leads: { handle: string }[] } })
@@ -230,7 +233,7 @@ describe('ApprovalQueue pagination', () => {
         const posted = vi.spyOn(window, 'postMessage');
         renderQueue(leads);
 
-        await user.click(screen.getByRole('button', { name: /Send Approved to Extension/ }));
+        await user.click(screen.getByRole('button', { name: 'Send approved DMs' }));
 
         expect(posted.mock.calls.some(([m]) => (m as { type?: string })?.type === 'MAGNET_ENGINE_CAMPAIGN')).toBe(false);
         expect(await screen.findByText(/already been sent/i)).toBeInTheDocument();
@@ -257,5 +260,73 @@ describe('ApprovalQueue pagination', () => {
 
         await rowsSettle(20);
         expect(handlesOnPage()[0]).toBe('founder_0');
+    });
+});
+
+describe('ApprovalQueue approval safety', () => {
+    beforeEach(() => localStorage.clear());
+
+    it('opens on Ready when drafts are waiting, not on All', async () => {
+        const leads = [
+            ...makeLeads(3),
+            ...makeLeads(2).map((l, i) => ({ ...l, id: `sent-${i}`, handle: `sent_${i}`, approved: true, dmSent: true })),
+        ];
+        renderQueue(leads);
+
+        expect(screen.getByRole('button', { name: /^Ready/ })).toHaveAttribute('aria-pressed', 'true');
+        await rowsSettle(3);
+    });
+
+    it('asks before approving every draft, and approves nothing if you keep reviewing', async () => {
+        const user = userEvent.setup();
+        const onApproveLeads = vi.fn();
+        renderQueue(makeLeads(4), { onApproveLeads });
+
+        await user.click(screen.getByRole('button', { name: 'Approve all (4)' }));
+        expect(screen.getByText('Approve 4 drafts without reading them?')).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Keep reviewing' }));
+        expect(onApproveLeads).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole('button', { name: 'Approve all (4)' }));
+        await user.click(screen.getByRole('button', { name: 'Approve 4 drafts' }));
+        expect(onApproveLeads).toHaveBeenCalledWith(['lead-0', 'lead-1', 'lead-2', 'lead-3']);
+    });
+
+    it('offers an undo after a bulk approve', async () => {
+        const user = userEvent.setup();
+        const onUnapproveLeads = vi.fn();
+        renderQueue(makeLeads(2), { onApproveLeads: vi.fn(), onUnapproveLeads });
+
+        await user.click(screen.getByRole('button', { name: 'Approve all (2)' }));
+        await user.click(screen.getByRole('button', { name: 'Approve 2 drafts' }));
+        await user.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        expect(onUnapproveLeads).toHaveBeenCalledWith(['lead-0', 'lead-1']);
+    });
+
+    it('stamps a delivered Handoff as Handed off, and never calls it Sent', async () => {
+        const user = userEvent.setup();
+        const onMarkHandedOff = vi.fn();
+        const leads = makeLeads(2).map(l => ({ ...l, approved: true }));
+        renderQueue(leads, { onMarkHandedOff });
+
+        await user.click(screen.getByRole('button', { name: 'Send 2 approved DMs' }));
+        await user.click(screen.getByRole('button', { name: 'Send 2 DMs' }));
+
+        // No handshake has answered yet, which `accepts` treats optimistically,
+        // so the Handoff is delivered.
+        expect(onMarkHandedOff).toHaveBeenCalledWith(['lead-0', 'lead-1']);
+        const toastText = (await screen.findByText(/handed to the extension/)).textContent ?? '';
+        expect(toastText).not.toMatch(/\bsent\b\s+—|drip/i);
+        expect(toastText).toMatch(/shows Sent once the extension confirms it/);
+    });
+
+    it('shows the whole DM, not a clamped preview', async () => {
+        const long = 'word '.repeat(120).trim();
+        renderQueue(makeLeads(1).map(l => ({ ...l, dmContent: long })));
+
+        const dm = await screen.findByText(long);
+        expect(dm.className).not.toMatch(/line-clamp/);
     });
 });

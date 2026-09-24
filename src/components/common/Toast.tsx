@@ -10,25 +10,45 @@ import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
  *   toast.success('12 DMs generated');
  *   toast.error('Daily send limit reached');
  *   toast.info('Campaign queued');
+ *   toast.success('10 DMs approved', { action: { label: 'Undo', onClick: undo } });
  */
 
 type ToastVariant = 'success' | 'error' | 'info';
+
+/** One follow-up the toast offers, e.g. Undo. Clicking it also dismisses the toast. */
+export interface ToastAction {
+    label: string;
+    onClick: () => void;
+}
+
+interface ToastOptions {
+    action?: ToastAction;
+}
 
 interface ToastItem {
     id: number;
     variant: ToastVariant;
     message: string;
+    action?: ToastAction;
 }
 
+type Notify = (message: string, options?: ToastOptions) => void;
+
 interface ToastContextValue {
-    success: (message: string) => void;
-    error: (message: string) => void;
-    info: (message: string) => void;
+    success: Notify;
+    error: Notify;
+    info: Notify;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const AUTO_DISMISS_MS = 4500;
+/**
+ * How long each toast stays. An error names what failed and how to recover,
+ * which takes longer to read than a confirmation, and 4.5 s was shorter than
+ * several of the recovery messages take to read. A toast carrying an action
+ * gets the long timer too — an Undo you can't reach in time is not one.
+ */
+const DISMISS_MS = { short: 4500, long: 9000 } as const;
 
 /**
  * Variant → role. `success` and `error` are the data's state, so `positive`
@@ -61,16 +81,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
 
-    const push = useCallback((variant: ToastVariant, message: string) => {
+    const push = useCallback((variant: ToastVariant, message: string, options?: ToastOptions) => {
         const id = nextId.current++;
-        setToasts(prev => [...prev.slice(-3), { id, variant, message }]); // keep max 4
-        setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+        setToasts(prev => [...prev.slice(-3), { id, variant, message, action: options?.action }]); // keep max 4
+        const long = variant === 'error' || Boolean(options?.action);
+        setTimeout(() => dismiss(id), long ? DISMISS_MS.long : DISMISS_MS.short);
     }, [dismiss]);
 
     const api: ToastContextValue = {
-        success: useCallback((m: string) => push('success', m), [push]),
-        error: useCallback((m: string) => push('error', m), [push]),
-        info: useCallback((m: string) => push('info', m), [push]),
+        success: useCallback<Notify>((m, o) => push('success', m, o), [push]),
+        error: useCallback<Notify>((m, o) => push('error', m, o), [push]),
+        info: useCallback<Notify>((m, o) => push('info', m, o), [push]),
     };
 
     return (
@@ -81,15 +102,26 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 {toasts.map(t => (
                     <div
                         key={t.id}
-                        role="status"
+                        // An error interrupts; everything else waits its turn.
+                        role={t.variant === 'error' ? 'alert' : 'status'}
                         className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border bg-surface-sunken text-sm text-white animate-[toastIn_0.25s_ease-out] ${VARIANT_STYLES[t.variant].border}`}
                     >
                         <span className="mt-0.5">{VARIANT_STYLES[t.variant].icon}</span>
                         <span className="flex-1 leading-snug">{t.message}</span>
+                        {t.action && (
+                            <button
+                                type="button"
+                                onClick={() => { t.action!.onClick(); dismiss(t.id); }}
+                                className="-my-1 px-2.5 py-1 rounded-lg text-sm font-semibold text-white bg-white/10 hover:bg-white/20 transition-colors"
+                            >
+                                {t.action.label}
+                            </button>
+                        )}
                         <button
+                            type="button"
                             onClick={() => dismiss(t.id)}
                             aria-label="Dismiss"
-                            className="text-neutral-600 hover:text-neutral-300 transition-colors mt-0.5"
+                            className="text-neutral-400 hover:text-white transition-colors mt-0.5"
                         >
                             <X className="w-3.5 h-3.5" />
                         </button>

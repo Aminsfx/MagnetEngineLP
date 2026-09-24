@@ -30,6 +30,14 @@ export interface Lead {
      */
     optedOut?: boolean;
     dmContent?: string;
+    /**
+     * When a delivered Handoff last carried this Lead's DM to the extension.
+     * Handed off is NOT Sent (CONTEXT.md): it only records that the extension
+     * accepted the work, so the queue can say "with the extension" instead of
+     * leaving an approved Lead looking untouched. Never stamped off a refused
+     * Handoff, and never read as evidence of a send.
+     */
+    handedOffAt?: string;
     dmDate?: string; // ISO date string
     replyDate?: string; // ISO date string
     followUp1Date?: string; // ISO date string

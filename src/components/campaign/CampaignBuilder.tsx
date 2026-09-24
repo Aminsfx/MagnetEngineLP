@@ -236,21 +236,21 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             <div className="flex gap-1 bg-white/3 border border-white/5 rounded-xl p-1 w-fit">
                 <button
                     onClick={() => { setTab('search'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'search' ? 'bg-white/10 text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'search' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
                 >
                     <Search className="w-3.5 h-3.5" />
                     Keyword Search
                 </button>
                 <button
                     onClick={() => { setTab('followers'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'followers' ? 'bg-white/10 text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'followers' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
                 >
                     <UserCheck className="w-3.5 h-3.5" />
                     Followers / Following
                 </button>
                 <button
                     onClick={() => { setTab('import'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === 'import' ? 'bg-white/10 text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'import' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
                 >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
                     Import CSV
@@ -260,16 +260,16 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             {/* ── Campaign name ──────────────────────────────────────── */}
             {tab !== 'import' && (
                 <div>
-                    <label className="block text-xs text-neutral-500 mb-1.5 font-medium">
+                    <label htmlFor="campaignbu-campaign-name-so-you-can" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                         Campaign name
-                        <span className="ml-2 text-neutral-700 font-normal">so you can track this batch later — optional</span>
+                        <span className="ml-2 text-neutral-400 font-normal">so you can track this batch later — optional</span>
                     </label>
-                    <input
+                    <input id="campaignbu-campaign-name-so-you-can"
                         type="text"
                         value={campaignName}
                         onChange={e => setCampaignName(e.target.value)}
                         placeholder="e.g. Miami coaches — Jan"
-                        className="w-full max-w-md bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
+                        className="w-full max-w-md bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
                     />
                 </div>
             )}
@@ -286,8 +286,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                         : <AlertCircle className="w-4 h-4 text-danger-400 flex-shrink-0" />
                     }
                     {toast.msg}
-                    <button onClick={() => setToast(null)} className="ml-1 text-neutral-600 hover:text-neutral-300 transition-colors">
-                        <X className="w-3.5 h-3.5" />
+                    <button type="button" onClick={() => setToast(null)} aria-label="Dismiss" className="ml-1 text-neutral-400 hover:text-white transition-colors">
+                        <X className="w-3.5 h-3.5" aria-hidden />
                     </button>
                 </div>
             )}
@@ -302,26 +302,26 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                     {/* Username input */}
                     <div>
-                        <label className="block text-xs text-neutral-500 mb-1.5 font-medium">
+                        <label htmlFor="campaignbu-instagram-username-s-comma-separated" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                             Instagram username(s)
-                            <span className="ml-2 text-neutral-700 font-normal">comma-separated — no @ needed</span>
+                            <span className="ml-2 text-neutral-400 font-normal">comma-separated — no @ needed</span>
                         </label>
-                        <input
+                        <input id="campaignbu-instagram-username-s-comma-separated"
                             type="text"
                             value={fUsername}
                             onChange={e => { setFUsername(e.target.value); setError(''); }}
                             placeholder="garyvee, alexhormozi, yourcompetitor"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
+                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
                         />
-                        <p className="text-[11px] text-neutral-700 mt-1.5">Scrape the followers or following list of any public account</p>
+                        <p className="text-label text-neutral-400 mt-1.5">Scrape the followers or following list of any public account</p>
                     </div>
 
                     {/* Type + Max items */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs text-neutral-500 mb-1.5 font-medium">Scrape type</label>
+                            <label htmlFor="campaignbu-scrape-type" className="block text-xs text-neutral-400 mb-1.5 font-medium">Scrape type</label>
                             <div className="relative">
-                                <select
+                                <select id="campaignbu-scrape-type"
                                     value={fType}
                                     onChange={e => setFType(e.target.value as 'followers' | 'following')}
                                     className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
@@ -329,16 +329,16 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     <option value="followers">Followers</option>
                                     <option value="following">Following</option>
                                 </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                             </div>
                         </div>
                         <div>
-                            <label className="block text-xs text-neutral-500 mb-1.5 font-medium">
+                            <label htmlFor="campaignbu-max-profiles-100-on-free" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                                 Max profiles
-                                <span className="ml-2 text-neutral-700 font-normal">100 on free Apify plan</span>
+                                <span className="ml-2 text-neutral-400 font-normal">100 on free Apify plan</span>
                             </label>
                             <div className="relative">
-                                <select
+                                <select id="campaignbu-max-profiles-100-on-free"
                                     value={fMaxItem}
                                     onChange={e => setFMaxItem(Number(e.target.value))}
                                     className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
@@ -347,7 +347,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                         <option key={n} value={n}>{n} profiles</option>
                                     ))}
                                 </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                             </div>
                         </div>
                     </div>
@@ -355,16 +355,16 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     {/* Enrichment toggle */}
                     <button
                         onClick={() => setFEnriched(v => !v)}
-                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-all ${
+                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-colors ${
                             fEnriched
                                 ? 'bg-white/10 border-white/25 text-white'
-                                : 'bg-white/3 border-white/8 text-neutral-500 hover:border-white/15 hover:text-neutral-300'
+                                : 'bg-white/3 border-white/8 text-neutral-400 hover:border-white/15 hover:text-neutral-300'
                         }`}
                     >
                         <Users className={`w-4 h-4 flex-shrink-0 ${fEnriched ? 'text-white' : ''}`} />
                         <div>
                             <p className="text-xs font-medium">Full profile enrichment</p>
-                            <p className="text-[11px] text-neutral-600 mt-0.5">
+                            <p className="text-label text-neutral-400 mt-0.5">
                                 Fetches bio, follower count, and business info for each profile · recommended for AI DM generation · slower
                             </p>
                         </div>
@@ -375,7 +375,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                     {/* Start */}
                     <div className="flex items-center justify-between pt-1">
-                        <p className="text-[11px] text-neutral-700">
+                        <p className="text-label text-neutral-400">
                             {fUsername.trim() && (
                                 <>
                                     {fUsername.split(',').filter(u => u.trim()).length} account{fUsername.split(',').filter(u => u.trim()).length !== 1 ? 's' : ''}
@@ -399,8 +399,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     {(isScraping || scrapeProgress > 0) && (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-[11px] text-neutral-600 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
-                                <span className="text-[11px] font-bold font-mono text-white">{scrapeProgress}%</span>
+                                <span className="text-label text-neutral-400 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
+                                <span className="text-label font-bold font-mono text-white">{scrapeProgress}%</span>
                             </div>
                             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                                 <div
@@ -441,7 +441,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                 {/* Quick-fill niche packs */}
                 <div>
-                    <p className="text-[10px] uppercase tracking-wider text-neutral-600 mb-1.5 font-semibold">
+                    <p className="text-label uppercase tracking-wider text-neutral-400 mb-1.5 font-semibold">
                         Quick fill from a niche pack:
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -449,7 +449,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                             <button
                                 key={preset.id}
                                 onClick={() => setSearchRaw(preset.suggestedSearch)}
-                                className="px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-[11px] text-neutral-400 hover:border-white/15 hover:text-neutral-300 transition-all"
+                                className="px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-label text-neutral-400 hover:border-white/15 hover:text-neutral-300 transition-colors"
                             >
                                 {preset.emoji} {preset.name}
                             </button>
@@ -459,27 +459,27 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                 {/* Search term */}
                 <div>
-                    <label className="block text-xs text-neutral-500 mb-1.5 font-medium">
+                    <label htmlFor="campaignbu-search-comma-separated-each-term" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                         Search
-                        <span className="ml-2 text-neutral-700 font-normal">comma-separated — each term is searched independently</span>
+                        <span className="ml-2 text-neutral-400 font-normal">comma-separated — each term is searched independently</span>
                     </label>
-                    <input
+                    <input id="campaignbu-search-comma-separated-each-term"
                         type="text"
                         value={searchRaw}
                         onChange={e => { setSearchRaw(e.target.value); setError(''); }}
                         onKeyDown={e => e.key === 'Enter' && !isScraping && handleSearch()}
                         placeholder={activeType.placeholder}
-                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
+                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
                     />
-                    <p className="text-[11px] text-neutral-700 mt-1.5">{activeType.hint}</p>
+                    <p className="text-label text-neutral-400 mt-1.5">{activeType.hint}</p>
                 </div>
 
                 {/* Search type + limit */}
                 <div className="grid grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-xs text-neutral-500 mb-1.5 font-medium">Search type</label>
+                        <label htmlFor="campaignbu-search-type" className="block text-xs text-neutral-400 mb-1.5 font-medium">Search type</label>
                         <div className="relative">
-                            <select
+                            <select id="campaignbu-search-type"
                                 value={searchType}
                                 onChange={e => setSearchType(e.target.value as SearchParams['searchType'])}
                                 className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
@@ -488,17 +488,17 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     <option key={t.value} value={t.value}>{t.label}</option>
                                 ))}
                             </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-xs text-neutral-500 mb-1.5 font-medium">
+                        <label htmlFor="campaignbu-search-limit-per-term-max" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                             Search limit per term
-                            <span className="ml-2 text-neutral-700 font-normal">max 250</span>
+                            <span className="ml-2 text-neutral-400 font-normal">max 250</span>
                         </label>
                         <div className="relative">
-                            <select
+                            <select id="campaignbu-search-limit-per-term-max"
                                 value={searchLimit}
                                 onChange={e => setSearchLimit(Number(e.target.value))}
                                 className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
@@ -507,7 +507,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     <option key={n} value={n}>{n} results</option>
                                 ))}
                             </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                         </div>
                     </div>
                 </div>
@@ -516,16 +516,16 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 {searchType === 'user' && (
                     <button
                         onClick={() => setEnhance(v => !v)}
-                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-all ${
+                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-colors ${
                             enhance
                                 ? 'bg-white/10 border-white/25 text-white'
-                                : 'bg-white/3 border-white/8 text-neutral-500 hover:border-white/15 hover:text-neutral-300'
+                                : 'bg-white/3 border-white/8 text-neutral-400 hover:border-white/15 hover:text-neutral-300'
                         }`}
                     >
                         <Mail className={`w-4 h-4 flex-shrink-0 ${enhance ? 'text-white' : ''}`} />
                         <div>
                             <p className="text-xs font-medium">Enhance with Facebook page &amp; email</p>
-                            <p className="text-[11px] text-neutral-600 mt-0.5">
+                            <p className="text-label text-neutral-400 mt-0.5">
                                 Enriches top 10 results per term with linked Facebook page and business email · uses extra Apify credits
                             </p>
                         </div>
@@ -536,7 +536,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 )}
 
                 {/* Info note: filters live in Settings */}
-                <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/5 rounded-xl text-[11px] text-neutral-600">
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/5 rounded-xl text-label text-neutral-400">
                     <Settings className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <span>
                         Lead quality filters (min/max followers, bio keywords, business-only) are configured in{' '}
@@ -547,7 +547,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                 {/* Start Search */}
                 <div className="flex items-center justify-between pt-1">
-                    <p className="text-[11px] text-neutral-700">
+                    <p className="text-label text-neutral-400">
                         {searchRaw.trim() && (
                             <>
                                 {searchRaw.split(',').filter(s => s.trim()).length} term{searchRaw.split(',').filter(s => s.trim()).length !== 1 ? 's' : ''}
@@ -572,8 +572,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 {(isScraping || scrapeProgress > 0) && (
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-neutral-600 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
-                            <span className="text-[11px] font-bold font-mono text-white">{scrapeProgress}%</span>
+                            <span className="text-label text-neutral-400 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
+                            <span className="text-label font-bold font-mono text-white">{scrapeProgress}%</span>
                         </div>
                         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                             <div
@@ -621,7 +621,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                         </div>
                         <button
                             onClick={handleAddToQueue}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl transition-all text-sm"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl transition-colors text-sm"
                             style={{ boxShadow: `0 0 16px ${alpha(CHANNEL.white, 0.25)}` }}
                         >
                             <Plus className="w-4 h-4" />
@@ -646,7 +646,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 <div className="mt-0.5 flex-shrink-0">
                                     {selected.has(lead.id)
                                         ? <CheckSquare className="w-4 h-4 text-white" />
-                                        : <Square className="w-4 h-4 text-neutral-700" />
+                                        : <Square className="w-4 h-4 text-neutral-400" />
                                     }
                                 </div>
 
@@ -669,16 +669,16 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-sm font-medium text-white">{lead.name}</span>
                                         {lead.verified && (
-                                            <span className="text-[10px] bg-neutral-500/10 text-neutral-400 border border-neutral-500/20 px-1.5 py-0.5 rounded-full">✓ Verified</span>
+                                            <span className="text-label bg-neutral-500/10 text-neutral-400 border border-neutral-500/20 px-1.5 py-0.5 rounded-full">✓ Verified</span>
                                         )}
                                         {lead.businessAccount && (
-                                            <span className="text-[10px] bg-white/10 text-white border border-white/20 px-1.5 py-0.5 rounded-full">Business</span>
+                                            <span className="text-label bg-white/10 text-white border border-white/20 px-1.5 py-0.5 rounded-full">Business</span>
                                         )}
                                         {lead.isPrivate && (
-                                            <span className="text-[10px] bg-neutral-800 text-neutral-500 border border-white/8 px-1.5 py-0.5 rounded-full">Private</span>
+                                            <span className="text-label bg-neutral-800 text-neutral-400 border border-white/8 px-1.5 py-0.5 rounded-full">Private</span>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-3 mt-0.5 text-xs text-neutral-600">
+                                    <div className="flex items-center gap-3 mt-0.5 text-xs text-neutral-400">
                                         <span>@{lead.handle}</span>
                                         <span className="flex items-center gap-1">
                                             <Users className="w-3 h-3" />
@@ -687,13 +687,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                         {lead.city && <span>📍 {lead.city}</span>}
                                     </div>
                                     {lead.bio && (
-                                        <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">{lead.bio}</p>
+                                        <p className="text-xs text-neutral-400 mt-1 line-clamp-2 leading-relaxed">{lead.bio}</p>
                                     )}
                                 </div>
 
                                 <div className="flex-shrink-0 text-right">
                                     <p className="text-xs font-medium text-neutral-400">{formatFollowers(lead.followers)}</p>
-                                    <p className="text-[10px] text-neutral-700">followers</p>
+                                    <p className="text-label text-neutral-400">followers</p>
                                 </div>
                             </div>
                         ))}
@@ -701,12 +701,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
                     {/* Footer CTA */}
                     <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between bg-white/[0.01]">
-                        <p className="text-xs text-neutral-600 max-w-sm">
+                        <p className="text-xs text-neutral-400 max-w-sm">
                             Leads in the queue are then filtered by your Settings rules before AI DMs are generated.
                         </p>
                         <button
                             onClick={handleAddToQueue}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl transition-all text-sm"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl transition-colors text-sm"
                         >
                             <Plus className="w-4 h-4" />
                             Add {selected.size > 0 ? selected.size : results.length} to Queue →

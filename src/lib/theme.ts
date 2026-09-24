@@ -6,8 +6,8 @@ import type { CSSProperties } from 'react';
  * Two places in this app take a colour as a value rather than a class name, and
  * neither can reach a Tailwind utility: Recharts wants `stroke`/`fill` as props
  * (`ConversionChart`), and the card bezel is an inline `style` because a 1px
- * gradient border is not expressible as a utility (`MetricsGrid`, `AIAnalyst`,
- * `HealthScore`, `FollowUpSequencer`, `AdminPage`, `ProfilePage`, …). Those
+ * gradient border is not expressible as a utility (`TodayPanel`, `Funnel`,
+ * `AIAnalyst`, `FollowUpSequencer`, `AdminPage`, `ProfilePage`, …). Those
  * needs are why the literals were copy-pasted — the bezel pair alone appeared
  * verbatim at 16 sites — so they live here once instead of being re-derived.
  *
@@ -21,13 +21,13 @@ import type { CSSProperties } from 'react';
 /** The four dark grounds. Mirrors `theme.extend.colors.surface`. */
 export const SURFACE = {
   /** App background. */
-  base: '#050505',
+  base: '#08080a',
   /** Cards on the app background. */
-  raised: '#0e0e0e',
+  raised: '#101014',
   /** Dashboard cards. */
-  sunken: '#0a0a0a',
+  sunken: '#0c0c0f',
   /** Menus, popovers, dropdowns. */
-  overlay: '#171717',
+  overlay: '#16161b',
 } as const;
 
 /** The brand orange ramp, one canonical spelling. Mirrors Tailwind's orange. */
@@ -46,6 +46,16 @@ export const BRAND = {
 } as const;
 
 /**
+ * The `positive` (emerald) ramp as values, for props that take a colour rather
+ * than a class — Whop's embedded checkout, whose pay button is the confirming
+ * action on /activate.
+ */
+export const POSITIVE = {
+  400: '#34d399',
+  500: '#10b981',
+} as const;
+
+/**
  * Role hues as `r,g,b` channel triples, for the alpha washes Tailwind's
  * `/opacity` syntax cannot express in an inline style. Roughly 24 distinct
  * hand-typed `rgba(…)` values existed across the repo; `alpha()` replaces the
@@ -53,6 +63,8 @@ export const BRAND = {
  */
 export const CHANNEL = {
   brand: '249,115,22',    // orange-500
+  positive: '16,185,129', // emerald-500
+  positiveLight: '52,211,153', // emerald-400
   info: '245,158,11',     // amber-500
   caution: '234,179,8',   // yellow-500
   danger: '239,68,68',    // red-500
@@ -113,9 +125,9 @@ export const CHART = {
   /** Replies — the outcome, so it reads as `positive`. */
   replies: '#10b981', // emerald-500
   /** Axis tick labels. */
-  axisTick: '#525252', // neutral-600
+  axisTick: '#a3a3a3', // neutral-400 — neutral-600 was 2.5:1 on the card
   /** Legend text. */
-  legendText: '#737373', // neutral-500
+  legendText: '#a3a3a3', // neutral-400
   /** Cartesian grid lines. */
   grid: alpha(CHANNEL.white, 0.04),
   /** Hover cursor wash behind a column. */

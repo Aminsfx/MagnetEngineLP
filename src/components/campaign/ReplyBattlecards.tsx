@@ -73,14 +73,14 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, ledger
     return (
         <div>
             <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] text-neutral-500">
+                <span className="text-label text-neutral-400">
                     Reply battlecards — pick the one that matches their reply
                 </span>
                 <a
                     href={`https://instagram.com/${lead.handle}/`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[11px] text-neutral-500 hover:text-white transition-colors"
+                    className="flex items-center gap-1.5 text-label text-neutral-400 hover:text-white transition-colors"
                 >
                     <ExternalLink className="w-3 h-3" />
                     Open profile
@@ -90,12 +90,12 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, ledger
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                 {rendered.map(card => (
                     <div key={card.id} className="bg-white/[0.02] border border-white/6 rounded-xl p-3.5 flex flex-col gap-2.5">
-                        <span className="text-[10px] uppercase tracking-wider text-neutral-600 font-semibold">
+                        <span className="text-label uppercase tracking-wider text-neutral-400 font-semibold">
                             {card.label}
                         </span>
                         <p className="text-xs text-neutral-300 leading-relaxed flex-1">
                             {card.text || (
-                                <em className="text-neutral-600">
+                                <em className="text-neutral-400">
                                     Nothing to send yet — this one needs an Offer Ledger field you haven&rsquo;t filled in.
                                 </em>
                             )}
@@ -119,7 +119,7 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, ledger
             </div>
 
             {missingLedger && (
-                <p className="text-[11px] text-white/90 mt-3">
+                <p className="text-label text-white/90 mt-3">
                     Tip: fill in your Offer Ledger and booking link in Settings so these paste ready-to-send.
                     A blank field is never guessed at — it just takes its sentence with it.
                 </p>

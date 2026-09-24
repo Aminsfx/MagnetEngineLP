@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Sparkles, AlertTriangle, CheckCircle, Info, Zap, TrendingUp, TrendingDown } from 'lucide-react';
 import { DashboardStats } from '../../lib/types';
-import { CARD_BEZEL } from '../../lib/theme';
 
 interface AIAnalystProps {
     stats: DashboardStats;
@@ -50,7 +49,7 @@ function buildInsights(stats: DashboardStats): Insight[] {
                 type: 'critical',
                 icon: <TrendingDown className="w-3.5 h-3.5" />,
                 title: 'Reply rate very low',
-                text: `${stats.replyRate}% reply rate is below the 5% minimum. Try shortening your DMs to 1-2 sentences and lead with curiosity instead of pitching.`,
+                text: `${stats.replyRate}% of your sent DMs got a reply. Try shortening your DMs to 1-2 sentences and lead with curiosity instead of pitching.`,
                 metric: `${stats.replyRate}%`,
             });
         } else if (stats.replyRate >= 15) {
@@ -58,7 +57,7 @@ function buildInsights(stats: DashboardStats): Insight[] {
                 type: 'success',
                 icon: <CheckCircle className="w-3.5 h-3.5" />,
                 title: 'Strong reply rate',
-                text: `${stats.replyRate}% reply rate is excellent (industry avg: 5-10%). Your messaging is clearly resonating — scale up volume.`,
+                text: `${stats.replyRate}% of your sent DMs got a reply. Your messaging is landing — the lever now is volume.`,
                 metric: `${stats.replyRate}%`,
             });
         } else {
@@ -132,107 +131,42 @@ function buildInsights(stats: DashboardStats): Insight[] {
     return insights.slice(0, 3);
 }
 
-const insightStyle: Record<InsightType, string> = {
-    critical: 'bg-danger-500/8 border-danger-500/20 text-danger-400',
-    warning:  'bg-white/8 border-white/20 text-white',
-    tip:      'bg-white/8 border-white/20 text-white',
-    success:  'bg-positive-500/8 border-positive-500/20 text-positive-400',
-    info:     'bg-white/4 border-white/8 text-neutral-400',
+const insightTone: Record<InsightType, string> = {
+    critical: 'text-danger-400',
+    warning: 'text-white',
+    tip: 'text-neutral-300',
+    success: 'text-positive-400',
+    info: 'text-neutral-400',
 };
 
-const analysisMessages = [
-    'Scanning pipeline health…',
-    'Calculating conversion ratios…',
-    'Comparing to benchmarks…',
-    'Insights ready.',
-];
-
 export const AIAnalyst: React.FC<AIAnalystProps> = ({ stats }) => {
-    const [typedText, setTypedText] = useState('');
-    const [analysisIndex, setAnalysisIndex] = useState(0);
-
+    // Rule-based, and it now says so by what it no longer does: it used to type
+    // "Scanning pipeline health… Comparing to benchmarks…" in a loop forever,
+    // performing an analysis that is a handful of if-statements.
     const insights = buildInsights(stats);
 
-    useEffect(() => {
-        let charIndex = 0;
-        const target = analysisMessages[analysisIndex];
-        setTypedText('');
 
-        const typeInterval = setInterval(() => {
-            if (charIndex < target.length) {
-                setTypedText(target.slice(0, charIndex + 1));
-                charIndex++;
-            } else {
-                clearInterval(typeInterval);
-                setTimeout(() => {
-                    setAnalysisIndex(prev => (prev + 1) % analysisMessages.length);
-                }, 2200);
-            }
-        }, 38);
-
-        return () => clearInterval(typeInterval);
-    }, [analysisIndex]);
-
-    // Best performing metric to highlight in footer
-    const bestMetric = [
-        { label: 'Reply Rate', value: stats.replyRate },
-        { label: 'Positive %', value: stats.positiveReplyRate },
-        { label: 'Booking Rate', value: stats.bookingRate },
-    ].reduce((a, b) => a.value >= b.value ? a : b);
-
+    /*
+     * Rule-based, and titled as what it is: suggestions from your own numbers.
+     * It used to be an "Analyst" with a sparkle icon, a typewriter pretending
+     * to scan, coloured boxes per insight and a "best metric" footer.
+     */
     return (
-        <div className="rounded-[1.5rem] p-[1px] h-full" style={CARD_BEZEL.outer}>
-            <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 h-full flex flex-col relative overflow-hidden"
-                style={CARD_BEZEL.inner}>
-
-                {/* Background glow */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
-
-                {/* Header */}
-                <div className="flex items-center gap-2.5 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">AI Engine</p>
-                        <h3 className="text-sm font-semibold text-white tracking-tight leading-none">Analyst</h3>
-                    </div>
-                </div>
-
-                {/* Typewriter feed */}
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/3 border border-white/6 mb-4">
-                    <Zap className="w-3 h-3 text-white flex-shrink-0" />
-                    <span className="text-[11px] font-mono text-neutral-500 truncate">
-                        {typedText}
-                        <span className="animate-pulse text-white">|</span>
-                    </span>
-                </div>
-
-                {/* Insights */}
-                <div className="space-y-2.5 flex-1">
-                    {insights.map((insight, index) => (
-                        <div
-                            key={index}
-                            className={`flex items-start gap-3 p-3 rounded-xl border ${insightStyle[insight.type]}`}
-                            style={{ animation: `fadeUp 0.5s cubic-bezier(0.32,0.72,0,1) ${index * 100}ms both` }}
-                        >
-                            <span className="mt-0.5 flex-shrink-0">{insight.icon}</span>
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-semibold mb-0.5">{insight.title}</p>
-                                <p className="text-[11px] leading-relaxed text-neutral-400">{insight.text}</p>
-                            </div>
+        <section aria-labelledby="suggestions-title">
+            <h2 id="suggestions-title" className="text-body-sm font-semibold text-white pb-3 border-b border-white/8">
+                Suggestions
+            </h2>
+            <ul className="divide-y divide-white/8">
+                {insights.map((insight) => (
+                    <li key={insight.title} className="flex items-start gap-3 py-4">
+                        <span className={`mt-0.5 flex-shrink-0 ${insightTone[insight.type]}`} aria-hidden>{insight.icon}</span>
+                        <div className="min-w-0">
+                            <p className="text-meta font-semibold text-white">{insight.title}</p>
+                            <p className="mt-1 text-meta text-neutral-400">{insight.text}</p>
                         </div>
-                    ))}
-                </div>
-
-                {/* Footer stat */}
-                <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] text-neutral-700 font-mono uppercase tracking-widest">{bestMetric.label}</span>
-                    <span className="text-sm font-semibold text-positive-400">
-                        {bestMetric.value.toFixed(1)}%
-                    </span>
-                </div>
-            </div>
-        </div>
+                    </li>
+                ))}
+            </ul>
+        </section>
     );
 };

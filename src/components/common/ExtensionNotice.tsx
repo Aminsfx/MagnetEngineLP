@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, PlugZap } from 'lucide-react';
 import type { ExtensionStatus } from '../../lib/extensionProtocol';
+import { SUPPORT_EMAIL } from '../../lib/plans';
 
 /**
  * Says out loud what the app↔extension handshake found.
@@ -29,8 +30,8 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
       role="status"
       className="mx-4 sm:mx-8 mt-4 flex items-start gap-3 rounded-2xl border border-white/25 bg-white/[0.07] px-4 py-3"
     >
-      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-white" />
-      <div className="text-[13px] leading-relaxed">
+      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-white" aria-hidden />
+      <div className="text-meta leading-relaxed">
         <p className="font-medium text-white">
           {absent
             ? 'Extension not detected'
@@ -41,7 +42,15 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
             <>
               DMs, follow-ups and inbox replies all send through the browser
               extension — without it, approving a DM won&apos;t send anything.
-              Install it, or enable it and reload this page.
+              Enable it at <span className="font-mono text-neutral-300">chrome://extensions</span> and
+              reload this page — or, if you never installed it,{' '}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}?subject=MagnetEngine%20extension%20install%20link`}
+                className="font-medium text-white underline decoration-white/40 hover:decoration-white"
+              >
+                email us for the install link
+              </a>
+              .
             </>
           ) : (
             <>

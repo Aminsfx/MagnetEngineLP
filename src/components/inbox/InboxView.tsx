@@ -37,7 +37,7 @@ const INTENT_META: Record<ConversationIntent, { label: string; cls: string }> = 
   interested:     { label: 'Interested',     cls: 'text-white border-white/30 bg-white/10' },
   booked:         { label: 'Booked',         cls: 'text-positive-300 border-positive-500/30 bg-positive-500/10' },
   objection:      { label: 'Objection',      cls: 'text-white border-white/30 bg-white/10' },
-  not_interested: { label: 'Not interested', cls: 'text-neutral-500 border-white/10 bg-white/5' },
+  not_interested: { label: 'Not interested', cls: 'text-neutral-400 border-white/10 bg-white/5' },
   neutral:        { label: 'Neutral',        cls: 'text-neutral-300 border-neutral-500/30 bg-neutral-500/10' },
 };
 
@@ -162,34 +162,34 @@ export const InboxView: React.FC<InboxViewProps> = ({
       {/* Header row */}
       <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.08] bg-white/[0.04] text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3">
-            Conversations
-          </div>
           <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">Inbox</h1>
-          <p className="text-neutral-600 text-sm mt-1.5">Every reply in one place — the AI drafts responses and books calls for you.</p>
+          <p className="text-neutral-400 text-sm mt-1.5">Every reply in one place, with an AI draft ready for you to check and send.</p>
         </div>
         {/* Autopilot toggle */}
         <button
+          type="button"
+          role="switch"
+          aria-checked={!!config.autopilot}
           onClick={toggleAutopilot}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-medium transition-colors flex-shrink-0 ${
             config.autopilot
               ? 'text-white border-white/40 bg-white/10'
               : 'text-neutral-400 border-white/10 bg-white/5 hover:text-white'
           }`}
-          title="When on, the AI auto-replies to new inbound DMs while this tab is open"
+          title="When on, the AI writes and sends replies to new inbound DMs without you reading them first, while this dashboard tab is open"
         >
-          <Bot className="w-4 h-4" />
-          Autopilot {config.autopilot ? 'ON' : 'OFF'}
+          <Bot className="w-4 h-4" aria-hidden />
+          Autopilot: {config.autopilot ? 'on' : 'off'}
         </button>
       </div>
 
       {config.autopilot && (
-        <div className="mb-3 px-3.5 py-2 rounded-xl border border-white/25 bg-white/[0.08] text-white/90 text-[12px] flex items-center gap-2 flex-shrink-0">
+        <div className="mb-3 px-3.5 py-2 rounded-xl border border-white/25 bg-white/[0.08] text-white/90 text-xs flex items-center gap-2 flex-shrink-0">
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neutral-200 opacity-75" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
           </span>
-          Autopilot is replying automatically while this tab stays open. Close it to pause.
+          Autopilot is sending AI replies without your review while this dashboard tab is open. Turn it off, or close this tab, to stop it.
         </div>
       )}
 
@@ -200,12 +200,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
           {/* Search + filters */}
           <div className="p-3 border-b border-white/5 space-y-2.5">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-neutral-600 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search @handle or name"
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/40"
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/40"
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -213,10 +213,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 <button
                   key={t.key}
                   onClick={() => setFilter(t.key)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                  className={`px-2.5 py-1 rounded-full text-label font-medium border transition-colors ${
                     filter === t.key
                       ? 'text-white border-white/30 bg-white/10'
-                      : 'text-neutral-500 border-white/[0.08] bg-transparent hover:text-white'
+                      : 'text-neutral-400 border-white/[0.08] bg-transparent hover:text-white'
                   }`}
                 >
                   {t.label} <span className="opacity-60">{counts[t.key]}</span>
@@ -228,8 +228,8 @@ export const InboxView: React.FC<InboxViewProps> = ({
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="p-8 text-center text-neutral-600 text-sm flex flex-col items-center gap-3">
-                <InboxIcon className="w-8 h-8 text-neutral-700" />
+              <div className="p-8 text-center text-neutral-400 text-sm flex flex-col items-center gap-3">
+                <InboxIcon className="w-8 h-8 text-neutral-400" />
                 {conversations.length === 0
                   ? 'No conversations yet. Keep Instagram open in another tab with the MagnetEngine extension running — replies to your DMs will show up here.'
                   : 'No conversations match this filter.'}
@@ -248,23 +248,23 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
                       {c.avatarUrl
                         ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        : <span className="text-[11px] font-bold text-neutral-400 uppercase">{c.handle[0] ?? '?'}</span>}
+                        : <span className="text-label font-bold text-neutral-400 uppercase">{c.handle[0] ?? '?'}</span>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-white font-medium truncate">@{c.handle}</span>
-                        <span className="text-[10px] text-neutral-600 flex-shrink-0">{timeAgo(c.lastMessageAt)}</span>
+                        <span className="text-label text-neutral-400 flex-shrink-0">{timeAgo(c.lastMessageAt)}</span>
                       </div>
-                      <p className="text-[12px] text-neutral-500 truncate mt-0.5">{c.lastMessageText ?? ''}</p>
+                      <p className="text-xs text-neutral-400 truncate mt-0.5">{c.lastMessageText ?? ''}</p>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {c.needsReply && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white border border-white/30 bg-white/10 font-medium">Needs reply</span>
+                          <span className="text-label px-1.5 py-0.5 rounded-full text-white border border-white/30 bg-white/10 font-medium">Needs reply</span>
                         )}
                         {c.intent && (
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium ${INTENT_META[c.intent].cls}`}>{INTENT_META[c.intent].label}</span>
+                          <span className={`text-label px-1.5 py-0.5 rounded-full border font-medium ${INTENT_META[c.intent].cls}`}>{INTENT_META[c.intent].label}</span>
                         )}
                         {c.account && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-neutral-500 border border-white/[0.08]">{c.account}</span>
+                          <span className="text-label px-1.5 py-0.5 rounded-full text-neutral-400 border border-white/[0.08]">{c.account}</span>
                         )}
                       </div>
                     </div>
@@ -278,34 +278,34 @@ export const InboxView: React.FC<InboxViewProps> = ({
         {/* ── Right: thread + composer ── */}
         <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} flex-col flex-1 min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden`}>
           {!selected ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-neutral-600 gap-3 p-8 text-center">
-              <MessageSquare className="w-10 h-10 text-neutral-700" />
+            <div className="flex-1 flex flex-col items-center justify-center text-neutral-400 gap-3 p-8 text-center">
+              <MessageSquare className="w-10 h-10 text-neutral-400" />
               <p className="text-sm">Select a conversation to view the thread and draft a reply.</p>
             </div>
           ) : (
             <>
               {/* Thread header */}
               <div className="px-4 py-3 border-b border-white/5 flex items-center gap-3 flex-shrink-0">
-                <button onClick={() => setSelectedId(null)} className="lg:hidden p-1 -ml-1 text-neutral-400 hover:text-white">
+                <button type="button" onClick={() => setSelectedId(null)} aria-label="Back to conversations" className="lg:hidden p-1 -ml-1 text-neutral-400 hover:text-white">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 overflow-hidden flex items-center justify-center flex-shrink-0">
                   {selected.avatarUrl
                     ? <img src={selected.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    : <span className="text-[10px] font-bold text-neutral-400 uppercase">{selected.handle[0] ?? '?'}</span>}
+                    : <span className="text-label font-bold text-neutral-400 uppercase">{selected.handle[0] ?? '?'}</span>}
                 </div>
                 <div className="min-w-0 flex-1">
                   <a href={`https://instagram.com/${selected.handle}`} target="_blank" rel="noreferrer" className="text-sm text-white font-medium hover:text-white truncate block">@{selected.handle}</a>
-                  {selected.name && <p className="text-[11px] text-neutral-600 truncate">{selected.name}</p>}
+                  {selected.name && <p className="text-label text-neutral-400 truncate">{selected.name}</p>}
                 </div>
                 {selected.intent && (
-                  <span className={`text-[10px] px-2 py-1 rounded-full border font-medium ${INTENT_META[selected.intent].cls}`}>{INTENT_META[selected.intent].label}</span>
+                  <span className={`text-label px-2 py-1 rounded-full border font-medium ${INTENT_META[selected.intent].cls}`}>{INTENT_META[selected.intent].label}</span>
                 )}
                 {selected.status !== 'booked' && (
                   // Chrome, not `positive`: the control is the Operator's click,
                   // while the pill it produces is the funnel state. Colouring both
                   // it `positive` put a second accent beside the composer's one CTA.
-                  <button onClick={setBooked} className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:border-white/20 transition-colors">
+                  <button onClick={setBooked} className="flex items-center gap-1 text-label px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:border-white/20 transition-colors">
                     <Calendar className="w-3 h-3" /> Booked
                   </button>
                 )}
@@ -313,11 +313,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
 
               {/* Labels */}
               <div className="px-4 py-2 border-b border-white/5 flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                <Tag className="w-3 h-3 text-neutral-600" />
+                <Tag className="w-3 h-3 text-neutral-400" />
                 {(selected.labels ?? []).map((l) => (
-                  <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.08] text-neutral-300 border border-white/10 flex items-center gap-1">
+                  <span key={l} className="text-label px-2 py-0.5 rounded-full bg-white/[0.08] text-neutral-300 border border-white/10 flex items-center gap-1">
                     {l}
-                    <button onClick={() => removeLabel(l)} className="hover:text-danger-400"><X className="w-2.5 h-2.5" /></button>
+                    <button type="button" onClick={() => removeLabel(l)} aria-label={`Remove label ${l}`} className="p-0.5 -m-0.5 hover:text-danger-400"><X className="w-3 h-3" aria-hidden /></button>
                   </span>
                 ))}
                 <input
@@ -325,10 +325,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   onChange={(e) => setLabelInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') addLabel(labelInput); }}
                   placeholder="Add label"
-                  className="text-[11px] bg-transparent border-none focus:outline-none text-neutral-300 placeholder:text-neutral-600 w-20"
+                  className="text-label bg-transparent border-none focus:outline-none text-neutral-300 placeholder:text-neutral-500 w-20"
                 />
                 {QUICK_LABELS.filter((q) => !(selected.labels ?? []).some((l) => l.toLowerCase() === q.toLowerCase())).slice(0, 3).map((q) => (
-                  <button key={q} onClick={() => addLabel(q)} className="text-[10px] px-1.5 py-0.5 rounded-full text-neutral-600 border border-dashed border-white/10 hover:text-white hover:border-white/30">+ {q}</button>
+                  <button key={q} onClick={() => addLabel(q)} className="text-label px-1.5 py-0.5 rounded-full text-neutral-400 border border-dashed border-white/10 hover:text-white hover:border-white/30">+ {q}</button>
                 ))}
               </div>
 
@@ -342,12 +342,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
                         : 'bg-white/5 text-neutral-200 border border-white/[0.08] rounded-bl-md'
                     }`}>
                       {m.text}
-                      <div className={`text-[9px] mt-1 ${m.direction === 'out' ? 'text-white/50' : 'text-neutral-600'}`}>{timeAgo(m.createdAt)}</div>
+                      <div className={`text-label mt-1 ${m.direction === 'out' ? 'text-white/50' : 'text-neutral-400'}`}>{timeAgo(m.createdAt)}</div>
                     </div>
                   </div>
                 ))}
                 {thread.length === 0 && (
-                  <div className="text-center text-neutral-600 text-sm py-8">No messages synced for this thread yet.</div>
+                  <div className="text-center text-neutral-400 text-sm py-8">No messages synced for this thread yet.</div>
                 )}
               </div>
 
@@ -358,7 +358,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={2}
                   placeholder="Write a reply, or let the AI draft one…"
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/40 resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/40 resize-none"
                 />
                 <div className="flex items-center gap-2">
                   <button
@@ -377,7 +377,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                     <Send className="w-3.5 h-3.5" /> Approve &amp; Send
                   </button>
                 </div>
-                <p className="text-[10px] text-neutral-600">The extension sends this reply from your logged-in Instagram, paced by your DM delay.</p>
+                <p className="text-label text-neutral-400">The extension sends this reply from your logged-in Instagram, paced by your DM delay.</p>
               </div>
             </>
           )}

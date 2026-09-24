@@ -99,16 +99,15 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
               <Rocket className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase">Quick Start</p>
               <h3 className="text-sm font-semibold text-white tracking-tight leading-none">
-                {completedCount} of {steps.length} steps complete
+                Quick start<span className="text-neutral-400 font-normal"> · {completedCount} of {steps.length} steps done</span>
               </h3>
             </div>
           </div>
           <button
             onClick={handleDismiss}
             id="onboarding-dismiss-btn"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-600 hover:text-neutral-300 hover:bg-white/5 transition-all"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-400 hover:text-neutral-300 hover:bg-white/5 transition-colors"
             title="Dismiss checklist"
           >
             <X className="w-3.5 h-3.5" />
@@ -128,7 +127,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
           {steps.map((step, i) => (
             <div
               key={step.id}
-              className={`rounded-xl p-3 border transition-all duration-300 ${
+              className={`rounded-xl p-3 border transition-colors duration-300 ${
                 step.complete
                   ? 'bg-positive-500/6 border-positive-500/15'
                   : 'bg-white/3 border-white/7 hover:border-white/12'
@@ -139,19 +138,19 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
                   {step.complete ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-positive-400" />
                   ) : (
-                    <Circle className="w-3.5 h-3.5 text-neutral-700" />
+                    <Circle className="w-3.5 h-3.5 text-neutral-400" />
                   )}
                 </span>
-                <span className={`text-[11px] font-medium leading-snug ${step.complete ? 'text-positive-400 line-through opacity-60' : 'text-white'}`}>
+                <span className={`text-label font-medium leading-snug ${step.complete ? 'text-positive-400 line-through opacity-60' : 'text-white'}`}>
                   {i + 1}. {step.label}
                 </span>
               </div>
-              <p className="text-[10px] text-neutral-600 leading-relaxed mb-2 pl-5">{step.description}</p>
+              <p className="text-label text-neutral-400 leading-relaxed mb-2 pl-5">{step.description}</p>
               {!step.complete && (
                 <Link
                   to={step.path}
                   id={`onboarding-step-${step.id}`}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-white hover:text-white transition-colors pl-5"
+                  className="inline-flex items-center gap-1 text-label font-semibold text-white hover:text-white transition-colors pl-5"
                 >
                   {step.linkText}
                   <ChevronRight className="w-2.5 h-2.5" />

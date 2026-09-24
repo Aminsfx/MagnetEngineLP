@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { Lead } from '../../lib/types';
-import { CARD_BEZEL, CHART } from '../../lib/theme';
+import { CHART } from '../../lib/theme';
 
 interface ConversionChartProps {
     leads: Lead[];
@@ -14,7 +14,7 @@ interface DayPoint {
     replies: number;
 }
 
-/** Build per-day counts of DMs sent + replies for the last 7 days from lead dates */
+/** Per-day counts of confirmed sends and replies over the last 7 days. */
 function buildWeekSeries(leads: Lead[]): { data: DayPoint[]; hasActivity: boolean } {
     const days: { key: string; label: string }[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -29,7 +29,11 @@ function buildWeekSeries(leads: Lead[]): { data: DayPoint[]; hasActivity: boolea
     const sentByDay = new Map<string, number>();
     const repliesByDay = new Map<string, number>();
     for (const lead of leads) {
-        if (lead.dmDate) {
+        // Only confirmed sends. `dmDate` is stamped when the DM is WRITTEN (and
+        // kept on send), so counting every dated Lead charted drafts as sends —
+        // "10 sent" beside a pipeline that said 9. The day is still the best
+        // date the Lead carries; Sent itself carries none (CONTEXT.md).
+        if (lead.dmSent && lead.dmDate) {
             const k = lead.dmDate.slice(0, 10);
             sentByDay.set(k, (sentByDay.get(k) ?? 0) + 1);
         }
@@ -52,7 +56,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-surface-sunken border border-white/10 rounded-2xl p-4 shadow-xl shadow-black/50 backdrop-blur-md">
-                <p className="text-neutral-500 text-xs font-medium uppercase tracking-widest mb-2">{label}</p>
+                <p className="text-neutral-400 text-xs font-medium uppercase tracking-widest mb-2">{label}</p>
                 {payload.map((entry: any) => (
                     <div key={entry.name} className="flex items-center gap-2 text-sm">
                         <span
@@ -72,22 +76,20 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export const ConversionChart: React.FC<ConversionChartProps> = ({ leads }) => {
     const { data, hasActivity } = useMemo(() => buildWeekSeries(leads), [leads]);
 
+    const weekSent = data.reduce((n, d) => n + d.sent, 0);
+    const weekReplies = data.reduce((n, d) => n + d.replies, 0);
+
     return (
-        /* Outer shell */
-        <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
-            {/* Inner core */}
-            <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6 relative overflow-hidden" style={CARD_BEZEL.inner}>
-                {/* Background glow — planet horizon echo */}
-                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white/5 to-transparent pointer-events-none" />
-
-                {/* Header */}
-                <div className="mb-6">
-                    <p className="text-[10px] font-semibold tracking-[0.2em] text-neutral-600 uppercase mb-1">Last 7 Days</p>
-                    <h3 className="text-base font-semibold text-white tracking-tight">Outreach Activity</h3>
-                </div>
-
+        <section aria-labelledby="week-title">
+            <div className="flex items-baseline justify-between gap-4 pb-3 border-b border-white/8">
+                <h2 id="week-title" className="text-body-sm font-semibold text-white">Last 7 days</h2>
+                <span className="text-label text-neutral-400 tabular-nums">
+                    {weekSent} sent · {weekReplies} {weekReplies === 1 ? 'reply' : 'replies'}
+                </span>
+            </div>
+            <div className="pt-5">
                 {hasActivity ? (
-                    <ResponsiveContainer width="100%" height={260}>
+                    <ResponsiveContainer width="100%" height={200}>
                         <ComposedChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="sentGradient" x1="0" y1="0" x2="0" y2="1">
@@ -137,17 +139,17 @@ export const ConversionChart: React.FC<ConversionChartProps> = ({ leads }) => {
                         </ComposedChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="h-[260px] flex flex-col items-center justify-center text-center gap-3">
+                    <div className="h-[200px] flex flex-col items-center justify-center text-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-white/4 border border-white/8 flex items-center justify-center">
-                            <BarChart3 className="w-5 h-5 text-neutral-600" />
+                            <BarChart3 className="w-5 h-5 text-neutral-400" aria-hidden />
                         </div>
-                        <p className="text-sm text-neutral-500">No outreach activity yet</p>
-                        <p className="text-xs text-neutral-700 max-w-[260px]">
+                        <p className="text-sm text-neutral-300">No outreach activity yet</p>
+                        <p className="text-xs text-neutral-400 max-w-[260px]">
                             Once you generate DMs and start sending, your daily sends and replies will chart here.
                         </p>
                     </div>
                 )}
             </div>
-        </div>
+        </section>
     );
 };

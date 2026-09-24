@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppConfig, DashboardStats, Lead } from './types';
 import type { PlanLimits } from './plans';
+import { SUPPORT_EMAIL } from './plans';
 import type { WorkspaceStore } from './store';
 import type { DueFollowUp } from './followups';
 import { db } from './db';
@@ -64,6 +65,10 @@ export interface OutreachEngine {
   addLeads(leads: Lead[]): Promise<void>;
   approve(id: string): Promise<void>;
   approveMany(ids: string[]): Promise<void>;
+  /** Undo for a bulk approve. Leaves any Lead already Sent alone. */
+  unapproveMany(ids: string[]): Promise<void>;
+  /** Stamps `handedOffAt` — only for Leads a DELIVERED Handoff carried. */
+  markHandedOff(ids: string[]): Promise<void>;
   reject(id: string): Promise<void>;
   updateDM(id: string, content: string): Promise<void>;
   update(lead: Lead): Promise<void>;
@@ -219,18 +224,42 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     [patch],
   );
 
-  /** Bulk approve — one state update, one batched write. */
-  const approveMany = useCallback(async (ids: string[]) => {
+  /** One state update + one batched write, for any per-Lead change over many Leads. */
+  const patchMany = useCallback(async (ids: string[], change: (lead: Lead) => Lead) => {
     if (ids.length === 0) return;
     const wanted = new Set(ids);
-    const updated = leadsRef.current
-      .filter((l) => wanted.has(l.id))
-      .map((l) => ({ ...l, approved: true, rejected: false }));
+    const updated = leadsRef.current.filter((l) => wanted.has(l.id)).map(change);
     const byId = new Map(updated.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
     if (updated.length > 0) await store.saveLeads(updated);
-    toast.success(`${ids.length} DM${ids.length !== 1 ? 's' : ''} approved`);
-  }, [toast, store]);
+  }, [store]);
+
+  /**
+   * Bulk approve. Silent: the caller confirms and offers the undo, because
+   * only the caller knows whether the Operator read these drafts first.
+   */
+  const approveMany = useCallback(
+    (ids: string[]) => patchMany(ids, (l) => ({ ...l, approved: true, rejected: false })),
+    [patchMany],
+  );
+
+  /** Undo for a bulk approve — back to Ready. Never touches a Lead already Sent. */
+  const unapproveMany = useCallback(
+    (ids: string[]) => patchMany(ids, (l) => (l.dmSent ? l : { ...l, approved: false })),
+    [patchMany],
+  );
+
+  /**
+   * Stamps the Leads a DELIVERED Handoff carried. Call it only when
+   * `sendCampaign(...).delivered` is true — a refused Handoff stamps nothing.
+   */
+  const markHandedOff = useCallback(
+    (ids: string[]) => {
+      const at = new Date().toISOString();
+      return patchMany(ids, (l) => ({ ...l, handedOffAt: at }));
+    },
+    [patchMany],
+  );
 
   const update = useCallback(async (updated: Lead) => {
     const previous = leadsRef.current.find((l) => l.id === updated.id);
@@ -259,7 +288,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
   const generateDMs = useCallback(async (target?: Lead[]) => {
     const remaining = limits.maxDMGenerations - dmUsed;
     if (remaining <= 0) {
-      toast.error(`You've used all ${limits.maxDMGenerations} DM generations for this month. Upgrade your plan to generate more.`);
+      toast.error(`You've used all ${limits.maxDMGenerations} DMs in this month's allowance. It refills next month — email ${SUPPORT_EMAIL} if you need more before then.`);
       return;
     }
 
@@ -451,6 +480,8 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     addLeads,
     approve,
     approveMany,
+    unapproveMany,
+    markHandedOff,
     reject,
     updateDM,
     update,

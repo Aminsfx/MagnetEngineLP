@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Mail, Lock, CheckCircle, AlertCircle, Loader2, Copy, Check, Camera } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CheckCircle, AlertCircle, Loader2, Copy, Check, Camera, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { CARD_BEZEL, CARD_BEZEL_DANGER } from '../lib/theme';
+import { usePlan } from '../contexts/PlanContext';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface ProfilePageProps {
@@ -20,6 +21,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
     const [avatarUploading, setAvatarUploading] = useState(false);
     const [copied, setCopied] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { status: planStatus, loading: planLoading } = usePlan();
 
     useEffect(() => {
         setAvatarUrl(localStorage.getItem(AVATAR_KEY(user.id)));
@@ -81,7 +83,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
             return;
         }
         if (newPw !== confirmPw) {
-            setPwMessage({ type: 'error', text: 'Passwords do not match.' });
+            setPwMessage({ type: 'error', text: "The two passwords don't match. Type the same one in both fields." });
             return;
         }
 
@@ -92,179 +94,194 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout }) => {
         if (error) {
             setPwMessage({ type: 'error', text: error.message });
         } else {
-            setPwMessage({ type: 'success', text: 'Password updated successfully.' });
+            setPwMessage({ type: 'success', text: 'Password updated.' });
             setNewPw('');
             setConfirmPw('');
         }
     };
 
+    /*
+     * An account page, read top to bottom as one document: who you are, what
+     * you pay for, how you sign in, and how to leave. It used to be three
+     * bezelled cards with cards inside them, a glowing gradient avatar and a
+     * "Member Plan" badge that said the same thing for every account whatever
+     * its real state. The badge now reads the subscription.
+     */
+    const PLAN = {
+        active: { label: 'Active', tone: 'text-positive-300', dot: 'bg-positive-400', note: 'Your trial or subscription is running.' },
+        pending: { label: 'Not started', tone: 'text-neutral-200', dot: 'bg-neutral-400', note: 'Start the trial to open the dashboard.' },
+        cancelled: { label: 'Cancelled', tone: 'text-danger-300', dot: 'bg-danger-400', note: 'Your access has ended.' },
+    }[planStatus];
+
     return (
-        <div className="p-8 max-w-2xl space-y-6">
-            {/* Page header */}
-            <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-[10px] font-semibold tracking-[0.2em] text-neutral-500 uppercase mb-3">
-                    Account
-                </div>
-                <h1 className="text-2xl font-semibold text-white tracking-tight">Profile</h1>
-                <p className="text-neutral-600 text-sm mt-1.5">Manage your account details and security settings.</p>
-            </div>
+        <div className="px-4 py-6 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full">
+            {/* Who */}
+            <header className="flex items-center gap-5 pb-8 border-b border-white/8">
+                <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label={avatarUrl ? 'Change profile photo' : 'Add a profile photo'}
+                    className="relative flex-shrink-0 group w-20 h-20 rounded-2xl bg-neutral-800 ring-1 ring-white/10 overflow-hidden flex items-center justify-center"
+                >
+                    {avatarUrl
+                        ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+                        : <span className="text-3xl font-semibold text-white">{initial}</span>
+                    }
+                    <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity flex items-center justify-center">
+                        {avatarUploading
+                            ? <Loader2 className="w-5 h-5 text-white animate-spin" aria-hidden />
+                            : <Camera className="w-5 h-5 text-white" aria-hidden />}
+                    </span>
+                </button>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
 
-            {/* Identity card */}
-            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
-                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
-                    <div className="flex items-center gap-5">
-                        {/* Avatar */}
-                        <div className="relative flex-shrink-0 group">
-                            <div
-                                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-white to-neutral-400 flex items-center justify-center shadow-[0_0_24px] shadow-white/25 overflow-hidden cursor-pointer"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                {avatarUrl
-                                    ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                                    : <span className="text-2xl font-bold text-surface">{initial}</span>
-                                }
-                                <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    {avatarUploading
-                                        ? <Loader2 className="w-5 h-5 text-white animate-spin" />
-                                        : <Camera className="w-5 h-5 text-white" />
-                                    }
-                                </div>
-                            </div>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={handleAvatarChange}
-                            />
-                        </div>
-                        <div className="min-w-0">
-                            {fullName && (
-                                <p className="text-white font-semibold text-base truncate">{fullName}</p>
-                            )}
-                            <p className={`truncate ${fullName ? 'text-neutral-500 text-sm' : 'text-white font-semibold text-base'}`}>{user.email}</p>
-                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                {/* Static dot on purpose: this reports the real plan, not a fake live status.
-                                    `positive` rather than `brand`: a subscription being active is a state,
-                                    and the page's one `brand` accent belongs to Update Password. */}
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-positive-500/10 border border-positive-500/20 text-positive-400 text-[11px] font-semibold capitalize">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-positive-400" />
-                                    Member Plan
-                                </span>
-                                <span className="text-neutral-600 text-xs">Member since {memberSince}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-6 grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-white/3 border border-white/6">
-                            <div className="flex items-center gap-2 mb-1">
-                                <Mail className="w-3.5 h-3.5 text-neutral-600" />
-                                <span className="text-[10px] text-neutral-600 uppercase tracking-widest font-semibold">Email</span>
-                            </div>
-                            <p className="text-sm text-neutral-300 truncate">{user.email}</p>
-                        </div>
-                        <div className="p-4 rounded-xl bg-white/3 border border-white/6">
-                            <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                    <User className="w-3.5 h-3.5 text-neutral-600" />
-                                    <span className="text-[10px] text-neutral-600 uppercase tracking-widest font-semibold">User ID</span>
-                                </div>
-                                <button
-                                    onClick={handleCopyId}
-                                    title="Copy full ID"
-                                    className="text-neutral-600 hover:text-white transition-colors"
-                                >
-                                    {copied
-                                        ? <Check className="w-3.5 h-3.5 text-positive-400" />
-                                        : <Copy className="w-3.5 h-3.5" />
-                                    }
-                                </button>
-                            </div>
-                            <p className="text-xs text-neutral-500 font-mono truncate">{user.id.slice(0, 16)}…</p>
-                            {copied && <p className="text-[10px] text-positive-500 mt-1">Copied to clipboard!</p>}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Change password */}
-            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
-                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
-                    <div className="flex items-center gap-3 mb-5">
-                        <div className="w-8 h-8 rounded-xl bg-neutral-800 border border-white/8 flex items-center justify-center">
-                            <Lock className="w-4 h-4 text-neutral-400" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-semibold text-white">Change Password</h2>
-                            <p className="text-[11px] text-neutral-600 mt-0.5">Update your login credentials.</p>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleChangePassword} className="space-y-3">
-                        <div>
-                            <label className="block text-xs text-neutral-500 mb-1.5">New Password</label>
-                            <input
-                                type="password"
-                                value={newPw}
-                                onChange={e => setNewPw(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                required
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-neutral-500 mb-1.5">Confirm New Password</label>
-                            <input
-                                type="password"
-                                value={confirmPw}
-                                onChange={e => setConfirmPw(e.target.value)}
-                                placeholder="Repeat password"
-                                required
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-all"
-                            />
-                        </div>
-
-                        {pwMessage && (
-                            <div className={`flex items-center gap-2.5 p-3 rounded-xl border text-[11px] ${
-                                pwMessage.type === 'success'
-                                    ? 'bg-positive-500/8 border-positive-500/20 text-positive-400'
-                                    : 'bg-danger-500/8 border-danger-500/20 text-danger-400'
-                            }`}>
-                                {pwMessage.type === 'success'
-                                    ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                                    : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                                {pwMessage.text}
-                            </div>
+                <div className="min-w-0">
+                    <h1 className="text-2xl font-semibold text-white tracking-tight truncate">{fullName || user.email}</h1>
+                    {fullName && <p className="text-body-sm text-neutral-400 truncate mt-0.5">{user.email}</p>}
+                    <p className="mt-2 flex items-center gap-2 text-meta">
+                        {planLoading ? (
+                            <span className="text-neutral-400">Checking subscription…</span>
+                        ) : (
+                            <>
+                                <span className={`w-1.5 h-1.5 rounded-full ${PLAN.dot}`} aria-hidden />
+                                <span className={`font-semibold ${PLAN.tone}`}>{PLAN.label}</span>
+                                <span className="text-neutral-500" aria-hidden>·</span>
+                                <span className="text-neutral-400">Member since {memberSince}</span>
+                            </>
                         )}
+                    </p>
+                </div>
+            </header>
 
-                        <button
-                            type="submit"
-                            disabled={pwLoading}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-medium hover:bg-white/20 hover:border-white/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            {/* Account */}
+            <Section title="Account" note="Your sign-in email and the ID support may ask for.">
+                <dl className="divide-y divide-white/8">
+                    {fullName && <Row term="Name">{fullName}</Row>}
+                    <Row term="Email">{user.email}</Row>
+                    <Row term="Member since">{memberSince}</Row>
+                    <Row term="User ID">
+                        <span className="flex items-center gap-2 min-w-0">
+                            <code className="font-mono text-meta text-neutral-300 truncate">{user.id}</code>
+                            <button
+                                type="button"
+                                onClick={handleCopyId}
+                                aria-label="Copy user ID"
+                                className="flex-none p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                {copied ? <Check className="w-3.5 h-3.5 text-positive-400" aria-hidden /> : <Copy className="w-3.5 h-3.5" aria-hidden />}
+                            </button>
+                            <span role="status" className="text-label text-positive-400">{copied ? 'Copied' : ''}</span>
+                        </span>
+                    </Row>
+                </dl>
+            </Section>
+
+            {/* Subscription */}
+            <Section title="Subscription" note="One plan. Billing is handled by Whop.">
+                <dl className="divide-y divide-white/8">
+                    <Row term="Status">
+                        {planLoading ? 'Checking…' : <span className={`font-semibold ${PLAN.tone}`}>{PLAN.label}</span>}
+                    </Row>
+                </dl>
+                {!planLoading && (
+                    <p className="mt-3 text-meta text-neutral-400">
+                        {PLAN.note}{' '}
+                        {planStatus !== 'active' && (
+                            <Link to="/activate" className="font-medium text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
+                                Start the trial
+                            </Link>
+                        )}
+                    </p>
+                )}
+            </Section>
+
+            {/* Password */}
+            <Section title="Password" note="At least 6 characters. You stay signed in here after changing it.">
+                <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                    <div>
+                        <label htmlFor="profile-new-password" className="block text-meta font-medium text-neutral-300 mb-2">New password</label>
+                        <input
+                            id="profile-new-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={newPw}
+                            onChange={e => setNewPw(e.target.value)}
+                            required
+                            className="w-full bg-surface-raised border border-white/10 rounded-xl px-4 py-2.5 text-body-sm text-white hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/25 focus:border-white/40 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="profile-confirm-password" className="block text-meta font-medium text-neutral-300 mb-2">Type it again</label>
+                        <input
+                            id="profile-confirm-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={confirmPw}
+                            onChange={e => setConfirmPw(e.target.value)}
+                            required
+                            className="w-full bg-surface-raised border border-white/10 rounded-xl px-4 py-2.5 text-body-sm text-white hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/25 focus:border-white/40 transition-colors"
+                        />
+                    </div>
+
+                    {pwMessage && (
+                        <div
+                            role={pwMessage.type === 'error' ? 'alert' : 'status'}
+                            className={`flex items-center gap-2.5 p-3 rounded-xl border text-meta ${
+                                pwMessage.type === 'success'
+                                    ? 'bg-positive-500/8 border-positive-500/25 text-positive-300'
+                                    : 'bg-danger-500/8 border-danger-500/25 text-danger-300'
+                            }`}
                         >
-                            {pwLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                            Update Password
-                        </button>
-                    </form>
-                </div>
-            </div>
+                            {pwMessage.type === 'success'
+                                ? <CheckCircle className="w-4 h-4 flex-shrink-0" aria-hidden />
+                                : <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden />}
+                            {pwMessage.text}
+                        </div>
+                    )}
 
-            {/* Danger zone */}
-            <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL_DANGER.outer}>
-                <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL_DANGER.inner}>
-                    <h2 className="text-sm font-semibold text-danger-400/80 mb-1">Danger Zone</h2>
-                    <p className="text-[11px] text-neutral-600 mb-4">These actions are irreversible.</p>
                     <button
-                        onClick={onLogout}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/8 transition-all"
+                        type="submit"
+                        disabled={pwLoading}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-surface text-body-sm font-semibold hover:bg-neutral-200 transition-[background-color,transform] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Sign out of all sessions
+                        {pwLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />}
+                        Update password
                     </button>
-                </div>
-            </div>
+                </form>
+            </Section>
+
+            {/* Sign out */}
+            <Section title="Sign out" note="Signs you out here and in every other browser where you're signed in.">
+                <button
+                    type="button"
+                    onClick={onLogout}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-danger-500/30 text-danger-300 text-body-sm font-medium hover:bg-danger-500/10 transition-colors"
+                >
+                    <LogOut className="w-4 h-4" aria-hidden />
+                    Sign out everywhere
+                </button>
+            </Section>
         </div>
     );
 };
+
+/** One labelled band of the page: title and a line of context left, content right. */
+const Section: React.FC<{ title: string; note: string; children: React.ReactNode }> = ({ title, note, children }) => (
+    <section className="grid md:grid-cols-[minmax(0,14rem)_1fr] gap-4 md:gap-10 py-8 border-b border-white/8 last:border-b-0">
+        <div>
+            <h2 className="text-body-sm font-semibold text-white">{title}</h2>
+            <p className="mt-1 text-meta text-neutral-400">{note}</p>
+        </div>
+        <div className="min-w-0">{children}</div>
+    </section>
+);
+
+/** One fact in a definition list. */
+const Row: React.FC<{ term: string; children: React.ReactNode }> = ({ term, children }) => (
+    <div className="grid grid-cols-[8rem_1fr] gap-4 py-3 first:pt-0 items-center">
+        <dt className="text-meta text-neutral-400">{term}</dt>
+        <dd className="text-body-sm text-neutral-200 min-w-0 truncate">{children}</dd>
+    </div>
+);
 
 export default ProfilePage;

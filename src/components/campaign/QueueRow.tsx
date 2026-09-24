@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-    Sparkles, Trash2, Check, X, Edit3, Users, MessageSquare,
-    CheckCircle, XCircle, Clock, MessageCircle, MessagesSquare, CalendarCheck,
+    Sparkles, Trash2, Check, X, Edit3, Users, MessageSquare, MapPin,
+    CheckCircle, XCircle, Clock, MessageCircle, ThumbsUp, MessagesSquare, CalendarCheck, Send, Hourglass,
 } from 'lucide-react';
 import { Lead } from '../../lib/types';
 import { ReplyBattlecards } from './ReplyBattlecards';
@@ -13,26 +13,51 @@ function formatFollowers(n: number): string {
     return String(n);
 }
 
+/** "3h ago" — coarse on purpose: the Operator needs "today or not", not seconds. */
+function ago(iso: string): string {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+}
+
 /**
  * The Actions cell's icon buttons, one entry per role.
  *
  * Written out rather than built from a role name because Tailwind's content
  * scanner only sees literal class strings — an interpolated
- * `hover:text-${role}-400` compiles to nothing. Spelling them once instead of
- * nine times is what makes the role map auditable: `info` means the AI made
- * it (docs/DESIGN-TOKENS.md), so anything not in that row must not reach for
- * it.
+ * `hover:text-${role}-400` compiles to nothing. Each button also carries an
+ * `aria-label`: `title` alone is a hover tooltip, which is no name at all to
+ * a screen reader or a keyboard user.
  */
 const ICON_BTN = {
-    neutral: 'p-1.5 rounded-lg text-neutral-600 hover:text-neutral-400 hover:bg-neutral-500/10 transition-all',
-    brand: 'p-1.5 rounded-lg text-neutral-600 hover:text-white hover:bg-white/10 transition-all',
-    danger: 'p-1.5 rounded-lg text-neutral-600 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
+    neutral: 'p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors',
+    positive: 'p-1.5 rounded-lg text-neutral-300 hover:text-positive-300 hover:bg-positive-500/10 transition-colors',
+    danger: 'p-1.5 rounded-lg text-neutral-400 hover:text-danger-400 hover:bg-danger-500/10 transition-colors',
     /** Delete only: it rests one step dimmer than Reject, since it is the
         irreversible one and should not be what the eye lands on first. */
-    dangerQuiet: 'p-1.5 rounded-lg text-neutral-700 hover:text-danger-400 hover:bg-danger-500/10 transition-all',
-    /** AI generation only. */
-    info: 'p-1.5 rounded-lg text-neutral-600 hover:text-white hover:bg-white/10 transition-all',
+    dangerQuiet: 'p-1.5 rounded-lg text-neutral-400 hover:text-danger-400 hover:bg-danger-500/10 transition-colors',
 } as const;
+
+/** One status pill. The icon is decoration; the word carries the state. */
+const Pill: React.FC<{ tone: 'positive' | 'danger' | 'ready' | 'muted'; icon: React.ReactNode; children: React.ReactNode }> = ({
+    tone, icon, children,
+}) => {
+    const cls = {
+        positive: 'bg-positive-500/10 text-positive-300 border-positive-500/25',
+        danger: 'bg-danger-500/10 text-danger-300 border-danger-500/25',
+        ready: 'bg-white/10 text-white border-white/20',
+        muted: 'bg-white/5 text-neutral-300 border-white/10',
+    }[tone];
+    return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label font-medium border whitespace-nowrap ${cls}`}>
+            <span aria-hidden>{icon}</span>
+            {children}
+        </span>
+    );
+};
 
 export interface QueueRowProps {
     lead: Lead;
@@ -91,11 +116,14 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
     onGenerateDM,
     onDelete,
 }) => {
-    const rowClass = lead.approved
+    const rowClass = lead.dmSent
+        ? ''
+        : lead.approved
         ? 'bg-positive-500/[0.03]'
         : lead.rejected
         ? 'bg-danger-500/[0.03]'
         : '';
+    const who = `@${lead.handle}`;
 
     return (
         <>
@@ -106,18 +134,19 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => onToggleSelect(lead.id)}
+                        aria-label={`Select ${who}`}
                         className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-white cursor-pointer"
                     />
                 </td>
-                {/* Prospect */}
-                <td className="px-5 py-4">
+                {/* Lead */}
+                <td className="px-5 py-4 align-top">
                     <div className="flex items-center gap-3">
                         {/* A page is a screenful of Instagram CDN avatars — up to 100 — so the
                             img is lazy: eager loading fired every cross-origin request the
                             moment the queue mounted, and the scraped URLs are signed and
                             expire, so most of them are 403s. */}
                         {lead.profilePicUrl ? (
-                            <img src={lead.profilePicUrl} alt={lead.name}
+                            <img src={lead.profilePicUrl} alt=""
                                 loading="lazy"
                                 decoding="async"
                                 width={36}
@@ -126,27 +155,25 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                         ) : (
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-white to-neutral-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            // Was white text on a white-to-grey gradient, i.e. invisible.
+                            <div aria-hidden className="w-9 h-9 rounded-full bg-neutral-800 ring-1 ring-white/10 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                                 {(lead.name || lead.handle)[0]?.toUpperCase()}
                             </div>
                         )}
-                        <div>
+                        <div className="min-w-0">
                             <div className="font-medium text-white text-sm leading-tight">{lead.name}</div>
-                            <div className="text-neutral-600 text-xs mt-0.5">@{lead.handle}</div>
-                            <div className="flex items-center gap-1.5 mt-1 text-[10px] text-neutral-700">
-                                <Users className="w-3 h-3" />
-                                {formatFollowers(lead.followers)}
+                            <div className="text-neutral-400 text-xs mt-0.5">{who}</div>
+                            <div className="flex items-center gap-1.5 mt-1 text-label text-neutral-400 tabular-nums">
+                                <Users className="w-3 h-3" aria-hidden />
+                                <span>{formatFollowers(lead.followers)}<span className="sr-only"> followers</span></span>
                                 {lead.businessAccount && (
-                                    <span className="bg-white/10 text-white px-1 py-0.5 rounded">Biz</span>
+                                    <span className="bg-white/10 text-white px-1 py-0.5 rounded">Business</span>
                                 )}
                             </div>
                             {/* `neutral`, not an accent: which campaign a Lead came
-                                from is a label, not a state or an AI product, and
-                                this chip was the app's most visible violet — the
-                                retired hue that made the dashboard read as
-                                unbranded. See docs/DESIGN-TOKENS.md. */}
+                                from is a label, not a state. See docs/DESIGN-TOKENS.md. */}
                             {lead.campaignName && (
-                                <div className="mt-1 inline-flex items-center gap-1 text-[9px] text-neutral-300/80 bg-neutral-500/10 border border-neutral-500/20 px-1.5 py-0.5 rounded-full max-w-[140px] truncate">
+                                <div className="mt-1 inline-flex items-center gap-1 text-label text-neutral-300 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-full max-w-[140px] truncate">
                                     {lead.campaignName}
                                 </div>
                             )}
@@ -154,176 +181,179 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                     </div>
                 </td>
 
-                {/* Bio / Profile data */}
-                <td className="px-5 py-4">
-                    <p className="text-xs text-neutral-500 leading-relaxed line-clamp-3">
-                        {lead.bio ?? <span className="text-neutral-700 italic">No bio</span>}
+                {/* Bio */}
+                <td className="px-5 py-4 align-top">
+                    <p className="text-xs text-neutral-400 leading-relaxed">
+                        {lead.bio || <span className="text-neutral-400 italic">No bio</span>}
                     </p>
                     {lead.city && (
-                        <p className="text-[10px] text-neutral-700 mt-1">📍 {lead.city}</p>
+                        <p className="flex items-center gap-1 text-label text-neutral-400 mt-1.5">
+                            <MapPin className="w-3 h-3" aria-hidden /> {lead.city}
+                        </p>
                     )}
                 </td>
 
-                {/* DM */}
-                <td className="px-5 py-4">
+                {/* DM — shown in full. Approval is the product's one human
+                    judgement, and it used to be made on four clamped lines
+                    with the rest behind a hover no keyboard can reach. */}
+                <td className="px-5 py-4 align-top">
                     {isEditing ? (
                         <div className="space-y-2">
                             <textarea
                                 value={editDraft ?? ''}
                                 onChange={e => onEditDraftChange(e.target.value)}
-                                rows={4}
+                                onKeyDown={e => {
+                                    if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+                                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSaveEdit(lead.id); }
+                                }}
+                                rows={6}
                                 autoFocus
-                                className="w-full bg-surface border border-white/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/50 resize-none"
+                                aria-label={`Edit the DM to ${who}`}
+                                className="w-full bg-surface border border-white/30 rounded-xl px-3 py-2 text-sm leading-relaxed text-white focus:outline-none focus:ring-1 focus:ring-white/50 resize-y"
                             />
-                            <div className="flex gap-2">
-                                <button onClick={() => onSaveEdit(lead.id)}
+                            <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => onSaveEdit(lead.id)}
                                     className="flex items-center gap-1 px-3 py-1 bg-white/20 text-white rounded-lg text-xs hover:bg-white/30 transition-colors">
-                                    <Check className="w-3 h-3" /> Save
+                                    <Check className="w-3 h-3" aria-hidden /> Save
                                 </button>
-                                <button onClick={onCancelEdit}
-                                    className="flex items-center gap-1 px-3 py-1 bg-white/5 text-neutral-400 rounded-lg text-xs hover:bg-white/10 transition-colors">
-                                    <X className="w-3 h-3" /> Cancel
+                                <button type="button" onClick={onCancelEdit}
+                                    className="flex items-center gap-1 px-3 py-1 bg-white/5 text-neutral-300 rounded-lg text-xs hover:bg-white/10 transition-colors">
+                                    <X className="w-3 h-3" aria-hidden /> Cancel
                                 </button>
+                                <span className="ml-auto text-label text-neutral-400">Ctrl+Enter saves · Esc cancels</span>
                             </div>
                         </div>
                     ) : lead.dmContent ? (
-                        <p className="text-xs text-neutral-300 leading-relaxed line-clamp-4 cursor-pointer hover:line-clamp-none transition-all"
-                            title="Click to see full DM">
+                        <p className="text-sm text-neutral-200 leading-relaxed whitespace-pre-line">
                             {lead.dmContent}
                         </p>
                     ) : (
-                        <span className="text-xs text-neutral-700 italic">Pending generation…</span>
+                        <span className="text-xs text-neutral-400 italic">Not written yet</span>
                     )}
                 </td>
 
-                {/* Status */}
-                <td className="px-5 py-4">
-                    {lead.approved ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-positive-500/10 text-positive-400 border border-positive-500/20">
-                            <CheckCircle className="w-3 h-3" /> Approved
+                {/* Status — the furthest the Lead has got. Sent is the extension's
+                    word (CONTEXT.md); Handed off only means it accepted the work. */}
+                <td className="px-5 py-4 align-top">
+                    {lead.dmSent ? (
+                        <Pill tone="positive" icon={<Send className="w-3 h-3" />}>Sent</Pill>
+                    ) : lead.approved && lead.handedOffAt ? (
+                        <span title="The extension has this DM and will send it on its pace and Send Cap. It shows Sent once the extension confirms it.">
+                            <Pill tone="muted" icon={<Hourglass className="w-3 h-3" />}>Handed off</Pill>
+                            <span className="block mt-1 text-label text-neutral-400">{ago(lead.handedOffAt)}</span>
                         </span>
+                    ) : lead.approved ? (
+                        <Pill tone="positive" icon={<CheckCircle className="w-3 h-3" />}>Approved</Pill>
                     ) : lead.rejected ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-danger-500/10 text-danger-400 border border-danger-500/20">
-                            <XCircle className="w-3 h-3" /> Rejected
-                        </span>
+                        <Pill tone="danger" icon={<XCircle className="w-3 h-3" />}>Rejected</Pill>
                     ) : lead.dmContent ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-white/10 text-white border border-white/20">
-                            <MessageSquare className="w-3 h-3" /> Ready
-                        </span>
+                        <Pill tone="ready" icon={<MessageSquare className="w-3 h-3" />}>Ready</Pill>
                     ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-neutral-800/60 text-neutral-500 border border-white/5">
-                            <Clock className="w-3 h-3" /> Pending
+                        <Pill tone="muted" icon={<Clock className="w-3 h-3" />}>Pending</Pill>
+                    )}
+                    {lead.booked ? (
+                        <span className="block mt-1.5 text-label font-medium text-positive-400">Booked</span>
+                    ) : lead.replied ? (
+                        <span className="block mt-1.5 text-label font-medium text-neutral-300">
+                            {lead.positiveReply ? 'Replied · interested' : 'Replied'}
                         </span>
-                    )}
-                    {lead.booked && (
-                        <span className="block mt-1.5 text-[10px] font-medium text-positive-400">Booked ✓</span>
-                    )}
+                    ) : null}
                 </td>
 
                 {/* Actions */}
-                <td className="px-5 py-4">
+                <td className="px-5 py-4 align-top">
                     <div className="flex items-center gap-1">
-                        {/* Edit */}
-                        {lead.dmContent && !isEditing && (
-                            <button
-                                onClick={() => onStartEdit(lead)}
-                                title="Edit DM"
-                                className={ICON_BTN.neutral}
-                            >
-                                <Edit3 className="w-3.5 h-3.5" />
+                        {/* Edit — only before it has gone out. */}
+                        {lead.dmContent && !isEditing && !lead.dmSent && (
+                            <button type="button" onClick={() => onStartEdit(lead)}
+                                title="Edit DM" aria-label={`Edit the DM to ${who}`} className={ICON_BTN.neutral}>
+                                <Edit3 className="w-4 h-4" aria-hidden />
                             </button>
                         )}
 
                         {/* Approve */}
-                        {lead.dmContent && !lead.approved && (
-                            <button
-                                onClick={() => onApprove(lead.id)}
-                                title="Approve"
-                                className={ICON_BTN.brand}
-                            >
-                                <Check className="w-3.5 h-3.5" />
+                        {lead.dmContent && !lead.approved && !lead.dmSent && (
+                            <button type="button" onClick={() => onApprove(lead.id)}
+                                title="Approve" aria-label={`Approve the DM to ${who}`} className={ICON_BTN.positive}>
+                                <Check className="w-4 h-4" aria-hidden />
                             </button>
                         )}
 
-                        {/* Reject */}
-                        {!lead.rejected && (
-                            <button
-                                onClick={() => onReject(lead.id)}
-                                title="Reject"
-                                className={ICON_BTN.danger}
-                            >
-                                <X className="w-3.5 h-3.5" />
+                        {/* Reject — pointless once Sent. */}
+                        {!lead.rejected && !lead.dmSent && (
+                            <button type="button" onClick={() => onReject(lead.id)}
+                                title="Reject" aria-label={`Reject the DM to ${who}`} className={ICON_BTN.danger}>
+                                <X className="w-4 h-4" aria-hidden />
                             </button>
                         )}
 
                         {/* Mark replied */}
                         {lead.dmSent && !lead.replied && (
                             <button
+                                type="button"
                                 onClick={() => {
                                     onUpdateLead({ ...lead, replied: true });
                                     // Open (never close) — matches the pre-extraction behaviour,
                                     // which set the id outright rather than toggling.
                                     if (!showBattlecards) onToggleBattlecards(lead.id);
                                 }}
-                                title="Mark as Replied"
+                                title="Mark as replied"
+                                aria-label={`Mark ${who} as replied`}
                                 className={ICON_BTN.neutral}
                             >
-                                <MessageCircle className="w-3.5 h-3.5" />
+                                <MessageCircle className="w-4 h-4" aria-hidden />
                             </button>
                         )}
-                        {/* Mark positive reply */}
+                        {/* Mark positive reply — its own icon; it used to share
+                            "Mark replied"'s speech bubble. */}
                         {lead.replied && !lead.positiveReply && (
-                            <button
-                                onClick={() => onUpdateLead({ ...lead, positiveReply: true })}
-                                title="Mark as Positive Reply"
-                                className={ICON_BTN.brand}
-                            >
-                                <MessageCircle className="w-3.5 h-3.5" />
+                            <button type="button" onClick={() => onUpdateLead({ ...lead, positiveReply: true })}
+                                title="Mark as interested" aria-label={`Mark ${who}'s reply as interested`} className={ICON_BTN.positive}>
+                                <ThumbsUp className="w-4 h-4" aria-hidden />
                             </button>
                         )}
                         {/* Mark booked */}
                         {lead.positiveReply && !lead.booked && (
-                            <button
-                                onClick={() => onUpdateLead({ ...lead, booked: true })}
-                                title="Mark as Booked"
-                                className={ICON_BTN.brand}
-                            >
-                                <CalendarCheck className="w-3.5 h-3.5" />
+                            <button type="button" onClick={() => onUpdateLead({ ...lead, booked: true })}
+                                title="Mark as booked" aria-label={`Mark ${who} as booked`} className={ICON_BTN.positive}>
+                                <CalendarCheck className="w-4 h-4" aria-hidden />
                             </button>
                         )}
                         {/* Reply battlecards */}
                         {lead.replied && (
                             <button
+                                type="button"
                                 onClick={() => onToggleBattlecards(lead.id)}
-                                title="Reply battlecards"
+                                title="Suggested replies"
+                                aria-label={`Suggested replies for ${who}`}
+                                aria-expanded={showBattlecards}
                                 className={showBattlecards
-                                    ? 'p-1.5 rounded-lg transition-all text-neutral-300 bg-neutral-500/10'
+                                    ? 'p-1.5 rounded-lg transition-colors text-white bg-white/10'
                                     : ICON_BTN.neutral}
                             >
-                                <MessagesSquare className="w-3.5 h-3.5" />
+                                <MessagesSquare className="w-4 h-4" aria-hidden />
                             </button>
                         )}
 
                         {/* Generate DM for this lead */}
                         {!lead.dmContent && (
                             <button
+                                type="button"
                                 onClick={() => onGenerateDM(lead)}
                                 disabled={isGenerating}
-                                title="Generate DM"
-                                className={`${ICON_BTN.info} disabled:opacity-40`}
+                                title="Write DM"
+                                aria-label={`Write a DM for ${who}`}
+                                className={`${ICON_BTN.neutral} disabled:opacity-40`}
                             >
-                                <Sparkles className="w-3.5 h-3.5" />
+                                <Sparkles className="w-4 h-4" aria-hidden />
                             </button>
                         )}
 
                         {/* Delete */}
                         {canDelete && (
-                            <button
-                                onClick={() => onDelete(lead)}
-                                title="Delete"
-                                className={ICON_BTN.dangerQuiet}
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
+                            <button type="button" onClick={() => onDelete(lead)}
+                                title="Delete" aria-label={`Delete ${who} from the queue`} className={ICON_BTN.dangerQuiet}>
+                                <Trash2 className="w-4 h-4" aria-hidden />
                             </button>
                         )}
                     </div>

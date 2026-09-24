@@ -69,6 +69,12 @@ it off a "yes, Tuesday works". Sent acquired this way carries no send date,
 because nothing observed when the send happened.
 _Avoid_: delivered, dispatched, queued
 
+**Handed off**:
+A delivered Handoff carried the Lead's approved DM to the extension. The
+extension accepted the work; nothing has been observed to send yet, so a
+Handed-off Lead is not Sent and moves no metric.
+_Avoid_: queued, scheduled, sending
+
 **Send Cap**:
 The maximum number of DMs the extension will send in one day. Set by the
 operator, enforced by the extension.

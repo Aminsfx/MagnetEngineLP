@@ -11,26 +11,33 @@ This file is the contract. Tokens live in exactly two places — `tailwind.confi
 (class names) and `src/lib/theme.ts` (raw values, for the two places a class
 cannot reach). Pick a token by **what it means**, never by what it looks like.
 
-Deliberately *not* a third place: root `index.css`. It holds `@tailwind`
-directives, keyframes and three animation helpers, and declares no colour at
-all. Tailwind resolves these tokens at build time from plain hex, so no CSS
-custom properties are needed and none were added — a `:root { --brand: … }`
-block would only be a second definition of the same values to drift from.
+Deliberately *not* a third place: the stylesheets. `index.css` and the landing
+kit's `landing.css` reach colours only through Tailwind's `theme()` (the
+approval card's trace marks, the scrollbar, the hero scrim), never a new value.
+Tailwind resolves these tokens at build time from plain hex, so no CSS custom
+properties are needed and none were added — a `:root { --brand: … }` block
+would only be a second definition of the same values to drift from. The one
+exception is `extension/popup.html`, which cannot use this build and restates
+the values it needs, each commented with its token.
 
 ## Roles
 
-The palette is **orange / black / white** on the public pages, and **black and
-white** once signed in — the dashboard carries no brand colour at all. The two
-exceptions there are `positive` and `danger`, which are the only hues in the
-product that a user has to be able to read at a glance: green confirms, red
-destroys. Everything else in the dashboard is white, gray or black.
+The palette is **black and white, everywhere** — the dashboard, the sign-in
+and activation pages, the legal pages, the extension popup, and the landing
+pages (`/`, `/lp/b`, `/lp/c`). The two exceptions are `positive` and
+`danger`, the only hues in the product that a user has to be able to read at a
+glance: green confirms, red destroys. Everything else is white, gray or black.
+
+The owner moved the public side onto the dashboard's palette on 2026-09-24.
+Nothing routed uses orange (`brand`) any more; its last user is the retired
+`src/pages/LandingPage.tsx`, which no route renders.
 
 It is expressed entirely in roles, so changing any of this means editing
 `tailwind.config.js` and `src/lib/theme.ts` and nothing else.
 
 | Role | Hue | Means |
 |---|---|---|
-| `brand` | orange | Primary action, "on". The product's one accent — **public pages only**. |
+| `brand` | orange | Retired with the old landing page. Do not add new uses — the primary action is white. |
 | `positive` | emerald | A good outcome in data, and the confirming half of a pair of actions. The dashboard's one colour. |
 | `info` | amber | AI and generation affordances **only**. Nothing else earns it. |
 | `accent` | amber | Decoration that needs a second colour — gradients, avatar placeholders, a progress bar. Carries no meaning. |
@@ -50,9 +57,13 @@ separate for the same reason.
 
 Where each one is allowed:
 
-- `brand` (orange) — landing, login, activate, legal. Never inside the dashboard.
-- `positive` (emerald) and `danger` (red) — the dashboard. A confirming action, a
+- `brand` (orange) — nowhere new. Only the unrouted old landing page still uses it.
+- `positive` (emerald) and `danger` (red) — every surface. A confirming action, a
   good outcome, a destructive action, a failure. Nothing decorative earns either.
+  The one reach outside a class: Whop's checkout takes `POSITIVE[500]` as its
+  accent, because paying is the confirming action on /activate.
+- The extension popup cannot use this build, so `extension/popup.html` restates
+  the values it needs as CSS custom properties, each commented with its token.
 - `info`, `accent`, `caution` — defined, and deliberately unused in the dashboard,
   which renders them as white or neutral. They still say what a thing *means*,
   which is what decides where a colour would go if one came back.
@@ -112,10 +123,10 @@ of them:
 
 | Token | Hex | Was | Use for |
 |---|---|---|---|
-| `surface` | `#050505` | `bg-[#030604]` ×60, `#0a1a14`, `#030303` ×2, `#0a0a0a`, `#020403`, `#05070A` | The app background |
-| `surface-raised` | `#0e0e0e` | `bg-[#050A08]` ×26 | Cards sitting on the app background |
-| `surface-sunken` | `#0a0a0a` | `bg-[#030A06]` ×19 | Dashboard cards |
-| `surface-overlay` | `#171717` | `bg-[#0A1510]`, `bg-[#0D1F14]` ×5 | Menus, popovers, dropdowns, inputs |
+| `surface` | `#08080a` | `bg-[#030604]` ×60, `#0a1a14`, `#030303` ×2, `#0a0a0a`, `#020403`, `#05070A` | The app background |
+| `surface-raised` | `#101014` | `bg-[#050A08]` ×26 | Cards sitting on the app background |
+| `surface-sunken` | `#0c0c0f` | `bg-[#030A06]` ×19 | Dashboard cards |
+| `surface-overlay` | `#16161b` | `bg-[#0A1510]`, `bg-[#0D1F14]` ×5 | Menus, popovers, dropdowns, inputs |
 
 The grounds carry **no hue**. They used to be emerald-tinted (`#030604` and
 friends), which read as faintly green the moment a warm accent sat on top —
@@ -172,8 +183,9 @@ duplicate it.
 
 - **Recharts props** — `CHART.sent`, `.replies`, `.axisTick`, `.legendText`,
   `.grid`, `.cursor`, `.dotStroke`. `ConversionChart` passed eight literals.
-- **The card bezel** — `CARD_BEZEL` (plus `CARD_BEZEL_BRAND`,
-  `CARD_BEZEL_DANGER`). A 1px gradient edge around a card with a hairline inner
+- **The card bezel** — `CARD_BEZEL` (plus `CARD_BEZEL_STRONG`,
+  `CARD_BEZEL_DANGER`; the public pages' 1.25rem `BrandPanel` in
+  `ApprovalPreview.tsx` uses the same halves). A 1px gradient edge around a card with a hairline inner
   highlight; not expressible as a utility, so it was inline-styled and
   copy-pasted verbatim at 16 sites across 8 files. Apply `.outer` to the
   `rounded-[1.5rem] p-[1px]` wrapper, `.inner` to the card inside it:
@@ -183,15 +195,14 @@ duplicate it.
     <div className="bg-surface-sunken rounded-[calc(1.5rem-1px)] p-6" style={CARD_BEZEL.inner}>
   ```
 
-- **Metric glows** — `MetricsGrid`'s `glowColor` prop. Use
-  `alpha(CHANNEL.<role>, n)`; the role must match the tile's meaning, so the
-  glow's role must match the tile's meaning — never pick one by eye.
+- **Metric glows** — retired with `MetricsGrid`. The home page's numbers
+  (`TodayPanel`, `Funnel`) carry no glow; a number is emphasised by size.
 
 ## How to pick
 
 1. **Is it chrome?** Text, a border, a divider, a disabled state → `neutral`.
-2. **Is it the one thing to click?** → `brand`. One per view. If two things on
-   screen are `brand-500`, one of them is wrong.
+2. **Is it the one thing to click?** → white (`bg-white text-surface`). One per
+   view. If two things on screen are solid white buttons, one of them is wrong.
 3. **Is it a state the data is in?** → `positive` / `caution` / `danger` by
    severity. Reach for `caution` before `danger`: red means something failed or
    will be destroyed, not that a number is high.
@@ -203,3 +214,29 @@ duplicate it.
 For a ground, pick by depth (`surface` → `raised` → `sunken` → `overlay`), never
 by eyedropper. If a new arbitrary `bg-[#hex]` feels necessary, one of the four
 is almost certainly close enough — nudge the design, not the palette.
+
+## Type
+
+Two self-hosted variable faces (`src/assets/fonts`, `@font-face` in `index.css`,
+Latin cut preloaded from `index.html`): **Schibsted Grotesk** for everything,
+**Sometype Mono** for data and measurement only. A third, **Instrument Serif
+italic** (`font-serif`, via `@fontsource`, imported only by the landing kit),
+sets one accent phrase per public heading and nothing else. Each has a local "Fallback"
+face re-metricked to match, so the swap at load does not move text. Do not
+re-add the Google Fonts `<link>`: it was render-blocking and third-party.
+
+The whole app uses five named size roles from `tailwind.config.js`, not
+hand-typed pixel sizes (the dashboard had 137 of them across eight values,
+down to 8px): `text-label` (11px, captions and badges), `text-meta`
+(13px, fine print and nav), `text-body-sm` (15px, dense body), `text-body`
+(16px, reading body), `text-lead` (18px, intro under a heading). Headings are
+fluid `clamp()`s at their call sites; the display tracking floor is `-0.04em`.
+Secondary text on the near-black grounds is `neutral-400` or lighter where it
+carries information (the trial's charge date is information); `neutral-500` is
+the floor, for redundant captions and placeholders only. `neutral-600` and
+`neutral-700` are not text colours — 2.5:1 and 1.9:1 on `surface-sunken`. They
+remain fine for borders, dividers and disabled chrome.
+
+Inside the dashboard, text selection is white (`selection:` on the shell root),
+because the public pages' orange selection is brand and the dashboard carries
+none.

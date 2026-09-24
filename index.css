@@ -1,11 +1,107 @@
+/* ── Type ─────────────────────────────────────────────────────────
+   Self-hosted variable cuts (OFL, licences beside the files). One file per
+   family covers every weight the app uses; the Latin-Ext cuts download only
+   when a glyph outside Latin-1 appears, e.g. in a prospect's name.
+
+   The "Fallback" faces are local Arial / Courier New re-metricked to the
+   real faces (size-adjust from measured average advance, ascent/descent from
+   the fonts' own tables), so the swap at load moves nothing on screen. */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./src/assets/fonts/schibsted-grotesk-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./src/assets/fonts/schibsted-grotesk-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Sometype Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./src/assets/fonts/sometype-mono-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Sometype Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./src/assets/fonts/sometype-mono-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Helvetica');
+  size-adjust: 103.84%;
+  ascent-override: 94.05%;
+  descent-override: 24.83%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Sometype Mono Fallback';
+  src: local('Courier New'), local('Courier');
+  size-adjust: 96.65%;
+  ascent-override: 95.71%;
+  descent-override: 28.45%;
+  line-gap-override: 0%;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Global styles for MagnetEngine */
-body {
+@layer base {
+  body {
     margin: 0;
     padding: 0;
+    font-family: theme('fontFamily.sans');
+    font-optical-sizing: auto;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Paragraphs avoid a stranded last word; headings balance (set per use). */
+  p,
+  li,
+  dd {
+    text-wrap: pretty;
+  }
+
+  /* A visible, consistent keyboard ring wherever a component does not draw
+     its own. White rather than brand: the dashboard carries no orange. */
+  :focus-visible {
+    outline: 2px solid theme('colors.neutral.200');
+    outline-offset: 3px;
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+  }
+}
+
+/* The hairline grid, kept for the admin console's backdrop. */
+.grid-bg {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
 /* ── Toast entrance ───────────────────────────────────────────── */
@@ -20,39 +116,141 @@ body {
   100% { background-position: -100% 0; }
 }
 
-/* ── Hero text entrance (fade up, fires once on load) ─────────── */
-@keyframes hero-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
+/* ── The landing page's one authored moment ───────────────────────
+   The approval pane plays the product's mechanism once: each fact the AI
+   read on the profile is marked, then the line of the message written
+   from it is underlined, pair by pair — then the Approve control lights.
+   The resting state IS the final frame (every mark and underline drawn),
+   so without the class, without JS, or with reduced motion, the pane
+   reads complete. `.is-playing` is added once, when the pane is on screen.
+
+   Material: a highlighter stroke and an ink underline, drawn by sweeping a
+   background-size — the page's own marks, not a generic fade-and-rise.   */
+.trace-mark {
+  background-color: transparent; /* <mark> ships a yellow UA highlight */
+  background-image: linear-gradient(theme('colors.brand.500 / 18%'), theme('colors.brand.500 / 18%'));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: color 200ms ease;
+}
+
+.trace-line {
+  background-image: linear-gradient(theme('colors.brand.400 / 70%'), theme('colors.brand.400 / 70%'));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1px;
+  padding-bottom: 1px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: color 200ms ease;
+}
+
+/* A pair lights together when either half is hovered or focused. */
+.trace-pair-on.trace-mark {
+  background-image: linear-gradient(theme('colors.brand.500 / 34%'), theme('colors.brand.500 / 34%'));
+  color: theme('colors.brand.100');
+}
+
+.trace-pair-on.trace-line {
+  color: theme('colors.white');
+}
+
+/* The same marks in the dashboard's palette (`tone="mono"`): a white
+   highlighter and a white ink underline. The Approve control keeps its green. */
+.trace-mono .trace-mark {
+  background-image: linear-gradient(theme('colors.white / 12%'), theme('colors.white / 12%'));
+}
+
+.trace-mono .trace-line {
+  background-image: linear-gradient(theme('colors.white / 55%'), theme('colors.white / 55%'));
+}
+
+.trace-mono .trace-pair-on.trace-mark {
+  background-image: linear-gradient(theme('colors.white / 24%'), theme('colors.white / 24%'));
+  color: theme('colors.white');
+}
+
+@keyframes trace-sweep {
+  from { background-size: 0% 100%; }
+  to   { background-size: 100% 100%; }
+}
+
+@keyframes trace-underline {
+  from { background-size: 0% 1px; }
+  to   { background-size: 100% 1px; }
+}
+
+@keyframes trace-ready {
+  0%   { box-shadow: 0 0 0 0 theme('colors.positive.400 / 0%'); }
+  35%  { box-shadow: 0 0 0 5px theme('colors.positive.400 / 22%'); }
+  100% { box-shadow: 0 0 0 10px theme('colors.positive.400 / 0%'); }
+}
+
+.is-playing .trace-mark {
+  animation: trace-sweep 520ms cubic-bezier(0.65, 0, 0.35, 1) both;
+  animation-delay: calc(var(--i) * 900ms + 250ms);
+}
+
+.is-playing .trace-line {
+  animation: trace-underline 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 900ms + 700ms);
+}
+
+.is-playing .trace-approve {
+  animation: trace-ready 1100ms cubic-bezier(0.16, 1, 0.3, 1) 3150ms both;
+}
+
+/* ── How it works: the rail fills as the reader moves down the steps.
+   The scroll relationship is the information (you are on step n of 3),
+   so it is scroll-driven where supported; elsewhere the rail is drawn. */
+@supports (animation-timeline: view()) {
+  .rail-fill {
+    transform-origin: top;
+    animation: rail-grow linear both;
+    animation-timeline: view();
+    animation-range: entry 60% cover 55%;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+}
+
+@keyframes rail-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-playing .trace-mark,
+  .is-playing .trace-line,
+  .is-playing .trace-approve,
+  .rail-fill {
+    animation: none !important;
+  }
+
+  .rail-fill {
+    transform: none !important;
   }
 }
 
-.hero-animate {
-  opacity: 0;
-  animation: hero-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Scrollbar, from tokens: the app ground as the track, overlay-to-neutral
+   for the thumb. */
+::-webkit-scrollbar {
+  width: 8px;
 }
 
-/* ── Planet outer space glow — blinks in sync with the orbit ──── */
-@keyframes planet-blink {
-  0%, 100% { opacity: 0.12; }
-  50%       { opacity: 1;    }
+::-webkit-scrollbar-track {
+  background: theme('colors.surface.DEFAULT');
 }
 
-.planet-glow {
-  animation: planet-blink 2.5s ease-in-out infinite;
+::-webkit-scrollbar-thumb {
+  background: theme('colors.neutral.800');
+  border-radius: 4px;
 }
 
-/* ── Orbit rim glow — the bright edge that blinks ─────────────── */
-@keyframes orbit-blink {
-  0%, 100% { opacity: 0;  }
-  50%       { opacity: 1;  }
+::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.neutral.700');
 }
 
-.orbit-glow {
-  animation: orbit-blink 2.5s ease-in-out infinite;
+html {
+  scrollbar-color: theme('colors.neutral.800') theme('colors.surface.DEFAULT');
 }

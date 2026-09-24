@@ -80,7 +80,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
             </div>
 
             {/* Drop zone */}
-            <label className="flex flex-col items-center justify-center gap-2 py-10 rounded-2xl border border-dashed border-white/10 text-neutral-600 hover:text-neutral-400 hover:border-white/20 transition-all cursor-pointer text-center px-4">
+            <label className="flex flex-col items-center justify-center gap-2 py-10 rounded-2xl border border-dashed border-white/10 text-neutral-400 hover:text-neutral-200 hover:border-white/20 transition-colors cursor-pointer text-center px-4">
                 <Upload className="w-5 h-5" />
                 <span className="text-sm">
                     {fileName || 'Drop a CSV here or click to browse — exports from Apify or any scraper work'}
@@ -103,7 +103,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                 <div className="flex items-center gap-2 text-white text-sm">
                     <CheckCircle className="w-4 h-4" />
                     ✓ {imported} leads added to the Approval Queue
-                    {note && <span className="text-neutral-500 text-xs ml-2">{note}</span>}
+                    {note && <span className="text-neutral-400 text-xs ml-2">{note}</span>}
                 </div>
             )}
 
@@ -113,11 +113,12 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         {FIELD_LABELS.map(({ field, label, required }) => (
                             <div key={field}>
-                                <label className="block text-[10px] font-semibold text-neutral-600 uppercase tracking-wider mb-1.5">
+                                <label htmlFor={`csv-map-${field}`} className="block text-label font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
                                     {label}{required && <span className="text-white"> *</span>}
                                 </label>
                                 <div className="relative">
                                     <select
+                                        id={`csv-map-${field}`}
                                         value={mapping[field] ?? ''}
                                         onChange={e => setMapping(prev => ({ ...prev, [field]: e.target.value || undefined }))}
                                         className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-3 pr-8 py-2.5 text-xs text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
@@ -127,7 +128,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                                             <option key={h} value={h}>{h}</option>
                                         ))}
                                     </select>
-                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600 pointer-events-none" />
+                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                                 </div>
                             </div>
                         ))}
@@ -140,7 +141,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                                 <thead className="border-b border-white/5">
                                     <tr>
                                         {['Handle', 'Name', 'Followers', 'Bio'].map(h => (
-                                            <th key={h} className="px-4 py-2.5 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest">{h}</th>
+                                            <th key={h} className="px-4 py-2.5 text-label font-semibold text-neutral-400 uppercase tracking-widest">{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -150,7 +151,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
                                             <td className="px-4 py-2.5 text-neutral-300">@{l.handle}</td>
                                             <td className="px-4 py-2.5 text-neutral-400">{l.name}</td>
                                             <td className="px-4 py-2.5 text-neutral-400">{l.followers.toLocaleString()}</td>
-                                            <td className="px-4 py-2.5 text-neutral-600 truncate max-w-[240px]">{l.bio ?? '—'}</td>
+                                            <td className="px-4 py-2.5 text-neutral-400 truncate max-w-[240px]">{l.bio ?? '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -160,7 +161,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
 
                     {/* Footer */}
                     <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-neutral-600 font-mono">
+                        <span className="text-label text-neutral-400 font-mono">
                             {previewLeads.length} rows found · {skipped} skipped (no handle)
                         </span>
                         <button
