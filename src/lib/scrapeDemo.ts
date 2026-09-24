@@ -103,7 +103,7 @@ const NICHES: Niche[] = [
 const SHAPE: Record<Exclude<SourceKind, 'profiles'>, { size: number; total: number }> = {
     keyword: { size: 30, total: 90 },
     hashtag: { size: 24, total: 220 },
-    followers: { size: 50, total: 400 },
+    followers: { size: 50, total: 50 },     // Instagram's outsider cap (FOLLOWERS_VISIBLE)
     following: { size: 50, total: 180 },
     likers: { size: 120, total: 120 },
     commenters: { size: 15, total: 60 },

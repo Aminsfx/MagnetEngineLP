@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { Lead } from '../../lib/types';
 import {
     runScrape, explainEmptyScrape, parseQueries,
-    MAX_PER_QUERY, SCRAPE_DEMO, type ScrapeProgress, type SourceKind,
+    MAX_PER_QUERY, FOLLOWERS_VISIBLE, SCRAPE_DEMO, type ScrapeProgress, type SourceKind,
 } from '../../lib/scrape';
 import {
     Search, CheckSquare, Square, ChevronDown,
@@ -33,6 +33,8 @@ interface SourceOption {
     /** Default campaign name from the first query. */
     campaign: (first: string) => string;
     multiline?: boolean;
+    /** Instagram's own ceiling per query, when it is below anything the Operator could pick. */
+    cap?: number;
 }
 
 const at = (q: string) => `@${q.replace(/^@/, '').replace(/\/+$/, '').split('/').pop()}`;
@@ -66,10 +68,11 @@ const SOURCES: SourceOption[] = [
         blurb: "An account's followers — a competitor's audience",
         icon: Users,
         inputLabel: 'Accounts',
-        inputHint: 'Usernames or profile links. Instagram only lists followers of public accounts.',
+        inputHint: `Usernames or profile links of public accounts. Instagram shows outsiders only about ${FOLLOWERS_VISIBLE} followers per account, so list several — competitors, peers, local names.`,
         placeholder: 'garyvee, alexhormozi, yourcompetitor',
         unit: ['account', 'accounts'],
         campaign: q => `Followers of ${at(q)}`,
+        cap: FOLLOWERS_VISIBLE,
     },
     {
         kind: 'following',
@@ -185,6 +188,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
     const source = SOURCES.find(s => s.kind === kind)!;
     const queries = parseQueries(kind, raw);
     const isList = kind === 'profiles';
+    const perQuery = source.cap ?? limit;
 
     const showToast = (msg: string, ok = true) => {
         setToast({ msg, ok });
@@ -217,7 +221,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
         try {
             const outcome = await runScrape(
-                { kind, queries, limit, enrich },
+                { kind, queries, limit: perQuery, enrich },
                 setProgress,
                 () => stopRef.current,
             );
@@ -249,7 +253,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         }
     // resetRun and source are derived from the deps below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [kind, raw, limit, enrich]);
+    }, [kind, raw, perQuery, enrich]);
 
     const handleStop = () => {
         stopRef.current = true;
@@ -471,6 +475,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                         {/* ── Limit + details ────────────────────────────── */}
                         {!isList && (
                             <div className="grid sm:grid-cols-2 gap-3">
+                                {source.cap ? (
+                                    <div className="px-4 py-3 rounded-xl border border-white/8 bg-white/3 self-end">
+                                        <p className="text-xs font-medium text-neutral-200">About {source.cap} per {source.unit[0]}</p>
+                                        <p className="text-label text-neutral-400 mt-0.5">Instagram's limit, not a setting — add more {source.unit[1]} for more leads</p>
+                                    </div>
+                                ) : (
                                 <div>
                                     <label htmlFor="campaignbu-limit" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                                         Profiles per {source.unit[0]}
@@ -490,6 +500,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
                                     </div>
                                 </div>
+                                )}
 
                                 <button
                                     type="button"
@@ -543,7 +554,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} to look up</>
                                     : <>
                                         {queries.length} {source.unit[queries.length === 1 ? 0 : 1]}
-                                        {' '}× {limit} = up to {queries.length * limit} profiles
+                                        {' '}× {source.cap ? `~${perQuery}` : perQuery} = {source.cap ? 'about' : 'up to'} {queries.length * perQuery} profiles
                                     </>
                                 )}
                                 {lookupsLeft !== undefined && (

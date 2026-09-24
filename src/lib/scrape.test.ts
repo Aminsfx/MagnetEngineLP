@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe('runScrape', () => {
     it('pages until the limit, then loads every profile in full', async () => {
-        const out = await runScrape({ kind: 'followers', queries: ['competitor'], limit: 120, enrich: true });
+        const out = await runScrape({ kind: 'following', queries: ['competitor'], limit: 120, enrich: true });
 
         expect(out.leads).toHaveLength(120);
         expect(calls('page')).toHaveLength(3);              // 50 + 50 + 20 of the third page

@@ -30,12 +30,12 @@ describe('CampaignBuilder', () => {
         expect(document.body.textContent).not.toMatch(/hiker|apify/i);
     });
 
-    it('scrapes followers and adds them to the queue under a campaign named for the source', async () => {
+    it('scrapes a following list and adds it to the queue under a campaign named for the source', async () => {
         const user = userEvent.setup();
         const onLeadsScraped = vi.fn();
         render(<CampaignBuilder onLeadsScraped={onLeadsScraped} />);
 
-        await user.click(screen.getByRole('button', { name: /^Followers/ }));
+        await user.click(screen.getByRole('button', { name: /^Following/ }));
         await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
         await user.selectOptions(screen.getByLabelText(/^Profiles per account/), '25');
         expect(screen.getByText(/1 account × 25 = up to 25 profiles/)).toBeInTheDocument();
@@ -47,8 +47,20 @@ describe('CampaignBuilder', () => {
         expect(onLeadsScraped).toHaveBeenCalledTimes(1);
         const leads = onLeadsScraped.mock.calls[0][0];
         expect(leads).toHaveLength(25);
-        expect(leads[0].campaignName).toMatch(/^Followers of @competitor · /);
+        expect(leads[0].campaignName).toMatch(/^Followed by @competitor · /);
         expect(leads.every((l: { bio?: string }) => l.bio)).toBe(true); // details loaded
+    });
+
+    it("states Instagram's ~50-follower cap instead of offering a limit it can't meet", async () => {
+        const user = userEvent.setup();
+        render(<CampaignBuilder onLeadsScraped={vi.fn()} />);
+
+        await user.click(screen.getByRole('button', { name: /^Followers/ }));
+        expect(screen.queryByLabelText(/^Profiles per account/)).not.toBeInTheDocument();
+        expect(screen.getByText('About 50 per account')).toBeInTheDocument();
+
+        await user.type(screen.getByLabelText(/^Accounts/), 'a, b, c');
+        expect(screen.getByText(/3 accounts × ~50 = about 150 profiles/)).toBeInTheDocument();
     });
 
     it("shows a query's own reason when it comes back empty", async () => {

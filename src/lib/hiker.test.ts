@@ -100,6 +100,20 @@ describe('readTarget', () => {
         expect(readTarget(src, { user: user(528817151, 'nasa'), status: 'ok' })?.id).toBe('528817151');
     });
 
+    it('picks the city over venues that merely mention it — measured on live data', () => {
+        // v3 answered "Miami" with Homestead-Miami Speedway first; v2 lists the
+        // city, but not always first.
+        const src = parseSource({ kind: 'location', query: 'miami' })!;
+        expect(resolveRequest(src)?.path).toBe('/v2/fbsearch/places');
+        const data = { items: [
+            { title: 'Homestead-Miami Speedway', location: { pk: 351890 } },
+            { title: 'Miami South Beach', location: { pk: 1916759361938729 } },
+            { title: 'Miami, FL', location: { pk: 222957150 } },
+            { title: 'Miami', location: { pk: '183204781823602' } },
+        ] };
+        expect(readTarget(src, data)).toEqual({ id: '183204781823602', label: 'Miami' });
+    });
+
     it('takes the first place that has a pk, and names it', () => {
         const src = parseSource({ kind: 'location', query: 'miami' })!;
         const data = { items: [{ title: 'Nowhere', location: {} }, { title: 'Miami, Florida', location: { pk: 212928653, name: 'Miami' } }] };

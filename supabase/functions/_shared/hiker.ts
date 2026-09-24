@@ -191,11 +191,21 @@ export function resolveRequest(src: Source): HikerRequest | null {
     case "commenters":
       return { path: "/v1/media/pk/from/code", params: { code: src.query } };
     case "location":
-      return { path: "/v3/fbsearch/places", params: { query: src.query } };
+      // v2, not v3: v3 answers "Miami" with venues (a speedway, a hospital)
+      // and never the city itself; v2 lists the city first.
+      return { path: "/v2/fbsearch/places", params: { query: src.query, safe_int: "true" } };
     default:
       return null;
   }
 }
+
+/**
+ * Instagram shows an outsider roughly the first 50 followers of any account
+ * (`should_limit_list_of_followers: true`, no next page) — measured live on
+ * g2, v1 and gql alike, for a 100k account as much as a 1M one. Following
+ * lists still page.
+ */
+export const FOLLOWERS_VISIBLE = 50;
 
 export interface Target {
   id: string;
@@ -223,14 +233,24 @@ export function readTarget(src: Source, data: unknown): Target | null {
     case "location": {
       const items = (data as { items?: unknown })?.items;
       if (!Array.isArray(items)) return null;
+      // The closest name wins, first among equals: "Miami" over "Miami, FL"
+      // over "Miami South Beach" over anything that merely mentions Miami.
+      const q = src.query.toLowerCase();
+      const score = (t: string) => (t === q ? 3 : t.startsWith(`${q},`) ? 2 : t.startsWith(q) ? 1 : 0);
+      let best: Target | null = null;
+      let bestScore = -1;
       for (const item of items) {
         const loc = (item as { location?: Record<string, unknown> })?.location;
         const pk = loc?.pk ?? loc?.facebook_places_id;
         if (pk === undefined || pk === null || pk === "") continue;
-        const title = (item as { title?: unknown }).title ?? loc?.name;
-        return { id: String(pk), label: String(title ?? src.query) };
+        const title = String((item as { title?: unknown }).title ?? loc?.name ?? src.query);
+        const s = score(title.toLowerCase());
+        if (s > bestScore) {
+          best = { id: String(pk), label: title };
+          bestScore = s;
+        }
       }
-      return null;
+      return best;
     }
     default:
       return null;

@@ -3,6 +3,7 @@ import { FunctionError, invokeFunction } from './functions';
 import { intake } from './intake';
 import {
     ENRICH_BATCH,
+    FOLLOWERS_VISIBLE,
     MAX_PER_QUERY,
     type ProfileRow,
     type SourceKind,
@@ -21,7 +22,7 @@ import {
  */
 
 export type { SourceKind };
-export { MAX_PER_QUERY };
+export { MAX_PER_QUERY, FOLLOWERS_VISIBLE };
 
 /**
  * Demo mode (`npm run demo`): the scrape step answers from generated sample
