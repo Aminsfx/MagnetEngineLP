@@ -1,59 +1,152 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Lead } from '../../lib/types';
-import { runApifyScrape, runFollowersScrape, explainEmptyScrape, SearchParams, FollowersParams } from '../../lib/apify';
+import {
+    runScrape, explainEmptyScrape, parseQueries,
+    MAX_PER_QUERY, SCRAPE_DEMO, type ScrapeProgress, type SourceKind,
+} from '../../lib/scrape';
 import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
-    X, ArrowRight, Plus, Settings, Mail, UserCheck,
-    FileSpreadsheet,
+    X, ArrowRight, Plus, Settings, UserCheck,
+    FileSpreadsheet, Hash, Heart, MessageCircle,
+    MapPin, Sparkles, AtSign, Info, CircleStop,
+    type LucideIcon,
 } from 'lucide-react';
 import { NICHE_PRESETS } from '../../lib/presets';
 import { CsvImport } from './CsvImport';
-import { BRAND, CHANNEL, alpha } from '../../lib/theme';
+import { CHANNEL, alpha } from '../../lib/theme';
 
 interface CampaignBuilderProps {
     onLeadsScraped: (leads: Lead[]) => void;
 }
 
-type SearchTypeOption = {
-    value: SearchParams['searchType'];
+interface SourceOption {
+    kind: SourceKind;
     label: string;
-    hint: string;
+    blurb: string;
+    icon: LucideIcon;
+    inputLabel: string;
+    inputHint: string;
     placeholder: string;
-};
+    /** Singular / plural noun for one query, for the "3 accounts × 100" line. */
+    unit: [string, string];
+    /** Default campaign name from the first query. */
+    campaign: (first: string) => string;
+    multiline?: boolean;
+}
 
-const SEARCH_TYPES: SearchTypeOption[] = [
+const at = (q: string) => `@${q.replace(/^@/, '').replace(/\/+$/, '').split('/').pop()}`;
+
+const SOURCES: SourceOption[] = [
     {
-        value: 'user',
-        label: 'Search profiles',
-        hint: 'Find Instagram profiles matching your keywords — best for niche targeting',
-        placeholder: 'coaches, consultants, agency, dm me, skool, ai agency',
+        kind: 'keyword',
+        label: 'Keyword search',
+        blurb: 'Accounts whose name or username matches',
+        icon: Search,
+        inputLabel: 'Search terms',
+        inputHint: 'Instagram matches names and usernames, not bios — use words people put in their name, like "coach" or "agency".',
+        placeholder: 'coaches, consultants, agency, skool, ai agency',
+        unit: ['term', 'terms'],
+        campaign: q => q,
     },
     {
-        value: 'hashtag',
-        label: 'Search hashtags',
-        hint: 'Explore hashtag data and related tags for a given niche',
-        placeholder: 'entrepreneur, digitalmarketing, agency, saas',
+        kind: 'hashtag',
+        label: 'Hashtag',
+        blurb: 'People who recently posted with a hashtag',
+        icon: Hash,
+        inputLabel: 'Hashtags',
+        inputHint: 'The authors of the most recent posts — active accounts, not just big ones.',
+        placeholder: 'smma, businesscoach, realestateagent',
+        unit: ['hashtag', 'hashtags'],
+        campaign: q => `#${q.replace(/^#/, '')}`,
     },
     {
-        value: 'place',
-        label: 'Search locations',
-        hint: 'Find business locations and venue profiles in a specific city',
-        placeholder: 'Miami, New York, Dubai, London',
+        kind: 'followers',
+        label: 'Followers',
+        blurb: "An account's followers — a competitor's audience",
+        icon: Users,
+        inputLabel: 'Accounts',
+        inputHint: 'Usernames or profile links. Instagram only lists followers of public accounts.',
+        placeholder: 'garyvee, alexhormozi, yourcompetitor',
+        unit: ['account', 'accounts'],
+        campaign: q => `Followers of ${at(q)}`,
+    },
+    {
+        kind: 'following',
+        label: 'Following',
+        blurb: 'Who an account follows — its peers and partners',
+        icon: UserCheck,
+        inputLabel: 'Accounts',
+        inputHint: 'Usernames or profile links. Only public accounts show who they follow.',
+        placeholder: 'a business in your niche, an industry leader',
+        unit: ['account', 'accounts'],
+        campaign: q => `Followed by ${at(q)}`,
+    },
+    {
+        kind: 'likers',
+        label: 'Post likers',
+        blurb: 'People who liked a specific post',
+        icon: Heart,
+        inputLabel: 'Post links',
+        inputHint: 'Links to a post or reel. Instagram shows a sample of likers on very popular posts, not all of them.',
+        placeholder: 'https://www.instagram.com/p/…',
+        unit: ['post', 'posts'],
+        campaign: () => 'Likers of a post',
+    },
+    {
+        kind: 'commenters',
+        label: 'Post commenters',
+        blurb: 'People who commented — the most engaged',
+        icon: MessageCircle,
+        inputLabel: 'Post links',
+        inputHint: "Links to a post or reel. Commenters on a competitor's post are already talking about the problem.",
+        placeholder: 'https://www.instagram.com/p/…',
+        unit: ['post', 'posts'],
+        campaign: () => 'Commenters on a post',
+    },
+    {
+        kind: 'location',
+        label: 'Location',
+        blurb: 'People who recently posted at a place',
+        icon: MapPin,
+        inputLabel: 'Places',
+        inputHint: 'A city, neighbourhood or venue. The best match on Instagram is used — its name shows while scraping.',
+        placeholder: 'Miami, Dubai Marina, Shoreditch London',
+        unit: ['place', 'places'],
+        campaign: q => `Posted at ${q}`,
+    },
+    {
+        kind: 'similar',
+        label: 'Similar accounts',
+        blurb: 'Accounts Instagram suggests next to one you name',
+        icon: Sparkles,
+        inputLabel: 'Accounts',
+        inputHint: 'Name an account that looks like your ideal client — you get the accounts Instagram considers alike.',
+        placeholder: 'your best client, a typical prospect',
+        unit: ['account', 'accounts'],
+        campaign: q => `Similar to ${at(q)}`,
+    },
+    {
+        kind: 'profiles',
+        label: 'Handle list',
+        blurb: 'Look up specific accounts you already have',
+        icon: AtSign,
+        inputLabel: 'Usernames',
+        inputHint: 'Usernames or profile links, separated by commas, spaces or new lines. Each one is looked up in full.',
+        placeholder: 'jane.coaching\nmiami_realtor\nhttps://instagram.com/growthwithsam',
+        unit: ['handle', 'handles'],
+        campaign: () => 'Handle list',
+        multiline: true,
     },
 ];
 
-// Actor hard cap is 250 per search term
-const LIMIT_OPTIONS = [10, 25, 50, 100, 150, 200, 250];
+const LIMIT_OPTIONS = [10, 25, 50, 100, 150, 200, MAX_PER_QUERY];
 
-/**
- * Fill for the scrape progress bar. Both tabs render the same bar, so the ramp
- * lives here rather than being re-typed per tab and drifting apart.
- */
+/** Fill for the scrape progress bar — white on black, like every other action surface. */
 function progressFill(progress: number): string {
     return progress === 100
-        ? `linear-gradient(90deg, ${BRAND[600]}, ${BRAND[500]})`
-        : `linear-gradient(90deg, ${BRAND[800]}, ${BRAND[500]}, ${BRAND[400]})`;
+        ? alpha(CHANNEL.white, 0.9)
+        : `linear-gradient(90deg, ${alpha(CHANNEL.white, 0.25)}, ${alpha(CHANNEL.white, 0.85)}, ${alpha(CHANNEL.white, 0.45)})`;
 }
 
 function formatFollowers(n: number): string {
@@ -62,30 +155,26 @@ function formatFollowers(n: number): string {
     return String(n);
 }
 
-export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped }) => {
-    // ── Tab ──────────────────────────────────────────────────────
-    const [tab, setTab] = useState<'search' | 'followers' | 'import'>('search');
+const FIELD = 'w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors';
 
-    // ── Campaign name (attached to every lead from this scrape for tracking) ─
+export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped }) => {
+    const [tab, setTab] = useState<'find' | 'import'>('find');
     const [campaignName, setCampaignName] = useState('');
 
-    // ── Keyword search inputs ────────────────────────────────────
-    const [searchType, setSearchType]   = useState<SearchParams['searchType']>('user');
-    const [searchRaw, setSearchRaw]     = useState('');
-    const [searchLimit, setSearchLimit] = useState(50);
-    const [enhance, setEnhance]         = useState(false);
+    // ── Source + inputs ──────────────────────────────────────────
+    const [kind, setKind]       = useState<SourceKind>('keyword');
+    const [raw, setRaw]         = useState('');
+    const [limit, setLimit]     = useState(50);
+    const [enrich, setEnrich]   = useState(true);
 
-    // ── Followers scraper inputs ─────────────────────────────────
-    const [fUsername, setFUsername]         = useState('');
-    const [fType, setFType]                 = useState<'followers' | 'following'>('followers');
-    const [fMaxItem, setFMaxItem]           = useState(100);
-    const [fEnriched, setFEnriched]         = useState(true);
-
-    // ── Shared scrape state ──────────────────────────────────────
-    const [isScraping, setIsScraping]     = useState(false);
-    const [scrapeProgress, setScrapeProgress] = useState(0);
-    const [scrapeStatus, setScrapeStatus]     = useState('');
-    const [error, setError]               = useState('');
+    // ── Run state ────────────────────────────────────────────────
+    const [isScraping, setIsScraping] = useState(false);
+    const [stopping, setStopping]     = useState(false);
+    const stopRef = useRef(false);
+    const [progress, setProgress]     = useState<ScrapeProgress | null>(null);
+    const [error, setError]           = useState('');
+    const [notes, setNotes]           = useState<string[]>([]);
+    const [lookupsLeft, setLookupsLeft] = useState<number | undefined>();
 
     // ── Results ──────────────────────────────────────────────────
     const [results, setResults]   = useState<Lead[]>([]);
@@ -93,7 +182,9 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
     const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
     const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const activeType = SEARCH_TYPES.find(t => t.value === searchType)!;
+    const source = SOURCES.find(s => s.kind === kind)!;
+    const queries = parseQueries(kind, raw);
+    const isList = kind === 'profiles';
 
     const showToast = (msg: string, ok = true) => {
         setToast({ msg, ok });
@@ -101,95 +192,69 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         toastRef.current = setTimeout(() => setToast(null), 3500);
     };
 
-    const log = (msg: string) => {
-        setScrapeStatus(msg);
-        if (msg.includes('Connecting'))          setScrapeProgress(8);
-        else if (msg.includes('Run started'))    setScrapeProgress(18);
-        else if (msg.includes('RUNNING') || /\d+s/.test(msg)) {
-            const match = msg.match(/(\d+)s/);
-            if (match) {
-                const elapsed = parseInt(match[1]);
-                setScrapeProgress(Math.min(82, 18 + Math.round((elapsed / 240) * 64)));
-            }
-        }
-        else if (msg.includes('Fetching'))       setScrapeProgress(88);
-        else if (msg.includes('Mapping'))        setScrapeProgress(95);
-        else if (msg.includes('Done'))           setScrapeProgress(100);
+    const resetRun = () => {
+        setError('');
+        setNotes([]);
+        setResults([]);
+        setSelected(new Set());
+        setProgress(null);
     };
 
-    const handleSearch = useCallback(async () => {
-        const trimmed = searchRaw.trim();
-        if (!trimmed) { setError('Enter at least one search term.'); return; }
+    const pickSource = (next: SourceKind) => {
+        if (isScraping || next === kind) return;
+        setKind(next);
+        setRaw('');
+        resetRun();
+    };
 
-        setError('');
-        setResults([]);
-        setSelected(new Set());
-        setScrapeProgress(0);
-        setScrapeStatus('');
+    const handleStart = useCallback(async () => {
+        if (queries.length === 0) { setError(`Enter at least one ${source.unit[0]}.`); return; }
+
+        resetRun();
+        stopRef.current = false;
+        setStopping(false);
         setIsScraping(true);
 
-        const params: SearchParams = {
-            search: trimmed,
-            searchType,
-            searchLimit,
-            enhanceUserSearchWithFacebookPage: enhance,
-        };
-
         try {
-            const outcome = await runApifyScrape(params, log);
-            const { leads } = outcome;
-            if (leads.length === 0) {
-                setError(explainEmptyScrape(outcome, 'Try different search terms or a higher limit.'));
-            } else {
-                setResults(leads);
-                setSelected(new Set(leads.map(l => l.id))); // auto-select all
-                log(`✓ ${leads.length} profile${leads.length !== 1 ? 's' : ''} ready.`);
+            const outcome = await runScrape(
+                { kind, queries, limit, enrich },
+                setProgress,
+                () => stopRef.current,
+            );
+            setLookupsLeft(outcome.lookupsLeft);
+
+            const extra = [...outcome.notes];
+            if (outcome.unenriched > 0) {
+                const n = `${outcome.unenriched} profile${outcome.unenriched !== 1 ? 's' : ''}`;
+                extra.push(outcome.stopped
+                    ? `Stopped before details loaded for ${n} — they have name and username only.`
+                    : `${n} couldn't be loaded in full — kept with name and username only.`);
             }
-        } catch (err: any) {
-            setError(err.message ?? 'Scrape failed. Check your connection and try again.');
+
+            if (outcome.leads.length === 0) {
+                setError(explainEmptyScrape(outcome, outcome.stopped
+                    ? 'You stopped before anything was found.'
+                    : 'Try a different search, or another source.'));
+            } else {
+                setResults(outcome.leads);
+                setSelected(new Set(outcome.leads.map(l => l.id)));
+                setNotes(extra);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Scrape failed. Check your connection and try again.');
+            setProgress(null);
         } finally {
             setIsScraping(false);
+            setStopping(false);
         }
-    }, [searchType, searchRaw, searchLimit, enhance]);
+    // resetRun and source are derived from the deps below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [kind, raw, limit, enrich]);
 
-    const handleFollowersScrape = useCallback(async () => {
-        const usernames = fUsername.split(',').map(u => u.trim().replace('@', '')).filter(Boolean);
-        if (!usernames.length) { setError('Enter at least one Instagram username.'); return; }
-
-        setError('');
-        setResults([]);
-        setSelected(new Set());
-        setScrapeProgress(0);
-        setScrapeStatus('');
-        setIsScraping(true);
-
-        const params: FollowersParams = {
-            usernames,
-            type: fType,
-            maxItem: fMaxItem,
-            profileEnriched: fEnriched,
-        };
-
-        try {
-            const outcome = await runFollowersScrape(params, log);
-            const { leads } = outcome;
-            if (leads.length === 0) {
-                setError(explainEmptyScrape(
-                    outcome,
-                    'Instagram only exposes follower lists for public accounts, and serves them in bounded pages — large accounts often return nothing. '
-                    + 'If the account is public, open this run in the Apify console: its log says why the list came back empty.',
-                ));
-            } else {
-                setResults(leads);
-                setSelected(new Set(leads.map(l => l.id)));
-                log(`✓ ${leads.length} profile${leads.length !== 1 ? 's' : ''} ready.`);
-            }
-        } catch (err: any) {
-            setError(err.message ?? 'Scrape failed.');
-        } finally {
-            setIsScraping(false);
-        }
-    }, [fUsername, fType, fMaxItem, fEnriched]);
+    const handleStop = () => {
+        stopRef.current = true;
+        setStopping(true);
+    };
 
     const toggleSelect = (id: string) =>
         setSelected(prev => {
@@ -217,17 +282,27 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         }
 
         // Default a name if the user left it blank, so campaigns stay trackable.
-        const name = campaignName.trim()
-            || `${searchRaw.split(',')[0]?.trim() || fUsername.split(',')[0]?.trim() || 'Campaign'} · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const first = queries[0] ? source.campaign(queries[0]) : 'Campaign';
+        const more = !isList && queries.length > 1 ? ` +${queries.length - 1}` : '';
+        const name = campaignName.trim() || `${first}${more} · ${date}`;
         const toAdd = picked.map(l => ({ ...l, campaignName: name }));
 
         onLeadsScraped(toAdd);
         showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to "${name}" ✓`);
         setResults([]);
         setSelected(new Set());
-        setScrapeProgress(0);
-        setScrapeStatus('');
+        setProgress(null);
+        setNotes([]);
     };
+
+    const switchTab = (next: 'find' | 'import') => {
+        if (isScraping) return;
+        setTab(next);
+        resetRun();
+    };
+
+    const percent = progress?.percent ?? 0;
 
     return (
         <div className="space-y-5 relative">
@@ -235,44 +310,20 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             {/* ── Tabs ───────────────────────────────────────────────── */}
             <div className="flex gap-1 bg-white/3 border border-white/5 rounded-xl p-1 w-fit">
                 <button
-                    onClick={() => { setTab('search'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'search' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
+                    onClick={() => switchTab('find')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'find' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
                 >
                     <Search className="w-3.5 h-3.5" />
-                    Keyword Search
+                    Find on Instagram
                 </button>
                 <button
-                    onClick={() => { setTab('followers'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'followers' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
-                >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    Followers / Following
-                </button>
-                <button
-                    onClick={() => { setTab('import'); setError(''); setResults([]); setScrapeProgress(0); setScrapeStatus(''); }}
+                    onClick={() => switchTab('import')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${tab === 'import' ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
                 >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
                     Import CSV
                 </button>
             </div>
-
-            {/* ── Campaign name ──────────────────────────────────────── */}
-            {tab !== 'import' && (
-                <div>
-                    <label htmlFor="campaignbu-campaign-name-so-you-can" className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                        Campaign name
-                        <span className="ml-2 text-neutral-400 font-normal">so you can track this batch later — optional</span>
-                    </label>
-                    <input id="campaignbu-campaign-name-so-you-can"
-                        type="text"
-                        value={campaignName}
-                        onChange={e => setCampaignName(e.target.value)}
-                        placeholder="e.g. Miami coaches — Jan"
-                        className="w-full max-w-md bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
-                    />
-                </div>
-            )}
 
             {/* ── Toast ──────────────────────────────────────────────── */}
             {toast && (
@@ -292,137 +343,6 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 </div>
             )}
 
-            {/* ── Followers / Following Card ───────────────────────────── */}
-            {tab === 'followers' && (
-                <div className="bg-surface-raised border border-white/5 rounded-2xl p-6 space-y-5">
-                    <div className="flex items-center gap-2">
-                        <UserCheck className="w-4 h-4 text-white" />
-                        <h3 className="text-sm font-semibold text-white">Followers / Following Scraper</h3>
-                    </div>
-
-                    {/* Username input */}
-                    <div>
-                        <label htmlFor="campaignbu-instagram-username-s-comma-separated" className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                            Instagram username(s)
-                            <span className="ml-2 text-neutral-400 font-normal">comma-separated — no @ needed</span>
-                        </label>
-                        <input id="campaignbu-instagram-username-s-comma-separated"
-                            type="text"
-                            value={fUsername}
-                            onChange={e => { setFUsername(e.target.value); setError(''); }}
-                            placeholder="garyvee, alexhormozi, yourcompetitor"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
-                        />
-                        <p className="text-label text-neutral-400 mt-1.5">Scrape the followers or following list of any public account</p>
-                    </div>
-
-                    {/* Type + Max items */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label htmlFor="campaignbu-scrape-type" className="block text-xs text-neutral-400 mb-1.5 font-medium">Scrape type</label>
-                            <div className="relative">
-                                <select id="campaignbu-scrape-type"
-                                    value={fType}
-                                    onChange={e => setFType(e.target.value as 'followers' | 'following')}
-                                    className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
-                                >
-                                    <option value="followers">Followers</option>
-                                    <option value="following">Following</option>
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
-                            </div>
-                        </div>
-                        <div>
-                            <label htmlFor="campaignbu-max-profiles-100-on-free" className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                                Max profiles
-                                <span className="ml-2 text-neutral-400 font-normal">100 on free Apify plan</span>
-                            </label>
-                            <div className="relative">
-                                <select id="campaignbu-max-profiles-100-on-free"
-                                    value={fMaxItem}
-                                    onChange={e => setFMaxItem(Number(e.target.value))}
-                                    className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
-                                >
-                                    {[50, 100, 200, 500, 1000].map(n => (
-                                        <option key={n} value={n}>{n} profiles</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Enrichment toggle */}
-                    <button
-                        onClick={() => setFEnriched(v => !v)}
-                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-colors ${
-                            fEnriched
-                                ? 'bg-white/10 border-white/25 text-white'
-                                : 'bg-white/3 border-white/8 text-neutral-400 hover:border-white/15 hover:text-neutral-300'
-                        }`}
-                    >
-                        <Users className={`w-4 h-4 flex-shrink-0 ${fEnriched ? 'text-white' : ''}`} />
-                        <div>
-                            <p className="text-xs font-medium">Full profile enrichment</p>
-                            <p className="text-label text-neutral-400 mt-0.5">
-                                Fetches bio, follower count, and business info for each profile · recommended for AI DM generation · slower
-                            </p>
-                        </div>
-                        <div className={`ml-auto w-9 h-5 rounded-full flex-shrink-0 transition-colors ${fEnriched ? 'bg-white' : 'bg-white/10'}`}>
-                            <div className={`w-4 h-4 m-0.5 bg-white rounded-full transition-transform ${fEnriched ? 'translate-x-4' : ''}`} />
-                        </div>
-                    </button>
-
-                    {/* Start */}
-                    <div className="flex items-center justify-between pt-1">
-                        <p className="text-label text-neutral-400">
-                            {fUsername.trim() && (
-                                <>
-                                    {fUsername.split(',').filter(u => u.trim()).length} account{fUsername.split(',').filter(u => u.trim()).length !== 1 ? 's' : ''}
-                                    {' '}× {fMaxItem} = up to {fUsername.split(',').filter(u => u.trim()).length * fMaxItem} profiles
-                                </>
-                            )}
-                        </p>
-                        <button
-                            onClick={handleFollowersScrape}
-                            disabled={isScraping || !fUsername.trim()}
-                            className="flex items-center gap-2 px-8 py-3 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold rounded-xl transition-all text-sm"
-                        >
-                            {isScraping
-                                ? <><Loader2 className="w-4 h-4 animate-spin" />Scraping…</>
-                                : <><UserCheck className="w-4 h-4" />Start Scrape</>
-                            }
-                        </button>
-                    </div>
-
-                    {/* Progress bar */}
-                    {(isScraping || scrapeProgress > 0) && (
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-label text-neutral-400 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
-                                <span className="text-label font-bold font-mono text-white">{scrapeProgress}%</span>
-                            </div>
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden"
-                                    style={{
-                                        width: `${scrapeProgress}%`,
-                                        background: progressFill(scrapeProgress),
-                                        backgroundSize: '200% 100%',
-                                        animation: isScraping ? 'chargeShimmer 1.8s linear infinite' : 'none',
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
-                    {error && (
-                        <div className="flex items-start gap-2 px-4 py-3 bg-danger-500/8 border border-danger-500/20 rounded-xl text-danger-400 text-xs">
-                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{error}
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* ── CSV Import ──────────────────────────────────────────── */}
             {tab === 'import' && (
                 <CsvImport
@@ -431,172 +351,270 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 />
             )}
 
-            {/* ── Search Card ─────────────────────────────────────────── */}
-            {tab === 'search' && (
-            <div className="bg-surface-raised border border-white/5 rounded-2xl p-6 space-y-5">
-                <div className="flex items-center gap-2">
-                    <Search className="w-4 h-4 text-white" />
-                    <h3 className="text-sm font-semibold text-white">Search Instagram</h3>
-                </div>
-
-                {/* Quick-fill niche packs */}
-                <div>
-                    <p className="text-label uppercase tracking-wider text-neutral-400 mb-1.5 font-semibold">
-                        Quick fill from a niche pack:
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {NICHE_PRESETS.map(preset => (
-                            <button
-                                key={preset.id}
-                                onClick={() => setSearchRaw(preset.suggestedSearch)}
-                                className="px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-label text-neutral-400 hover:border-white/15 hover:text-neutral-300 transition-colors"
-                            >
-                                {preset.emoji} {preset.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Search term */}
-                <div>
-                    <label htmlFor="campaignbu-search-comma-separated-each-term" className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                        Search
-                        <span className="ml-2 text-neutral-400 font-normal">comma-separated — each term is searched independently</span>
-                    </label>
-                    <input id="campaignbu-search-comma-separated-each-term"
-                        type="text"
-                        value={searchRaw}
-                        onChange={e => { setSearchRaw(e.target.value); setError(''); }}
-                        onKeyDown={e => e.key === 'Enter' && !isScraping && handleSearch()}
-                        placeholder={activeType.placeholder}
-                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
-                    />
-                    <p className="text-label text-neutral-400 mt-1.5">{activeType.hint}</p>
-                </div>
-
-                {/* Search type + limit */}
-                <div className="grid grid-cols-2 gap-3">
+            {tab === 'find' && (
+                <>
+                    {/* ── Campaign name ──────────────────────────────────── */}
                     <div>
-                        <label htmlFor="campaignbu-search-type" className="block text-xs text-neutral-400 mb-1.5 font-medium">Search type</label>
-                        <div className="relative">
-                            <select id="campaignbu-search-type"
-                                value={searchType}
-                                onChange={e => setSearchType(e.target.value as SearchParams['searchType'])}
-                                className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
-                            >
-                                {SEARCH_TYPES.map(t => (
-                                    <option key={t.value} value={t.value}>{t.label}</option>
-                                ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label htmlFor="campaignbu-search-limit-per-term-max" className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                            Search limit per term
-                            <span className="ml-2 text-neutral-400 font-normal">max 250</span>
+                        <label htmlFor="campaignbu-campaign-name" className="block text-xs text-neutral-400 mb-1.5 font-medium">
+                            Campaign name
+                            <span className="ml-2 text-neutral-400 font-normal">so you can track this batch later — optional</span>
                         </label>
-                        <div className="relative">
-                            <select id="campaignbu-search-limit-per-term-max"
-                                value={searchLimit}
-                                onChange={e => setSearchLimit(Number(e.target.value))}
-                                className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
-                            >
-                                {LIMIT_OPTIONS.map(n => (
-                                    <option key={n} value={n}>{n} results</option>
-                                ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
-                        </div>
+                        <input id="campaignbu-campaign-name"
+                            type="text"
+                            value={campaignName}
+                            onChange={e => setCampaignName(e.target.value)}
+                            placeholder="e.g. Miami coaches — Jan"
+                            className="w-full max-w-md bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
+                        />
                     </div>
-                </div>
 
-                {/* Enhance toggle (user search only) */}
-                {searchType === 'user' && (
-                    <button
-                        onClick={() => setEnhance(v => !v)}
-                        className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-colors ${
-                            enhance
-                                ? 'bg-white/10 border-white/25 text-white'
-                                : 'bg-white/3 border-white/8 text-neutral-400 hover:border-white/15 hover:text-neutral-300'
-                        }`}
-                    >
-                        <Mail className={`w-4 h-4 flex-shrink-0 ${enhance ? 'text-white' : ''}`} />
-                        <div>
-                            <p className="text-xs font-medium">Enhance with Facebook page &amp; email</p>
-                            <p className="text-label text-neutral-400 mt-0.5">
-                                Enriches top 10 results per term with linked Facebook page and business email · uses extra Apify credits
-                            </p>
-                        </div>
-                        <div className={`ml-auto w-9 h-5 rounded-full flex-shrink-0 transition-colors ${enhance ? 'bg-white' : 'bg-white/10'}`}>
-                            <div className={`w-4 h-4 m-0.5 bg-white rounded-full transition-transform ${enhance ? 'translate-x-4' : ''}`} />
-                        </div>
-                    </button>
-                )}
+                    <div className="bg-surface-raised border border-white/5 rounded-2xl p-6 space-y-5">
 
-                {/* Info note: filters live in Settings */}
-                <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/5 rounded-xl text-label text-neutral-400">
-                    <Settings className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                    <span>
-                        Lead quality filters (min/max followers, bio keywords, business-only) are configured in{' '}
-                        <span className="text-neutral-400 font-medium">Settings → Lead Filtering Rules</span>
-                        {' '}and applied automatically to the Approval Queue.
-                    </span>
-                </div>
-
-                {/* Start Search */}
-                <div className="flex items-center justify-between pt-1">
-                    <p className="text-label text-neutral-400">
-                        {searchRaw.trim() && (
-                            <>
-                                {searchRaw.split(',').filter(s => s.trim()).length} term{searchRaw.split(',').filter(s => s.trim()).length !== 1 ? 's' : ''}
-                                {' '}× {searchLimit} = up to{' '}
-                                {searchRaw.split(',').filter(s => s.trim()).length * searchLimit} profiles
-                            </>
+                        {SCRAPE_DEMO && (
+                            <div className="flex items-start gap-2 px-4 py-3 bg-white/5 border border-white/15 rounded-xl text-xs text-neutral-300">
+                                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-white" />
+                                <span>
+                                    <span className="text-white font-semibold">Demo mode.</span> Scrapes return generated
+                                    sample profiles, not real accounts. Their handles contain a hyphen, which Instagram
+                                    doesn't allow, so nothing can ever be sent to a real person. The queue and DM
+                                    generation after this are real. Try an account with "private" or "nobody" in it to see
+                                    the error handling.
+                                </span>
+                            </div>
                         )}
-                    </p>
-                    <button
-                        onClick={handleSearch}
-                        disabled={isScraping || !searchRaw.trim()}
-                        className="flex items-center gap-2 px-8 py-3 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold rounded-xl transition-all text-sm"
-                    >
-                        {isScraping
-                            ? <><Loader2 className="w-4 h-4 animate-spin" />Scraping…</>
-                            : <><Search className="w-4 h-4" />Start Search</>
-                        }
-                    </button>
-                </div>
 
-                {/* Progress bar */}
-                {(isScraping || scrapeProgress > 0) && (
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-label text-neutral-400 font-mono truncate max-w-[80%]">{scrapeStatus}</span>
-                            <span className="text-label font-bold font-mono text-white">{scrapeProgress}%</span>
+                        {/* ── Source picker ──────────────────────────────── */}
+                        <div>
+                            <p id="campaignbu-source" className="text-label uppercase tracking-wider text-neutral-400 mb-2 font-semibold">
+                                Where to find leads
+                            </p>
+                            <div role="group" aria-labelledby="campaignbu-source" className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                {SOURCES.map(s => {
+                                    const Icon = s.icon;
+                                    const active = s.kind === kind;
+                                    return (
+                                        <button
+                                            key={s.kind}
+                                            type="button"
+                                            aria-pressed={active}
+                                            disabled={isScraping && !active}
+                                            onClick={() => pickSource(s.kind)}
+                                            className={`flex items-start gap-3 px-3.5 py-3 rounded-xl border text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                                active
+                                                    ? 'bg-white/10 border-white/25 text-white'
+                                                    : 'bg-white/3 border-white/8 text-neutral-300 hover:border-white/15 hover:text-white'
+                                            }`}
+                                        >
+                                            <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
+                                            <span className="min-w-0">
+                                                <span className="block text-xs font-semibold">{s.label}</span>
+                                                <span className="block text-label text-neutral-400 mt-0.5 leading-snug">{s.blurb}</span>
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                            <div
-                                className="h-full rounded-full transition-all duration-700 ease-out"
-                                style={{
-                                    width: `${scrapeProgress}%`,
-                                    background: progressFill(scrapeProgress),
-                                    backgroundSize: '200% 100%',
-                                    animation: isScraping ? 'chargeShimmer 1.8s linear infinite' : 'none',
-                                }}
-                            />
-                        </div>
-                    </div>
-                )}
 
-                {/* Error */}
-                {error && (
-                    <div className="flex items-start gap-2 px-4 py-3 bg-danger-500/8 border border-danger-500/20 rounded-xl text-danger-400 text-xs">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                        {error}
+                        {/* ── Quick-fill niche packs (keyword search only) ─ */}
+                        {kind === 'keyword' && (
+                            <div>
+                                <p className="text-label uppercase tracking-wider text-neutral-400 mb-1.5 font-semibold">
+                                    Quick fill from a niche pack:
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {NICHE_PRESETS.map(preset => (
+                                        <button
+                                            key={preset.id}
+                                            onClick={() => setRaw(preset.suggestedSearch)}
+                                            disabled={isScraping}
+                                            className="px-3 py-1.5 rounded-full border border-white/8 bg-white/3 text-label text-neutral-400 hover:border-white/15 hover:text-neutral-300 transition-colors"
+                                        >
+                                            {preset.emoji} {preset.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── Input ──────────────────────────────────────── */}
+                        <div>
+                            <label htmlFor="campaignbu-query" className="block text-xs text-neutral-400 mb-1.5 font-medium">
+                                {source.inputLabel}
+                                {!source.multiline && (
+                                    <span className="ml-2 text-neutral-400 font-normal">comma-separated — each one is searched on its own</span>
+                                )}
+                            </label>
+                            {source.multiline ? (
+                                <textarea id="campaignbu-query"
+                                    rows={5}
+                                    value={raw}
+                                    disabled={isScraping}
+                                    onChange={e => { setRaw(e.target.value); setError(''); }}
+                                    placeholder={source.placeholder}
+                                    className={`${FIELD} font-mono resize-y`}
+                                />
+                            ) : (
+                                <input id="campaignbu-query"
+                                    type="text"
+                                    value={raw}
+                                    disabled={isScraping}
+                                    onChange={e => { setRaw(e.target.value); setError(''); }}
+                                    onKeyDown={e => e.key === 'Enter' && !isScraping && handleStart()}
+                                    placeholder={source.placeholder}
+                                    className={FIELD}
+                                />
+                            )}
+                            <p className="text-label text-neutral-400 mt-1.5">{source.inputHint}</p>
+                        </div>
+
+                        {/* ── Limit + details ────────────────────────────── */}
+                        {!isList && (
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label htmlFor="campaignbu-limit" className="block text-xs text-neutral-400 mb-1.5 font-medium">
+                                        Profiles per {source.unit[0]}
+                                        <span className="ml-2 text-neutral-400 font-normal">max {MAX_PER_QUERY}</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select id="campaignbu-limit"
+                                            value={limit}
+                                            disabled={isScraping}
+                                            onChange={e => setLimit(Number(e.target.value))}
+                                            className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
+                                        >
+                                            {LIMIT_OPTIONS.map(n => (
+                                                <option key={n} value={n}>{n} profiles</option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    aria-pressed={enrich}
+                                    disabled={isScraping}
+                                    onClick={() => setEnrich(v => !v)}
+                                    className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border text-left transition-colors self-end ${
+                                        enrich
+                                            ? 'bg-white/10 border-white/25 text-white'
+                                            : 'bg-white/3 border-white/8 text-neutral-400 hover:border-white/15 hover:text-neutral-300'
+                                    }`}
+                                >
+                                    <Users className={`w-4 h-4 flex-shrink-0 ${enrich ? 'text-white' : ''}`} />
+                                    <div>
+                                        <p className="text-xs font-medium">Full profile details</p>
+                                        <p className="text-label text-neutral-400 mt-0.5">
+                                            Bio, follower count and category — needed for AI DMs and your filters · slower
+                                        </p>
+                                    </div>
+                                    <div className={`ml-auto w-9 h-5 rounded-full flex-shrink-0 transition-colors ${enrich ? 'bg-white' : 'bg-white/10'}`}>
+                                        <div className={`w-4 h-4 m-0.5 rounded-full transition-transform ${enrich ? 'translate-x-4 bg-surface' : 'bg-white'}`} />
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+
+                        {!isList && !enrich && (
+                            <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/5 rounded-xl text-label text-neutral-400">
+                                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                <span>
+                                    Without details, leads arrive with name and username only: follower count reads 0, so a
+                                    minimum-followers filter hides them, and the AI writes DMs without a bio to go on.
+                                </span>
+                            </div>
+                        )}
+
+                        {/* ── Filters live in Settings ───────────────────── */}
+                        <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/5 rounded-xl text-label text-neutral-400">
+                            <Settings className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                            <span>
+                                Lead quality filters (min/max followers, bio keywords, business-only) are configured in{' '}
+                                <span className="text-neutral-300 font-medium">Settings → Lead Filtering Rules</span>
+                                {' '}and applied automatically to the Approval Queue.
+                            </span>
+                        </div>
+
+                        {/* ── Start / Stop ───────────────────────────────── */}
+                        <div className="flex items-center justify-between gap-4 pt-1">
+                            <p className="text-label text-neutral-400">
+                                {queries.length > 0 && (isList
+                                    ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} to look up</>
+                                    : <>
+                                        {queries.length} {source.unit[queries.length === 1 ? 0 : 1]}
+                                        {' '}× {limit} = up to {queries.length * limit} profiles
+                                    </>
+                                )}
+                                {lookupsLeft !== undefined && (
+                                    <span className="block mt-0.5">{lookupsLeft.toLocaleString('en-US')} profile lookups left this month</span>
+                                )}
+                            </p>
+                            {isScraping ? (
+                                <button
+                                    type="button"
+                                    onClick={handleStop}
+                                    disabled={stopping}
+                                    className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/15 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors text-sm"
+                                >
+                                    {stopping
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" />Stopping…</>
+                                        : <><CircleStop className="w-4 h-4" />Stop — keep what's found</>
+                                    }
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleStart}
+                                    disabled={queries.length === 0}
+                                    className="flex items-center gap-2 px-8 py-3 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold rounded-xl transition-all text-sm"
+                                >
+                                    <source.icon className="w-4 h-4" />
+                                    {isList ? 'Look up' : 'Start scrape'}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* ── Progress ───────────────────────────────────── */}
+                        {progress && (
+                            <div className="space-y-2" aria-live="polite">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-label text-neutral-400 font-mono truncate">{progress.message}</span>
+                                    <span className="text-label font-bold font-mono text-white">{percent}%</span>
+                                </div>
+                                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full transition-all duration-700 ease-out"
+                                        style={{
+                                            width: `${percent}%`,
+                                            background: progressFill(percent),
+                                            backgroundSize: '200% 100%',
+                                            animation: isScraping ? 'chargeShimmer 1.8s linear infinite' : 'none',
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── Error ──────────────────────────────────────── */}
+                        {error && (
+                            <div role="alert" className="flex items-start gap-2 px-4 py-3 bg-danger-500/8 border border-danger-500/20 rounded-xl text-danger-400 text-xs">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                {error}
+                            </div>
+                        )}
+
+                        {/* ── Notes: per-query problems that didn't stop the run ─ */}
+                        {notes.length > 0 && (
+                            <div className="flex items-start gap-2 px-4 py-3 bg-white/3 border border-white/8 rounded-xl text-neutral-300 text-xs">
+                                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                <ul className="space-y-1">
+                                    {notes.map((n, i) => <li key={i}>{n}</li>)}
+                                </ul>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
+                </>
             )}
 
             {/* ── Results Card ─────────────────────────────────────────── */}
@@ -606,7 +624,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     {/* Toolbar */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/[0.01]">
                         <div className="flex items-center gap-3">
-                            <button onClick={toggleAll} className="text-neutral-400 hover:text-white transition-colors">
+                            <button onClick={toggleAll} aria-label="Select all" className="text-neutral-400 hover:text-white transition-colors">
                                 {selected.size === results.length
                                     ? <CheckSquare className="w-4 h-4 text-white" />
                                     : <Square className="w-4 h-4" />
@@ -655,11 +673,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     <img
                                         src={lead.profilePicUrl}
                                         alt={lead.name}
+                                        referrerPolicy="no-referrer"
                                         className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10 flex-shrink-0"
                                         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                     />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white to-neutral-400 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white to-neutral-400 flex items-center justify-center text-surface text-sm font-bold flex-shrink-0">
                                         {(lead.name || lead.handle)[0]?.toUpperCase()}
                                     </div>
                                 )}
@@ -680,10 +699,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                     </div>
                                     <div className="flex items-center gap-3 mt-0.5 text-xs text-neutral-400">
                                         <span>@{lead.handle}</span>
-                                        <span className="flex items-center gap-1">
-                                            <Users className="w-3 h-3" />
-                                            {formatFollowers(lead.followers)}
-                                        </span>
+                                        {lead.businessCategory && <span>{lead.businessCategory}</span>}
                                         {lead.city && <span>📍 {lead.city}</span>}
                                     </div>
                                     {lead.bio && (
@@ -692,7 +708,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 </div>
 
                                 <div className="flex-shrink-0 text-right">
-                                    <p className="text-xs font-medium text-neutral-400">{formatFollowers(lead.followers)}</p>
+                                    <p className="text-xs font-medium text-neutral-300">{formatFollowers(lead.followers)}</p>
                                     <p className="text-label text-neutral-400">followers</p>
                                 </div>
                             </div>

@@ -83,7 +83,7 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
             <label className="flex flex-col items-center justify-center gap-2 py-10 rounded-2xl border border-dashed border-white/10 text-neutral-400 hover:text-neutral-200 hover:border-white/20 transition-colors cursor-pointer text-center px-4">
                 <Upload className="w-5 h-5" />
                 <span className="text-sm">
-                    {fileName || 'Drop a CSV here or click to browse — exports from Apify or any scraper work'}
+                    {fileName || 'Drop a CSV here or click to browse — exports from any scraper work'}
                 </span>
                 <input
                     type="file"

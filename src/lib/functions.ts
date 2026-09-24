@@ -1,10 +1,10 @@
 /**
  * Thin wrapper around supabase.functions.invoke for the app's backend proxies
- * (generate-dm, start-scrape, poll-scrape).
+ * (generate-dm, generate-reply, scrape).
  *
  * supabase.functions.invoke automatically attaches the signed-in user's session
  * JWT + the anon apikey, so these endpoints are reachable only by authenticated
- * users — the owner's Claude/Apify keys live in Supabase secrets, never here.
+ * users — the owner's AI and scraping keys live in Supabase secrets, never here.
  */
 import { supabase } from './supabase';
 

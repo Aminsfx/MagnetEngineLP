@@ -3,9 +3,11 @@ import type { Lead, ColumnMapping } from './types';
 /**
  * Lead intake — the only way a Lead enters the product.
  *
- * Three sources feed it (keyword search, followers scrape, CSV upload) and each
- * used to build Leads its own way: two alias tables in apify.ts that disagreed
- * about follower-count field names, a third parser in CsvImport, three
+ * Two kinds of source feed it — an Instagram scrape (search, hashtag,
+ * followers, post engagement, place… see src/lib/scrape.ts) and a CSV upload.
+ * Before this module each source built Leads its own way: two alias tables in
+ * the old Apify client that disagreed about follower-count field names, a
+ * third parser in CsvImport, three
  * different handle normalizers, and dedupe in two unrelated modules. The
  * invariant that actually matters — a Handle is lowercase, `@`-less, URL-less,
  * and unique — was enforced nowhere in the type and re-derived at four call
@@ -25,8 +27,7 @@ export interface IntakeResult {
 }
 
 export type IntakeRequest =
-  | { source: 'search'; rows: RawRow[]; campaignId: string }
-  | { source: 'followers'; rows: RawRow[]; campaignId: string }
+  | { source: 'scrape'; rows: RawRow[]; campaignId: string }
   | { source: 'csv'; rows: RawRow[]; campaignId: string; mapping: ColumnMapping };
 
 // ─── Canonical forms ─────────────────────────────────────────────────────────
@@ -67,23 +68,26 @@ export function parseBoolean(raw: unknown): boolean {
 }
 
 // ─── Scraper field aliases ───────────────────────────────────────────────────
-// One table for both scrapers. The keyword actor returns camelCase, the
-// followers actor a mix of snake_case and GraphQL edges; splitting these into
-// two mappers is how the two ended up disagreeing about which aliases exist.
+// One table for every scraper row. The scrape function emits HikerAPI's own
+// field names (`ProfileRow` in supabase/functions/_shared/hiker.ts —
+// follower_count, media_count, is_business, city_name); the camelCase and
+// GraphQL-edge spellings are what other scrapers' exports use. Splitting these
+// into per-source mappers is how two of them once disagreed about which
+// aliases exist.
 
 const ALIASES = {
   handle: ['username', 'handle', 'userName'],
   name: ['fullName', 'full_name', 'name', 'displayName'],
-  followers: ['followersCount', 'followers', 'followers_count'],
-  following: ['followingCount', 'following', 'following_count'],
-  postsCount: ['postsCount', 'mediaCount', 'posts'],
+  followers: ['follower_count', 'followersCount', 'followers', 'followers_count'],
+  following: ['following_count', 'followingCount', 'following'],
+  postsCount: ['media_count', 'postsCount', 'mediaCount', 'posts'],
   bio: ['biography', 'bio', 'description'],
-  isPrivate: ['isPrivate', 'is_private'],
-  verified: ['isVerified', 'verified', 'is_verified'],
-  businessAccount: ['isBusinessAccount', 'is_business_account', 'isBusiness'],
-  businessCategory: ['businessCategoryName', 'business_category_name', 'category_name', 'category'],
-  profilePicUrl: ['profilePicUrl', 'profile_pic_url', 'profilePicUrlHD'],
-  city: ['city', 'locationName'],
+  isPrivate: ['is_private', 'isPrivate'],
+  verified: ['is_verified', 'isVerified', 'verified'],
+  businessAccount: ['is_business', 'isBusinessAccount', 'is_business_account', 'isBusiness'],
+  businessCategory: ['category', 'category_name', 'businessCategoryName', 'business_category_name'],
+  profilePicUrl: ['profile_pic_url', 'profilePicUrl', 'profilePicUrlHD'],
+  city: ['city_name', 'city', 'locationName'],
 } as const;
 
 function pick(row: RawRow, field: keyof typeof ALIASES): unknown {
@@ -94,7 +98,7 @@ function pick(row: RawRow, field: keyof typeof ALIASES): unknown {
   return undefined;
 }
 
-/** GraphQL edge shapes (`edge_followed_by.count`) the followers actor still emits. */
+/** GraphQL edge shapes (`edge_followed_by.count`) in Instagram web-profile exports. */
 function edgeCount(row: RawRow, edge: string): number | undefined {
   const node = row[edge];
   if (node && typeof node === 'object' && 'count' in node) {

@@ -15,7 +15,7 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     // No AI-provider proxies needed: all external API calls now go through the
-    // Supabase Edge Functions (generate-dm / start-scrape / poll-scrape), which
+    // Supabase Edge Functions (generate-dm / generate-reply / scrape), which
     // hold the secret keys server-side.
   },
   plugins: [react()],

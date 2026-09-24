@@ -10,8 +10,11 @@ interface ImportMetaEnv {
     readonly VITE_WHOP_PLAN_ID_ANNUAL?: string;
     // Owner emails — cosmetic /admin UI gate; real enforcement is server-side.
     readonly VITE_ADMIN_EMAILS?: string;
+    // 'true' only under `npm run demo` (.env.demo): the Campaign Builder scrapes
+    // generated sample profiles instead of calling the `scrape` function.
+    readonly VITE_SCRAPE_DEMO?: string;
     //
-    // Secret keys (Apify, Claude/OpenAI/Gemini, Whop webhook secret, admin list)
+    // Secret keys (HikerAPI, Claude/OpenAI/Gemini, Whop webhook secret, admin list)
     // are NOT here — they live only in Supabase Edge Function secrets and are
     // never exposed to the browser. See README → "Frontend vs backend env".
 }

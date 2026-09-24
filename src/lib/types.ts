@@ -78,9 +78,6 @@ export interface AppConfig {
     maxFollowers: number;
     accountType: 'all' | 'public' | 'private';
     selectedAIProvider: 'openai' | 'claude' | 'gemini';
-    apifyTargetLocation?: string;
-    apifyTargetKeywords?: string[];
-    apifyMaxProfiles?: number;
     // AI Onboarding Wizard
     founderName?: string;      // who the DM is "from" (e.g. Marcus)
     founderRole?: string;      // e.g. founder, consultant, coach

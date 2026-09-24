@@ -32,8 +32,5 @@ verify_jwt = true
 [functions.generate-reply]
 verify_jwt = true
 
-[functions.start-scrape]
-verify_jwt = true
-
-[functions.poll-scrape]
+[functions.scrape]
 verify_jwt = true

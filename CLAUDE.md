@@ -11,7 +11,7 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
 - **Lucide React** — icons
-- **Apify** — `apify~instagram-search-scraper` actor for lead scraping
+- **HikerAPI** — Instagram REST API for lead scraping (nine sources; see below)
 
 ## Repository Layout
 ```
@@ -29,7 +29,7 @@ src/
     ProfilePage.tsx              # Account, change password, real plan badge
   components/
     campaign/
-      CampaignBuilder.tsx        # Apify search UI — scrape leads
+      CampaignBuilder.tsx        # Source picker + scrape UI (nine sources, Stop, results → queue)
       ApprovalQueue.tsx          # Review / edit / approve / reject DMs
       FollowUpSequencer.tsx      # Multi-touch sequences (Pro+)
     dashboard/
@@ -66,15 +66,16 @@ src/
     outcome.ts                   # What a Conversation reveals about its Lead
     extensionProtocol.ts         # App side of the app↔extension seam (typed)
     plans.ts                     # PLAN_LIMITS, SubscriptionStatus, WHOP_PLAN_IDS, PRICES, isAdminEmail
-    apify.ts                     # Apify client (start + poll, via Edge Functions)
+    scrape.ts                    # Scrape loop: page by page via the `scrape` function, then enrich
     api.ts                       # generate-dm / generate-reply callers
     filters.ts                   # filterLeads() + calculateStats()
 extension/
   protocol.js                    # Wire protocol — shared by worker, content script, popup
   background.js / content.js / popup.js
 supabase/
-  functions/_shared/             # http.ts (servePost), ai.ts (providers), completion.ts (output cleanup), apify.ts, emails.ts
+  functions/_shared/             # http.ts (servePost), ai.ts (providers), completion.ts (output cleanup), hiker.ts (sources + parsing), emails.ts
   migrations/0001_usage.sql      # dm_usage + usage_counters
+  migrations/0002_scrape_usage.sql # scrape_usage (HikerAPI lookups per user per month)
 CONTEXT.md                       # Domain glossary — read before naming anything
 ```
 Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, `src/components/calculator/*`, root-level `components/` duplicates.
@@ -197,18 +198,33 @@ AppConfig {
   onboardingComplete
 }
 
-APIKeys { openai?, claude?, gemini? }  // NO apify — backend-managed
+APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
 ```
 
-## Apify Integration (src/lib/apify.ts → Edge Functions)
-- **Actor**: `apify~instagram-search-scraper` (keyword); followers actor via `APIFY_FOLLOWERS_ACTOR_ID`
-- **Input schema** (exact field names):
-  - `search` — comma-separated search terms (string)
-  - `searchType` — `"user" | "hashtag" | "place"`
-  - `searchLimit` — 1–250 (actor hard cap; 250 is the maximum)
-  - `enhanceUserSearchWithFacebookPage` — boolean (enriches top 10 user results)
-- **Flow**: client calls `start-scrape` (returns `runId`) → polls `poll-scrape` every 5 s → gets dataset items on SUCCEEDED → maps to `Lead[]` client-side. Timeout 4 min (48 polls).
-- **API key**: `APIFY_API_KEY` lives ONLY as a Supabase secret, used by `start-scrape`/`poll-scrape`. The browser never talks to api.apify.com.
+## Lead scraping (src/lib/scrape.ts → `scrape` Edge Function → HikerAPI)
+- **Sources** (`SOURCE_KINDS` in `supabase/functions/_shared/hiker.ts` — the ONE list; the
+  client imports it): `keyword` (account search), `hashtag` (authors of recent posts),
+  `followers`, `following`, `likers`, `commenters` (post link), `location` (authors of
+  recent posts at a place), `similar` (Instagram's suggested profiles), `profiles` (a handle list).
+- **Synchronous, client-driven.** HikerAPI answers each request at once — there is no run to
+  poll. The browser calls `scrape` with `{ op: 'page', source, cursor }` one page at a time
+  (the cursor carries the resolved user/media/location id so the lookup is paid once), then
+  `{ op: 'enrich', ids }` in batches of 10 for rows a list endpoint left short (no bio, no
+  follower count). Stop is honoured between calls and keeps what was found.
+- **Parsing lives in `_shared/hiker.ts`**, which holds no Deno globals by contract:
+  `src/lib/hiker.test.ts` imports it and runs `extractUsers`/`toRow` against real payload
+  shapes. Each source reads users from ONE place (a post's author, a comment's author, a
+  `users` array) — never "anything user-shaped", or a hashtag scrape collects everyone tagged.
+- **`ProfileRow` uses HikerAPI's own field names** (`follower_count`, `media_count`,
+  `is_business`, `city_name`); `intake()`'s alias table knows them. No translation step.
+- **250 per query** (`MAX_PER_QUERY`) — the landing pages promise "up to 250 profiles per search".
+- **Metered.** Every billed upstream request (`x-hiker-info: reqs=N`) is counted in
+  `scrape_usage`; `MONTHLY_SCRAPE_LIMIT` (default 5000) → `429 scrape_quota`.
+- **Errors carry a code.** `not_found` / `private_target` / `bad_source` are about one query —
+  the client notes them and carries on; anything else stops the run. Operator-facing messages
+  never name the provider; the real cause is in the function log.
+- **API key**: `HIKERAPI_KEY` lives ONLY as a Supabase secret, sent as the `x-access-key`
+  header (never in a URL). The browser never talks to api.hikerapi.com.
 
 ## AI DM Generation (src/lib/api.ts → generate-dm Edge Function)
 - `aiAPI.generateDM(provider, lead, systemPrompt)` calls the `generate-dm` Edge Function via `supabase.functions.invoke`. Provider keys (`CLAUDE_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`) are Supabase secrets; prompt building + injection-safe bio handling + output cleanup run server-side. Client sees no key.
@@ -228,7 +244,7 @@ VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin 
 ```
 CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-reply
 MONTHLY_DM_LIMIT                                   # generate-dm quota (default 1500)
-APIFY_API_KEY / APIFY_FOLLOWERS_ACTOR_ID           # start-scrape / poll-scrape
+HIKERAPI_KEY / MONTHLY_SCRAPE_LIMIT                # scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
 ADMIN_EMAILS                                       # admin-api
 RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
@@ -236,7 +252,7 @@ SEND_EMAIL_HOOK_SECRET                             # auth-email-hook
 SOP_DOC_URL / ONBOARDING_CALL_URL                  # onboarding email links (optional; SOP defaults to bundled PDF, call URL defaults to cal.com/magnetengine/30min)
 ```
 Set via `supabase secrets set KEY=value`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
-Template: `.env.example` (committed, no real values). Edge Functions: `supabase/functions/{generate-dm,start-scrape,poll-scrape,whop-webhook,admin-api,auth-email-hook}`.
+Template: `.env.example` (committed, no real values). Edge Functions: `supabase/functions/{generate-dm,generate-reply,scrape,whop-webhook,admin-api,auth-email-hook}`.
 
 ## Transactional Emails (Resend — docs/EMAIL_SETUP.md)
 Four lifecycle emails, all sent server-side via the Resend API (`RESEND_API_KEY` is a Supabase secret; the browser never sends email):
@@ -356,8 +372,9 @@ role; users can read their own count but never write it.
 
 **Enforcement:**
 - Settings page has zero API key management UI
-- `APIKeys` type has no `apify` field
-- Apify key only lives as a Supabase secret, used by `start-scrape` / `poll-scrape`
+- `APIKeys` type has no scraping-key field
+- The HikerAPI key only lives as a Supabase secret, used by `scrape`; no Operator-facing
+  copy or error message names the provider
 - AI provider keys (OpenAI/Claude/Gemini) are Supabase secrets read by `_shared/ai.ts`;
   the browser has no key storage at all (`storage.getAPIKeys` was deleted)
 
@@ -365,7 +382,7 @@ role; users can read their own count but never write it.
 `useOutreach` derives `filteredLeads` with `useMemo` (never state — storing it made every
 Lead mutation commit twice).  
 Filters (min/max followers, include/exclude keywords, account type) live in `Settings → Lead Filtering Rules`.  
-`CampaignBuilder` has **no filter UI** — it only exposes what the Apify actor natively accepts.
+`CampaignBuilder` has **no filter UI** — it only exposes what the scrape sources natively accept.
 
 ## Common Commands
 ```bash
@@ -396,4 +413,4 @@ hex/rgba, for Recharts props and inline styles, which no utility can reach).
 2. **localStorage as fallback persistence** — Supabase when configured; leads/config survive refresh either way
 3. **AI DM generation is template-based** in the wizard step; live AI calls use the selected provider key from localStorage
 4. **CampaignBuilder fallback**: if user scrapes results but selects none, clicking "Add to Queue" adds all results (prevents silent no-op)
-5. **250 lead cap**: Apify actor enforces this server-side; UI dropdown max is 250
+5. **250 lead cap**: `MAX_PER_QUERY` in `_shared/hiker.ts`; the UI dropdown max is 250 per query

@@ -64,16 +64,17 @@ Two supporting positions, both factual rather than promotional:
   mapping (bio, business category, verified, city) and the browser-extension
   sending are all built for this one channel. Most AI outreach tools target
   LinkedIn or email.
-- **The Operator never touches an API key.** Apify and the AI providers are
+- **The Operator never touches an API key.** HikerAPI and the AI providers are
   billed to the Owner and live only as server-side secrets. This is a standing
   constraint, not a feature that can be traded away.
 
 ## Operating Context
 
 The loop, as the Operator actually works it: a one-time prompt wizard in Settings
-(~5 minutes) and a set of lead-quality rules → a keyword, hashtag or place search
-in the Campaign Builder (the scrape takes 1–4 minutes, up to 250 results per
-term) → **Generate AI DMs** → the Approval Queue, where each draft is read,
+(~5 minutes) and a set of lead-quality rules → a scrape in the Campaign Builder
+from one of nine sources — keyword, hashtag, followers, following, post likers,
+post commenters, location, similar accounts, or a handle list (up to 250
+profiles per query, progress shown live, stoppable) → **Generate AI DMs** → the Approval Queue, where each draft is read,
 edited, approved or rejected → the Chrome extension sends the approved ones →
 replies arrive in the Inbox with an AI draft attached → the dashboard funnel and
 follow-up ladders update themselves.
@@ -142,7 +143,7 @@ Explicitly undecided — record, do not invent:
   reconciling into one honest customer-facing throughput number.
 - The three-day hold and the $147 charge are Whop configuration; nothing in this
   codebase makes them true.
-- Per-customer variable API cost (Apify + AI providers) has never been measured,
+- Per-customer variable API cost (HikerAPI + AI providers) has never been measured,
   so gross margin is unknown.
 - The SMMA beachhead has not been validated against a paying customer.
 

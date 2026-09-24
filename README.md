@@ -1,6 +1,6 @@
 # MagnetEngine — AI Lead Automation
 
-MagnetEngine finds Instagram leads with Apify, writes personalized DMs with AI, queues them for approval, and auto-sends approved messages through a Chrome extension.
+MagnetEngine finds Instagram leads (via HikerAPI), writes personalized DMs with AI, queues them for approval, and auto-sends approved messages through a Chrome extension.
 
 ## Stack
 
@@ -109,7 +109,7 @@ Full setup click-path: `docs/WHOP_SETUP.md`.
 ## Environment variables — frontend vs backend
 
 **No secret key ever reaches the browser.** All external API calls (Claude/OpenAI/
-Gemini, Apify) go through Supabase Edge Functions that hold the keys server-side.
+Gemini, HikerAPI) go through Supabase Edge Functions that hold the keys server-side.
 
 **Frontend (`VITE_*` in `.env` / Vercel — PUBLIC, shipped in the JS bundle):**
 
@@ -127,7 +127,7 @@ Only put non-secret values here. Never add an API key as a `VITE_` var.
 | Secret | Used by |
 |---|---|
 | `CLAUDE_API_KEY` (and/or `OPENAI_API_KEY`, `GEMINI_API_KEY`) | `generate-dm` |
-| `APIFY_API_KEY` (opt. `APIFY_FOLLOWERS_ACTOR_ID`) | `start-scrape`, `poll-scrape` |
+| `HIKERAPI_KEY` (opt. `MONTHLY_SCRAPE_LIMIT`, default 5000 lookups/user/month) | `scrape` |
 | `WHOP_WEBHOOK_SECRET` (opt. `WHOP_PLAN_ID_MONTHLY`/`_ANNUAL`) | `whop-webhook` |
 | `ADMIN_EMAILS` | `admin-api` |
 
@@ -135,21 +135,20 @@ Only put non-secret values here. Never add an API key as a `VITE_` var.
 
 ## Backend (Edge Functions)
 
-The `supabase/functions/` directory holds five Deno Edge Functions:
-`generate-dm`, `start-scrape`, `poll-scrape` (secret-holding proxies for the app),
-plus `whop-webhook` and `admin-api`. Deploy and configure once:
+The `supabase/functions/` directory holds the Deno Edge Functions:
+`generate-dm`, `generate-reply`, `scrape` (secret-holding proxies for the app),
+plus `whop-webhook`, `admin-api` and `auth-email-hook`. Deploy and configure once:
 
 ```bash
 # 1. Set the server-side secrets (never committed, never VITE_-prefixed):
 supabase secrets set \
   CLAUDE_API_KEY=sk-ant-... \
-  APIFY_API_KEY=apify_api_...
-# optional: OPENAI_API_KEY, GEMINI_API_KEY, APIFY_FOLLOWERS_ACTOR_ID
+  HIKERAPI_KEY=...
+# optional: OPENAI_API_KEY, GEMINI_API_KEY, MONTHLY_SCRAPE_LIMIT
 
 # 2. Deploy the app proxies (gateway JWT check ON — only signed-in users can call):
 supabase functions deploy generate-dm
-supabase functions deploy start-scrape
-supabase functions deploy poll-scrape
+supabase functions deploy scrape
 # webhook is public (verifies its own signature); admin-api keeps JWT check on:
 supabase functions deploy whop-webhook --no-verify-jwt
 supabase functions deploy admin-api
@@ -157,7 +156,8 @@ supabase functions deploy admin-api
 
 The browser calls the app proxies via `supabase.functions.invoke`, which attaches
 the signed-in user's JWT automatically — so anonymous callers can't spend your
-AI/Apify credits.
+AI/HikerAPI credits. Scrape lookups are also metered per user per month in
+`scrape_usage` — run `supabase/migrations/0002_scrape_usage.sql` once.
 
 ## Deploying (Vercel + Supabase)
 

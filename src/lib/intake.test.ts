@@ -49,7 +49,7 @@ describe('parseBoolean', () => {
 describe('intake — scraper sources', () => {
   it('reads the keyword actor camelCase shape', () => {
     const { leads } = intake({
-      source: 'search',
+      source: 'scrape',
       campaignId: 'c1',
       rows: [{
         username: 'FounderMike',
@@ -85,7 +85,7 @@ describe('intake — scraper sources', () => {
 
   it('reads the followers actor snake_case and GraphQL-edge shape', () => {
     const { leads } = intake({
-      source: 'followers',
+      source: 'scrape',
       campaignId: 'c1',
       rows: [{
         username: 'coach_jane',
@@ -113,7 +113,7 @@ describe('intake — scraper sources', () => {
 
   it('skips rows with no handle and repeats within the batch', () => {
     const { leads, skipped } = intake({
-      source: 'search',
+      source: 'scrape',
       campaignId: 'c1',
       rows: [
         { username: 'a' },
@@ -127,9 +127,43 @@ describe('intake — scraper sources', () => {
     expect(skipped).toBe(2);
   });
 
+  it('reads the scrape function\'s ProfileRow — HikerAPI field names, no translation', () => {
+    const { leads } = intake({
+      source: 'scrape',
+      campaignId: 'c1',
+      rows: [{
+        pk: '123',
+        username: 'Miami_Realtor',
+        full_name: 'Ana Costa',
+        biography: 'Luxury homes',
+        follower_count: 5400,
+        following_count: 610,
+        media_count: 212,
+        is_private: false,
+        is_verified: false,
+        is_business: true,
+        category: 'Real Estate Agent',
+        profile_pic_url: 'https://pic',
+        city_name: 'Miami',
+      }],
+    });
+
+    expect(leads[0]).toMatchObject({
+      handle: 'miami_realtor',
+      name: 'Ana Costa',
+      bio: 'Luxury homes',
+      followers: 5400,
+      following: 610,
+      postsCount: 212,
+      businessAccount: true,
+      businessCategory: 'Real Estate Agent',
+      city: 'Miami',
+    });
+  });
+
   it('gives every lead its own id and the batch campaignId', () => {
     const { leads } = intake({
-      source: 'search',
+      source: 'scrape',
       campaignId: 'camp-9',
       rows: [{ username: 'a' }, { username: 'b' }],
     });

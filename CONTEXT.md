@@ -25,8 +25,9 @@ review and reporting; it does not own the Leads in it.
 _Avoid_: batch, list, segment
 
 **Intake**:
-Turning rows from an outside source — keyword search, followers scrape, CSV
-upload — into Leads. Intake is where handles are canonicalised and duplicates
+Turning rows from an outside source — an Instagram scrape (keyword, hashtag,
+followers, post engagement, place, a handle list…) or a CSV upload — into
+Leads. Intake is where handles are canonicalised and duplicates
 are dropped, so downstream code can assume both.
 _Avoid_: import, ingestion (reserved for the Inbox), mapping
 
