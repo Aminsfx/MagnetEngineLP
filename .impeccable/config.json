@@ -1,3 +1,15 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "theme('fontfamily.sans')",
+        "createdAt": "2026-09-24T08:50:53.424Z",
+        "reason": "Claude: false positive — index.css sets body font via Tailwind's theme('fontFamily.sans'), which resolves to Schibsted Grotesk, the face DESIGN.md documents"
+      }
+    ]
+  }
 }
