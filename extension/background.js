@@ -1,4 +1,4 @@
-// MagnetEngine — Background Service Worker v2
+// MagnetEngine — Background Service Worker v3
 
 // The wire protocol is defined once, in protocol.js, and shared with the
 // content script (loaded first in content_scripts) and the app (which has a
@@ -114,19 +114,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    // ── Stats request from the web app (real sent count + sent log) ────────
-    if (kind === RUNTIME.GET_STATS) {
-        chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog', 'sentHandles'], (result) => {
-            const fresh = result.dailyResetDate === new Date().toDateString();
-            sendResponse({
-                dailySentCount: fresh ? (result.dailySentCount || 0) : 0,
-                dailyCap:       Number(result.dailyCap) || DEFAULT_DAILY_CAP,
-                sentLog:        fresh ? (result.sentLog || []) : [],
-                // Not date-gated: the app reconciles against this so leads sent
-                // on earlier days stay marked as sent and never get re-queued.
-                sentHandles:    result.sentHandles || [],
+    // ── Settings from the web app (the Send Cap changed in Settings) ───────
+    // Stored at once rather than waiting for the next campaign handoff, which
+    // is refused while a campaign runs — so the cap enforced here and the one
+    // the dashboard shows both follow Settings. Answered with fresh stats.
+    if (kind === APP_TO_EXT.SETTINGS) {
+        chrome.storage.local.get(['dailyCap'], (stored) => {
+            const { dailyCap } = readSendSettings(request.payload, {
+                dailyCap: Number(stored.dailyCap) || DEFAULT_DAILY_CAP,
+            });
+            chrome.storage.local.set({ dailyCap }, () => {
+                resumeIfStalled();
+                readStats(sendResponse);
             });
         });
+        return true;
+    }
+
+    // ── Stats request from the web app (real sent count + sent log) ────────
+    if (kind === RUNTIME.GET_STATS) {
+        readStats(sendResponse);
         return true;
     }
 
@@ -249,6 +256,52 @@ function broadcastToApp(message) {
             }
         }
     });
+}
+
+// ── Today's sending, as the dashboard reads it ───────────────────
+function readStats(sendResponse) {
+    chrome.storage.local.get(['dailySentCount', 'dailyResetDate', 'dailyCap', 'sentLog', 'sentHandles'], (result) => {
+        const fresh = result.dailyResetDate === new Date().toDateString();
+        sendResponse({
+            dailySentCount: fresh ? (result.dailySentCount || 0) : 0,
+            dailyCap:       Number(result.dailyCap) || DEFAULT_DAILY_CAP,
+            sentLog:        fresh ? (result.sentLog || []) : [],
+            // Not date-gated: the app reconciles against this so leads sent
+            // on earlier days stay marked as sent and never get re-queued.
+            sentHandles:    result.sentHandles || [],
+        });
+    });
+}
+
+// ── Restart a campaign that stopped at its cap ─────────────────────
+// A campaign that reaches the Send Cap simply stops scheduling (see
+// TASK_COMPLETE). When the cap is raised — or a new day resets the count —
+// the queued leads should carry on, but nothing ever woke the drip back up.
+// This does, one paced step from now: never an immediate send, and never a
+// second schedule on top of one already waiting.
+function resumeIfStalled() {
+    chrome.storage.local.get(
+        ['campaignQueue', 'isExecuting', 'isPaused', 'dailySentCount', 'dailyResetDate', 'dailyCap', 'minDelay', 'maxDelay'],
+        (result) => {
+            const queue = result.campaignQueue || [];
+            if (queue.length === 0 || result.isExecuting || result.isPaused) return;
+
+            const today = new Date().toDateString();
+            const count = result.dailyResetDate === today ? (result.dailySentCount || 0) : 0;
+            const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
+            if (count >= cap) return;
+
+            chrome.alarms.get('dripEngine', (alarm) => {
+                if (alarm) return;
+                const min = Number(result.minDelay) || DEFAULT_MIN_DELAY;
+                const max = Math.max(min, Number(result.maxDelay) || DEFAULT_MAX_DELAY);
+                const delayMinutes = min + Math.random() * (max - min);
+                chrome.storage.local.set({ nextAlarmTime: Date.now() + delayMinutes * 60 * 1000 }, () => {
+                    chrome.alarms.create('dripEngine', { delayInMinutes: delayMinutes });
+                });
+            });
+        },
+    );
 }
 
 // ── Core: open next Instagram tab ─────────────────────────────────

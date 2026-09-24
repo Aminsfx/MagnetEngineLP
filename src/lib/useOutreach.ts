@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppConfig, DashboardStats, Lead } from './types';
 import type { PlanLimits } from './plans';
-import { SUPPORT_EMAIL } from './plans';
+import { SUPPORT_EMAIL, sendCapOf } from './plans';
 import type { WorkspaceStore } from './store';
 import type { DueFollowUp } from './followups';
 import { db } from './db';
@@ -397,7 +397,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
       leads: due.map((d) => ({ handle: d.lead.handle, message: d.message })),
       minDelay: delay.min,
       maxDelay: delay.max,
-      dailyCap: config.dailySendCap ?? 40,
+      dailyCap: sendCapOf({ dailySendCap: config.dailySendCap }),
     });
     // Stamping a step the extension never received would burn it: the Lead
     // reads as followed up, and the touch is never retried. Leave them due.

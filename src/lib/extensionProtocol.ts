@@ -29,6 +29,7 @@ export const APP_TO_EXT = {
   GET_STATS: 'MAGNET_ENGINE_GET_STATS',
   GET_INBOX: 'MAGNET_ENGINE_GET_INBOX',
   HELLO: 'MAGNET_ENGINE_HELLO',
+  SETTINGS: 'MAGNET_ENGINE_SETTINGS',
 } as const;
 
 /** Extension → page. */
@@ -45,7 +46,7 @@ export const PROTOCOL_PREFIX = 'MAGNET_ENGINE_';
  * Wire-protocol revision this build of the dashboard speaks. Must match
  * MAGNET_PROTOCOL.VERSION in extension/protocol.js — asserted by the test.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * What an extension built before the handshake (≤ 1.4.0) accepts.
@@ -74,6 +75,17 @@ export interface CampaignPayload {
   /** Minutes between sends — the extension randomises within the range. */
   minDelay: number;
   maxDelay: number;
+  dailyCap: number;
+}
+
+/**
+ * The Operator's sending settings, pushed to the extension the moment they
+ * change. Before protocol 3 the extension only learned the Send Cap from the
+ * next campaign handoff — and refuses a handoff while a campaign runs — so a
+ * cap changed in Settings reached neither the extension's enforcement nor the
+ * header's "sent today" pill, which reads the extension's cap.
+ */
+export interface SendSettings {
   dailyCap: number;
 }
 
@@ -278,6 +290,22 @@ export function sendCampaign(payload: CampaignPayload): Handoff {
     return { delivered: false, reason: explainRefusal() };
   }
   window.postMessage({ type: APP_TO_EXT.CAMPAIGN, payload }, '*');
+  return { delivered: true };
+}
+
+/**
+ * Tell the extension the Operator's current sending settings.
+ *
+ * Refused (not posted) to a build that doesn't accept SETTINGS — protocol 2
+ * and older. Those builds keep the cap they were last handed and pick up the
+ * new one with the next campaign, which carries it; the caller decides whether
+ * that is worth saying. A delivered push is answered with fresh STATS.
+ */
+export function pushSendSettings(settings: SendSettings): Handoff {
+  if (!accepts(APP_TO_EXT.SETTINGS)) {
+    return { delivered: false, reason: explainRefusal() };
+  }
+  window.postMessage({ type: APP_TO_EXT.SETTINGS, payload: settings }, '*');
   return { delivered: true };
 }
 

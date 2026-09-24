@@ -56,6 +56,22 @@ if (!window.location.hostname.includes("instagram.com")) {
             return;
         }
 
+        // Page → background: the Operator changed their sending settings.
+        // The worker stores them and answers with fresh stats, so the
+        // dashboard's "sent today" pill shows the new cap straight away.
+        if (event.data.type === APP_TO_EXT.SETTINGS) {
+            try {
+                if (!chrome?.runtime?.sendMessage) return;
+                chrome.runtime.sendMessage({ type: APP_TO_EXT.SETTINGS, payload: event.data.payload }, (stats) => {
+                    if (chrome.runtime.lastError || !stats) return;
+                    window.postMessage({ type: EXT_TO_APP.STATS, ...stats }, '*');
+                });
+            } catch (e) {
+                console.warn("[MagnetEngine] settings relay error:", e);
+            }
+            return;
+        }
+
         // Page → background: the app asks for the latest inbox snapshot.
         if (event.data.type === APP_TO_EXT.GET_INBOX) {
             try {

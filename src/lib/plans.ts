@@ -75,6 +75,25 @@ export const PLAN_LIMITS: PlanLimits = {
     maxCampaignsPerMonth: 6,
 };
 
+/** The Send Cap a config that never set one gets. The extension's own default matches. */
+export const DEFAULT_SEND_CAP = 40;
+
+/**
+ * The Send Cap — how many DMs the extension may send in a day — as every
+ * surface must read it: the Operator's setting, or the default, clamped to
+ * the plan.
+ *
+ * One function because four call sites each spelled it themselves and two of
+ * them disagreed: Settings and the handoffs fell back to 40, the header to the
+ * plan's 200, so an account that never touched the setting was told it could
+ * send 200 while every campaign carried 40.
+ */
+export function sendCapOf(config: { dailySendCap?: number }): number {
+    const chosen = Number(config.dailySendCap);
+    const cap = Number.isFinite(chosen) && chosen > 0 ? Math.round(chosen) : DEFAULT_SEND_CAP;
+    return Math.min(PLAN_LIMITS.maxDailyCap, Math.max(1, cap));
+}
+
 /** The one support address. Every mailto in the app is built from it. */
 export const SUPPORT_EMAIL = 'amine@magnetengine.xyz';
 export const UPGRADE_CONTACT = `mailto:${SUPPORT_EMAIL}?subject=Upgrade%20Plan`;

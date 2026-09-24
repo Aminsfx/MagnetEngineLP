@@ -9,6 +9,7 @@ import {
   accepts,
   getExtensionStatus,
   onExtensionMessage,
+  pushSendSettings,
   requestExtensionSync,
   sendCampaign,
   watchExtension,
@@ -132,6 +133,25 @@ describe('app adapter', () => {
     expect(types).toContain(APP_TO_EXT.GET_INBOX);
   });
 
+  it('pushes sending settings under the agreed name', () => {
+    const posted = vi.spyOn(window, 'postMessage');
+    const handoff = pushSendSettings({ dailyCap: 80 });
+
+    expect(handoff.delivered).toBe(true);
+    expect(posted).toHaveBeenCalledWith({ type: APP_TO_EXT.SETTINGS, payload: { dailyCap: 80 } }, '*');
+  });
+
+  it('the extension keeps its stored cap when a SETTINGS payload carries nonsense', () => {
+    const read = loadExtensionScope().readSendSettings as (
+      payload: unknown, current: { dailyCap: number },
+    ) => { dailyCap: number };
+
+    expect(read({ dailyCap: 80 }, { dailyCap: 40 })).toEqual({ dailyCap: 80 });
+    expect(read({ dailyCap: 0 }, { dailyCap: 40 })).toEqual({ dailyCap: 40 });
+    expect(read({ dailyCap: 'lots' }, { dailyCap: 40 })).toEqual({ dailyCap: 40 });
+    expect(read(undefined, { dailyCap: 40 })).toEqual({ dailyCap: 40 });
+  });
+
   it('delivers known extension messages and ignores everything else', () => {
     const seen: string[] = [];
     const stop = onExtensionMessage((m) => seen.push(m.type));
@@ -227,6 +247,25 @@ describe('version handshake', () => {
       expect(status.state).toBe('legacy');
       expect(status.protocolVersion).toBe(1);
       expect(status.needsUpdate).toBe(true);
+    });
+  });
+
+  it('does not push settings to a build that cannot act on them', () => {
+    const posted = vi.spyOn(window, 'postMessage');
+    watching(() => {
+      announce({
+        type: EXT_TO_APP.HELLO_BACK,
+        protocolVersion: 2,
+        version: '1.5.1',
+        accepts: Object.values(APP_TO_EXT).filter((n) => n !== APP_TO_EXT.SETTINGS),
+      });
+      posted.mockClear();
+
+      const handoff = pushSendSettings({ dailyCap: 80 });
+
+      expect(handoff.delivered).toBe(false);
+      expect(handoff.reason).toMatch(/v1\.5\.1.*too old/);
+      expect(posted).not.toHaveBeenCalled();
     });
   });
 

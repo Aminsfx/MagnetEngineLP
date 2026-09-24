@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { sendCapOf } from '../../lib/plans';
 import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook, Bot } from 'lucide-react';
 import { AppConfig } from '../../lib/types';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
@@ -179,7 +180,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ onApply }) => {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig }) => {
     const { limits } = usePlan();
-    const dailyCap = config.dailySendCap ?? 40;
+    const dailyCap = sendCapOf(config);
     const toast = useToast();
     const [wizardStep, setWizardStep] = useState<WizardStep>(
         config.onboardingComplete ? 5 : 1

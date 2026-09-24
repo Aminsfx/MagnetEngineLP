@@ -25,6 +25,7 @@ import { todayCounts, headline } from '../lib/today';
 import {
   EXT_TO_APP,
   onExtensionMessage,
+  pushSendSettings,
   requestExtensionSync,
   sendCampaign,
   watchExtension,
@@ -35,6 +36,7 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompt
 import { AppConfig, Conversation, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
+import { sendCapOf } from '../lib/plans';
 import { useToast } from '../components/common/Toast';
 import { Loader2, Sparkles, Menu, Send } from 'lucide-react';
 
@@ -265,6 +267,21 @@ const DashboardShell: React.FC = () => {
   // app state — only on which extension is installed.
   useEffect(() => watchExtension(setExtStatus), []);
 
+  // ─── Send Cap → extension ───────────────────────────────────────────────────
+  // Settings owns the cap; the extension enforces it. It used to learn a new
+  // cap only from the next campaign handoff — refused while one runs — so a
+  // cap changed here reached neither the extension nor the header pill, which
+  // shows the extension's cap. Pushed whenever it changes and whenever an
+  // extension (re)announces itself, and only once the saved config has
+  // loaded, so the default is never pushed over the Operator's real setting.
+  // A build too old to accept it is refused inside pushSendSettings; the next
+  // handoff still carries the cap.
+  const sendCap = sendCapOf(config);
+  useEffect(() => {
+    if (dataLoading || extStatus.state !== 'ready') return;
+    pushSendSettings({ dailyCap: sendCap });
+  }, [dataLoading, sendCap, extStatus.state]);
+
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
     setConfig(newConfig);
@@ -326,7 +343,7 @@ const DashboardShell: React.FC = () => {
       leads: [{ handle: conv.handle, message: body }],
       minDelay: delay.min,
       maxDelay: delay.max,
-      dailyCap: configRef.current.dailySendCap ?? 40,
+      dailyCap: sendCapOf(configRef.current),
     });
     if (!handoff.delivered) {
       toast.error(handoff.reason!);
@@ -526,18 +543,26 @@ const DashboardShell: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            {/* Daily send counter — real count from the extension (what actually
-                sent today). Falls back to the app's cap when the extension
-                hasn't reported yet. */}
+            {/* Daily send counter: the count is the extension's (what actually
+                sent today), the cap is the Operator's (the one Settings shows).
+                It used to take the cap from the extension too, which only
+                learned a new one on the next campaign — so the pill and
+                Settings disagreed after every change. When an older extension
+                is still on its previous cap, the tooltip says so. */}
             {(() => {
-              const cap = extStats?.cap ?? Math.min(limits.maxDailyCap, config.dailySendCap ?? limits.maxDailyCap);
+              const cap = sendCap;
               const sent = extStats?.count ?? 0;
               const pct = cap > 0 ? sent / cap : 0;
               const color = usagePillTone(pct);
+              const behind = extStats && extStats.cap > 0 && extStats.cap !== cap;
               return (
                 <div
                   className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-label tabular-nums ${color}`}
-                  title="DMs the extension has confirmed sending today, against your Send Cap"
+                  title={
+                    behind
+                      ? `DMs the extension has confirmed sending today, against your Send Cap. Your extension is still on its previous cap of ${extStats.cap} a day; it switches to ${cap} with your next send, or right away once the extension is updated.`
+                      : 'DMs the extension has confirmed sending today, against your Send Cap'
+                  }
                 >
                   <Send className="w-3 h-3" aria-hidden />
                   {sent}/{cap}<span className="hidden sm:inline">&nbsp;sent today</span>

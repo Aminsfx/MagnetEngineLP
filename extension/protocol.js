@@ -33,8 +33,10 @@ const MAGNET_PROTOCOL = {
    * 1 — pre-handshake (≤ 1.4.0). Inferred, never sent: those builds answer
    *     GET_STATS but know nothing about HELLO.
    * 2 — HELLO / HELLO_BACK.
+   * 3 — SETTINGS: the Send Cap follows Settings the moment it changes, instead
+   *     of waiting for the next campaign (which is refused while one runs).
    */
-  VERSION: 2,
+  VERSION: 3,
 
   /** Every page↔extension message name starts with this. */
   PREFIX: 'MAGNET_ENGINE_',
@@ -45,6 +47,7 @@ const MAGNET_PROTOCOL = {
     GET_STATS: 'MAGNET_ENGINE_GET_STATS',
     GET_INBOX: 'MAGNET_ENGINE_GET_INBOX',
     HELLO: 'MAGNET_ENGINE_HELLO',
+    SETTINGS: 'MAGNET_ENGINE_SETTINGS',
   },
 
   /** Extension → page, relayed into the page by the content script. */
@@ -119,8 +122,15 @@ function readCampaign(payload, defaults) {
   };
 }
 
+/** Normalize a SETTINGS payload. A missing or nonsense cap keeps the one stored. */
+function readSendSettings(payload, current) {
+  const dailyCap = Math.round(Number(payload?.dailyCap));
+  return { dailyCap: dailyCap > 0 ? dailyCap : current.dailyCap };
+}
+
 globalThis.MAGNET_PROTOCOL = MAGNET_PROTOCOL;
 globalThis.isAppMessage = isAppMessage;
 globalThis.messageKind = messageKind;
 globalThis.readCampaign = readCampaign;
+globalThis.readSendSettings = readSendSettings;
 globalThis.describeExtension = describeExtension;

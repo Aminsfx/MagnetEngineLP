@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { sendCapOf } from '../../lib/plans';
 import { Lead, AppConfig } from '../../lib/types';
 import {
     Sparkles, Send, Trash2, Download, ChevronDown, Users,
@@ -382,7 +383,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
     // already contacted. Instagram reads repeat DMs to the same handle as
     // spam, so this is an account-restriction risk, not just bad data.
     const sendable = leads.filter(l => l.approved && l.dmContent && !l.dmSent);
-    const dailyCap = config.dailySendCap ?? 40;
+    const dailyCap = sendCapOf(config);
 
     /** Opens the confirmation, or says plainly why there is nothing to send. */
     const requestSend = () => {
