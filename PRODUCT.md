@@ -128,11 +128,13 @@ Seats are framed as founding-member scarcity with an owner-maintained count
 (currently 7 of 100), never a resetting countdown. The former 7-day money-back
 guarantee has been retired from every surface.
 
-**Decided, not yet true in the code:** the monthly DM allowance is **1,500**, as
-the landing card already states. Two things must move to match it — the
-`MONTHLY_DM_LIMIT` Supabase secret (generate-dm defaults to 500) and
-`PLAN_LIMITS.maxDMGenerations`, which still reads 500. Until both do, customers
-hit a wall at 500.
+**The monthly DM allowance is 1,500.** Server side it is live (2026-09-24): the
+`MONTHLY_DM_LIMIT` secret is 1500 and generate-dm version 12, the first deploy
+since July that meters DMs server-side at all, enforces it. Client side,
+`PLAN_LIMITS.maxDMGenerations` reads 1,500 on `chore/feedback-loop`; until that
+merges and deploys, the live dashboard's own check still stops Operators at
+500. Server-side counting began with that deploy, so the first metered month
+started partway through September.
 
 Explicitly undecided — record, do not invent:
 
