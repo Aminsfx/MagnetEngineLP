@@ -42,3 +42,12 @@ perf-report.txt
 # Business strategy / GTM planning — local working notes, not part of the product
 HORMOZI-BRIEF.md
 ROAD-TO-100-USERS.md
+
+# Impeccable design workspace: the briefs, config and design.json sidecar are
+# committed; screenshots, caches and live-session state are machine-local.
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/live/
+.impeccable/questions/
+.impeccable/critique/
+.impeccable/hook.cache.json

@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-24T00:00:00Z",
+  "title": "Design System: MagnetEngine",
+  "extensions": {
+    "colorMeta": {
+      "surface": { "role": "neutral", "displayName": "Ground", "canonical": "#08080a", "tonalRamp": ["#08080a", "#0c0c0f", "#101014", "#16161b", "#262626", "#525252", "#a3a3a3", "#f5f5f5"] },
+      "surface-raised": { "role": "neutral", "displayName": "Raised", "canonical": "#101014", "tonalRamp": ["#08080a", "#0c0c0f", "#101014", "#16161b", "#262626", "#525252", "#a3a3a3", "#f5f5f5"] },
+      "surface-sunken": { "role": "neutral", "displayName": "Sunken", "canonical": "#0c0c0f", "tonalRamp": ["#08080a", "#0c0c0f", "#101014", "#16161b", "#262626", "#525252", "#a3a3a3", "#f5f5f5"] },
+      "surface-overlay": { "role": "neutral", "displayName": "Overlay", "canonical": "#16161b", "tonalRamp": ["#08080a", "#0c0c0f", "#101014", "#16161b", "#262626", "#525252", "#a3a3a3", "#f5f5f5"] },
+      "action-white": { "role": "primary", "displayName": "Action White", "canonical": "#ffffff", "tonalRamp": ["#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5", "#ffffff"] },
+      "neutral-100": { "role": "neutral", "displayName": "Gray 100 (emphasised body)", "canonical": "#f5f5f5", "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "neutral-200": { "role": "neutral", "displayName": "Gray 200 (FAQ question, ghost label, focus ring)", "canonical": "#e5e5e5", "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "neutral-300": { "role": "neutral", "displayName": "Gray 300 (subhead, lit body)", "canonical": "#d4d4d4", "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "neutral-400": { "role": "neutral", "displayName": "Gray 400 (informative secondary)", "canonical": "#a3a3a3", "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "neutral-500": { "role": "neutral", "displayName": "Gray 500 (text floor)", "canonical": "#737373", "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "rgba(255,255,255,0.08)" },
+      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "rgba(255,255,255,0.12)" },
+      "hairline-hover": { "role": "neutral", "displayName": "Hairline Hover", "canonical": "rgba(255,255,255,0.30)" },
+      "wash": { "role": "neutral", "displayName": "Wash", "canonical": "rgba(255,255,255,0.04)" },
+      "positive-300": { "role": "secondary", "displayName": "Approval Emerald, text", "canonical": "#6ee7b7", "tonalRamp": ["#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0"] },
+      "positive-400": { "role": "secondary", "displayName": "Approval Emerald, mark", "canonical": "#34d399", "tonalRamp": ["#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0"] },
+      "positive-500": { "role": "secondary", "displayName": "Approval Emerald", "canonical": "#10b981", "tonalRamp": ["#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0"] },
+      "positive-wash": { "role": "secondary", "displayName": "Approval Wash", "canonical": "rgba(16,185,129,0.12)" },
+      "positive-line": { "role": "secondary", "displayName": "Approval Line", "canonical": "rgba(16,185,129,0.25)" },
+      "danger-300": { "role": "tertiary", "displayName": "Stop Red, text", "canonical": "#fca5a5", "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fecaca"] },
+      "danger-400": { "role": "tertiary", "displayName": "Stop Red, mark", "canonical": "#f87171", "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fecaca"] },
+      "danger-500": { "role": "tertiary", "displayName": "Stop Red", "canonical": "#ef4444", "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fecaca"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The hero h1 only, centred, max-w-5xl, balanced." },
+      "headline": { "displayName": "Headline", "purpose": "Every section h2 via the kit's Heading." },
+      "accent": { "displayName": "Accent (Instrument Serif italic)", "purpose": "The one Em phrase per heading; inherits the heading's size." },
+      "title": { "displayName": "Title", "purpose": "Pipeline station titles." },
+      "lead": { "displayName": "Lead", "purpose": "Intro under a heading; hero subhead at ~50ch." },
+      "body": { "displayName": "Body", "purpose": "Reading copy and ruled-row answers." },
+      "body-sm": { "displayName": "Body small", "purpose": "Dense body, FAQ answers (68ch), feature lists, pill labels." },
+      "meta": { "displayName": "Meta", "purpose": "Terms, captions, nav, marquee chips, row labels." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked data keys inside product surfaces only; the smallest size." },
+      "data": { "displayName": "Data (Sometype Mono)", "purpose": "Counts, prices in comparisons, handles, pacing stats; tabular numerals." }
+    },
+    "shadows": [
+      { "name": "bezel-highlight", "value": "inset 0 1px 1px rgba(255,255,255,0.04)", "purpose": "Top edge of every panel and dashboard card; travels with the 1px gradient bezel (CARD_BEZEL)." },
+      { "name": "bezel-edge", "value": "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)", "purpose": "The 1px gradient border, painted on a p-[1px] wrapper." },
+      { "name": "bezel-edge-accent", "value": "linear-gradient(160deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.03))", "purpose": "The lit edge of the card you act in (pricing, approval card)." },
+      { "name": "action-glow", "value": "0 10px 30px -12px rgba(255,255,255,0.35)", "purpose": "Under the white primary pill and auth submit only." },
+      { "name": "floating-header", "value": "0 18px 40px -18px rgba(0,0,0,0.9)", "purpose": "The condensed header pill, with backdrop-filter: blur(16px) over surface at 70%." },
+      { "name": "nav-active-inset", "value": "inset 0 0 0 1px rgba(255,255,255,0.1)", "purpose": "The scroll-spied section link lifted out of its track." },
+      { "name": "approve-ready", "value": "0 0 0 5px rgba(52,211,153,0.22)", "purpose": "One pulse on the Approve control when the approval card's trace completes." }
+    ],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The system's one easing: entrances, pill disc travel, header condense, sheet, FAQ rows, trace underline." },
+      { "name": "ease-in-out-trace", "value": "cubic-bezier(0.65, 0, 0.35, 1)", "purpose": "The highlighter sweep in the approval card (520ms)." },
+      { "name": "landing-in", "value": "1000ms ease-out-expo; from opacity 0, translateY(28px), blur(8px); delays 0/100/200/260ms", "purpose": "Hero text entrance, CSS-only, visible by default." },
+      { "name": "landing-rise", "value": "800ms ease-out-expo; from opacity 0, translateY(-24px)", "purpose": "The header's one entrance." },
+      { "name": "control-slow", "value": "500ms", "purpose": "PillButton disc travel and padding swap, header condense, sheet slide, FAQ expand." },
+      { "name": "control-fast", "value": "300ms", "purpose": "Ghost pill, nav link colour, sheet scrim fade." },
+      { "name": "marquee", "value": "45s linear infinite; pauses on hover and offscreen", "purpose": "Niche strip under the hero." },
+      { "name": "dm-rise", "value": "55s linear infinite per column; 9s approval flash", "purpose": "Variant B's DM wall." },
+      { "name": "hero-canvas", "value": "requestAnimationFrame, always scheduled; draws only while in view; DPR capped at 2; dt clamped to 48ms", "purpose": "Variant A magnet field and C radar sweep." },
+      { "name": "reduced-motion", "value": "400ms opacity fade; canvases render still frames; marquee and DM wall stand still", "purpose": "prefers-reduced-motion: reduce." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Pill",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action: a white pill whose arrow disc slides from right to left and turns on hover or focus.",
+      "html": "<a class=\"ds-pill\" href=\"#\"><span class=\"ds-pill-label\">Start my 3-day trial</span><span class=\"ds-pill-disc\" aria-hidden=\"true\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/></svg></span></a>",
+      "css": ".ds-pill { position: relative; display: inline-flex; align-items: center; height: 48px; padding: 0 56px 0 24px; overflow: hidden; border-radius: 9999px; white-space: nowrap; background: #ffffff; color: #08080a; font-family: 'Schibsted Grotesk', system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.7; font-weight: 600; text-decoration: none; box-shadow: 0 10px 30px -12px rgba(255,255,255,0.35); transition: padding 500ms cubic-bezier(0.16,1,0.3,1), background-color 500ms cubic-bezier(0.16,1,0.3,1), transform 500ms cubic-bezier(0.16,1,0.3,1); } .ds-pill-label { position: relative; z-index: 1; } .ds-pill-disc { position: absolute; right: 4px; top: 50%; width: 40px; height: 40px; border-radius: 9999px; background: #08080a; color: #ffffff; display: flex; align-items: center; justify-content: center; transform: translateY(-50%); transition: right 500ms cubic-bezier(0.16,1,0.3,1), transform 500ms cubic-bezier(0.16,1,0.3,1); } .ds-pill:hover, .ds-pill:focus-visible { padding: 0 24px 0 56px; background: #f5f5f5; } .ds-pill:hover .ds-pill-disc, .ds-pill:focus-visible .ds-pill-disc { right: calc(100% - 44px); transform: translateY(-50%) rotate(45deg); } .ds-pill:focus-visible { outline: 2px solid #e5e5e5; outline-offset: 4px; } .ds-pill:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Ghost Pill",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "The second action: a hairline pill that brightens on hover.",
+      "html": "<button type=\"button\" class=\"ds-ghost\">Book a 15-minute list check</button>",
+      "css": ".ds-ghost { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 24px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #e5e5e5; font-family: 'Schibsted Grotesk', system-ui, sans-serif; font-size: 0.9375rem; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 300ms, border-color 300ms, color 300ms, transform 300ms; } .ds-ghost:hover { color: #ffffff; border-color: rgba(255,255,255,0.30); background: rgba(255,255,255,0.04); } .ds-ghost:focus-visible { outline: 2px solid #e5e5e5; outline-offset: 3px; } .ds-ghost:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Section Nav",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Recessed pill track; the section in view is lifted out onto a ground-coloured pill.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Sections\"><a href=\"#\" class=\"ds-nav-link\">The problem</a><a href=\"#\" class=\"ds-nav-link is-current\" aria-current=\"true\">How it works</a><a href=\"#\" class=\"ds-nav-link\">The math</a><a href=\"#\" class=\"ds-nav-link\">Pricing</a></nav>",
+      "css": ".ds-nav { display: inline-flex; align-items: center; padding: 4px; border-radius: 9999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); } .ds-nav-link { display: block; padding: 8px 16px; border-radius: 9999px; font-family: 'Schibsted Grotesk', system-ui, sans-serif; font-size: 0.8125rem; line-height: 1.5; font-weight: 500; color: #a3a3a3; text-decoration: none; transition: color 300ms, background-color 300ms; } .ds-nav-link:hover { color: #ffffff; background: rgba(8,8,10,0.6); } .ds-nav-link.is-current { color: #ffffff; background: #08080a; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); } .ds-nav-link:focus-visible { outline: 2px solid #e5e5e5; outline-offset: 3px; }"
+    },
+    {
+      "name": "Bezelled Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The public pages' container: a 1px gradient edge around a raised card with a hairline top highlight. The accent variant lights the edge for the card you act in.",
+      "html": "<div class=\"ds-bezel ds-bezel-accent\"><div class=\"ds-panel\"><p class=\"ds-panel-row\"><span>1,500 DMs sent a month</span><span class=\"ds-panel-meta\">your allowance</span></p><p class=\"ds-panel-row\"><span>× your reply rate</span><span class=\"ds-panel-meta\">assume 8% until you have your own</span></p></div></div>",
+      "css": ".ds-bezel { border-radius: 1.25rem; padding: 1px; background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%); } .ds-bezel-accent { background: linear-gradient(160deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.03)); } .ds-panel { border-radius: calc(1.25rem - 1px); background: #101014; box-shadow: inset 0 1px 1px rgba(255,255,255,0.04); padding: 28px; font-family: 'Schibsted Grotesk', system-ui, sans-serif; } .ds-panel-row { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin: 0; padding: 16px 0; color: #ffffff; font-size: 0.9375rem; font-weight: 500; } .ds-panel-row + .ds-panel-row { border-top: 1px solid rgba(255,255,255,0.08); } .ds-panel-meta { color: #a3a3a3; font-size: 0.8125rem; font-weight: 400; text-align: right; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Auth field: persistent label above, raised well, white focus edge and soft ring.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-email\" class=\"ds-field-label\">Email</label><input id=\"ds-email\" class=\"ds-input\" type=\"email\" placeholder=\"you@business.com\"></div>",
+      "css": ".ds-field { font-family: 'Schibsted Grotesk', system-ui, sans-serif; max-width: 24rem; } .ds-field-label { display: block; margin-bottom: 8px; font-size: 0.8125rem; font-weight: 500; color: #d4d4d4; } .ds-input { width: 100%; background: #101014; border: 1px solid rgba(255,255,255,0.10); border-radius: 0.75rem; padding: 12px 16px; font-family: inherit; font-size: 0.9375rem; line-height: 1.7; color: #ffffff; transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: #737373; } .ds-input:hover { border-color: rgba(255,255,255,0.20); } .ds-input:focus { outline: none; border-color: rgba(255,255,255,0.50); box-shadow: 0 0 0 2px rgba(255,255,255,0.10); }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "chip-positive",
+      "description": "Pill chips: emerald for a good outcome or the free trial, neutral for a plain tag.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-positive\">3-day free trial</span><span class=\"ds-chip ds-chip-neutral\">Founding member</span></div>",
+      "css": ".ds-chips { display: flex; gap: 8px; font-family: 'Schibsted Grotesk', system-ui, sans-serif; } .ds-chip { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 0.6875rem; line-height: 1.35; font-weight: 600; } .ds-chip-positive { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: #6ee7b7; } .ds-chip-neutral { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #ffffff; }"
+    },
+    {
+      "name": "Niche Chip",
+      "kind": "chip",
+      "refersTo": "chip-niche",
+      "description": "A search term the Campaign Builder accepts, shown in the marquee instead of customer logos.",
+      "html": "<span class=\"ds-niche\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg>roofing contractor</span>",
+      "css": ".ds-niche { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.08); font-family: 'Schibsted Grotesk', system-ui, sans-serif; font-size: 0.8125rem; line-height: 1.5; color: #d4d4d4; white-space: nowrap; } .ds-niche svg { color: #737373; }"
+    },
+    {
+      "name": "Seat Map",
+      "kind": "custom",
+      "refersTo": "seat-map",
+      "description": "The founding-seat count drawn as the hundred seats it counts; stands where an avatar stack would.",
+      "html": "<div class=\"ds-seats\"><span class=\"ds-seat-grid\" aria-hidden=\"true\"><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class=\"ds-seat-text\"><b>7 of 100 founding seats</b><span>claimed at $147/month</span></span></div>",
+      "css": ".ds-seats { display: flex; align-items: center; gap: 14px; font-family: 'Schibsted Grotesk', system-ui, sans-serif; } .ds-seat-grid { display: grid; grid-template-columns: repeat(20, 3px); grid-auto-rows: 3px; gap: 2px; } .ds-seat-grid i { border-radius: 1px; background: rgba(255,255,255,0.12); } .ds-seat-grid i.on { background: #ffffff; } .ds-seat-text { line-height: 1.25; } .ds-seat-text b { display: block; font-size: 0.9375rem; font-weight: 600; color: #ffffff; font-variant-numeric: tabular-nums; } .ds-seat-text span { display: block; font-size: 0.8125rem; color: #a3a3a3; }"
+    },
+    {
+      "name": "Approve / Reject Pair",
+      "kind": "custom",
+      "refersTo": "approval-controls",
+      "description": "The dashboard's approval controls as depicted in the approval card: emerald confirm, hairline reject.",
+      "html": "<div class=\"ds-approve-row\"><span class=\"ds-approve\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg>Approve</span><span class=\"ds-reject\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>Reject</span></div>",
+      "css": ".ds-approve-row { display: flex; gap: 8px; font-family: 'Schibsted Grotesk', system-ui, sans-serif; } .ds-approve, .ds-reject { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 0.5rem; font-size: 0.8125rem; } .ds-approve { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: #6ee7b7; font-weight: 600; animation: ds-ready 1100ms cubic-bezier(0.16,1,0.3,1) 400ms both; } .ds-reject { border: 1px solid rgba(255,255,255,0.08); color: #a3a3a3; font-weight: 500; } @keyframes ds-ready { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } 35% { box-shadow: 0 0 0 5px rgba(52,211,153,0.22); } 100% { box-shadow: 0 0 0 10px rgba(52,211,153,0); } } @media (prefers-reduced-motion: reduce) { .ds-approve { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operator's Desk, After Dark",
+    "overview": "MagnetEngine looks like the dashboard it sells. The public pages (`/`, `/lp/b`, `/lp/c`), sign-in, activation, not-found and the extension popup all wear the client dashboard's palette: untinted near-black grounds, white for the one thing to do, grays for everything that is chrome, and green only where something went well. The owner chose the category standard (Linear's hairline precision and dark density, Framer's motion-led first viewport) and asked for it at full fidelity, so the system has no quirks. What makes it this product is what it refuses to fake: no logo strip, avatar stack, star rating or testimonial. Where the reference layout had those, the build shows true material instead: a seat count drawn as the hundred seats it counts, a marquee of niches the product can search, and the approval card itself as live DOM.\n\nDensity follows reading, not decoration. A landing section is one heading with one serif-italic phrase, a measured column (`max-w-2xl` to `max-w-3xl` for argument, `max-w-6xl` for the pipeline and header), and hairline-ruled rows instead of card grids. Motion has one job per surface: the hero field dramatises the variant's angle behind the headline, and the approval card plays the product's own mechanism once. Everything else only responds to input.",
+    "keyCharacteristics": [
+      "Near-black grounds with no hue; depth comes from four surface steps and 1px white hairlines, not shadows.",
+      "White is the action colour. Emerald (`positive`) and red (`danger`) are the only hues, and each always means something.",
+      "One typeface (Schibsted Grotesk) for everything, one Instrument Serif italic phrase per heading, Sometype Mono only for numbers and handles.",
+      "Every control is a pill; panels are 1.25rem bezelled rectangles; dashboard cards are 1.5rem.",
+      "A continuous hero field behind a legibility scrim, a CSS blur-rise entrance, and a resting state that is always the finished frame.",
+      "The proof shown is only proof that exists."
+    ],
+    "rules": [
+      { "name": "The Two Hues Rule", "body": "Green and red are the only colours in the product, and each must mean something. Green is a good outcome or the confirming half of a pair of actions. Red is destruction or failure. Decoration never earns either. `brand` (orange) is retired from every routed surface. `info`, `accent` and `caution` stay defined, but nothing public or in the dashboard renders them.", "section": "colors" },
+      { "name": "The Untinted Black Rule", "body": "The four grounds carry no hue. A black that is not black is a second accent nobody declared.", "section": "colors" },
+      { "name": "The White Means Act Rule", "body": "A solid white fill on a control marks the primary action: start the trial or submit the form. The second action is always the hairline ghost pill, never another white pill.", "section": "colors" },
+      { "name": "The One Italic Phrase Rule", "body": "A heading may carry one Instrument Serif italic phrase, set through `Em`, and no more. The serif never appears in body copy, UI or data.", "section": "typography" },
+      { "name": "The Mono Is Measurement Rule", "body": "Sometype Mono is for numbers, handles and counts, where tabular alignment helps a reader. It is never a way to look technical.", "section": "typography" },
+      { "name": "The Five Roles Rule", "body": "Running text uses the five named sizes (`label`, `meta`, `body-sm`, `body`, `lead`). Headings are fluid `clamp()`s set at the call site. Nothing is smaller than `label`.", "section": "typography" },
+      { "name": "The Hairline Rule", "body": "Structure is drawn with 1px white lines at 8% (12% for emphasis), never with drop shadows on cards.", "section": "elevation" },
+      { "name": "The Bezel Travels Together Rule", "body": "The gradient edge and the inner highlight are one device. Apply them from `CARD_BEZEL`, `CARD_BEZEL_STRONG` or `CARD_BEZEL_DANGER` in `src/lib/theme.ts`, never re-typed inline.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** take every colour from a token: a Tailwind role class, `theme()` in CSS, or `SURFACE`/`CHANNEL`/`alpha()` from `src/lib/theme.ts` for canvas and inline styles.",
+      "**Do** keep one white pill per action group and pair it with a hairline ghost pill for the second action.",
+      "**Do** give every heading at most one `Em` phrase in Instrument Serif italic.",
+      "**Do** set numbers, handles and prices in Sometype Mono with tabular numerals.",
+      "**Do** rule lists with `hairline` rows instead of wrapping each item in a card.",
+      "**Do** make every entrance CSS-only and visible by default: `landing-in` (1000ms, 28px rise out of an 8px blur, staggered 0, 100, 200 and 260ms), and a 400ms fade under reduced motion.",
+      "**Do** keep hero canvas loops always scheduled, skip drawing while out of view, and render still frames under reduced motion.",
+      "**Do** put a scrim behind any text that sits over a motion field, and fade the field before content rises over it.",
+      "**Do** print the trial terms (card required, cancel before day 4, the monthly price) wherever the trial is offered."
+    ],
+    "donts": [
+      "**Don't** use `brand` orange on any routed surface, and don't render `info`, `accent` or `caution` on public pages or in the dashboard.",
+      "**Don't** use green or red decoratively. A green point, check, ring or chip must stand for approved, replied, found, captured or free.",
+      "**Don't** show logos, avatar stacks, star ratings, testimonials or result numbers the product cannot stand behind. Show seats, terms, searchable niches and the product itself.",
+      "**Don't** put an uppercase tracked label above a section heading. The 11px uppercase label is for data keys inside product surfaces.",
+      "**Don't** use `neutral-600` or `neutral-700` for text; they are for borders, dividers and disabled chrome.",
+      "**Don't** add drop shadows to cards or panels; depth is the bezel and the surface step.",
+      "**Don't** gate a hero animation on `document.hidden` or `visibilitychange`.",
+      "**Don't** set the serif outside a heading's accent phrase, or the mono outside data.",
+      "**Don't** square off a public control; buttons, chips and nav are pills."
+    ]
+  }
+}

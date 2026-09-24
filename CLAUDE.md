@@ -6,8 +6,8 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 ## Tech Stack
 - **React 19 + TypeScript**
 - **Vite 6** — dev server on port 3000, env vars via `VITE_` prefix (`import.meta.env`)
-- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. The public pages are orange / black / white; the dashboard is black and white, with `positive` (emerald) and `danger` (red) as its only two hues. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
-- **React Router v7** — public: `/` (landing), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
+- **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. Every surface — dashboard, auth, legal, the extension popup — is black and white, with `positive` (emerald) and `danger` (red) as its only two hues; orange (`brand`) survives only in the unrouted, retired `src/pages/LandingPage.tsx`. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
+- **React Router v7** — public: `/` (landing A), `/lp/b` and `/lp/c` (A/B-test variants, `noindex`; `/preview/a|b|c` redirect to them), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
 - **Lucide React** — icons
@@ -18,7 +18,10 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 src/
   App.tsx                        # Slim router: lazy routes + auth/payment guards
   pages/
-    LandingPage.tsx              # Marketing landing page
+    landing/VariantA.tsx         # Live landing page (`/`) — "The Magnet"
+    landing/VariantB.tsx         # A/B variant at /lp/b — "Not a template"
+    landing/VariantC.tsx         # A/B variant at /lp/c — "The hire"
+    LandingPage.tsx              # Retired orange landing page — no route renders it
     LoginPage.tsx                # Sign in / sign up / forgot-password (Supabase)
     ResetPasswordPage.tsx        # Password-recovery landing (from email link)
     PendingActivationPage.tsx    # /activate — payment links + "check status"
@@ -30,8 +33,9 @@ src/
       ApprovalQueue.tsx          # Review / edit / approve / reject DMs
       FollowUpSequencer.tsx      # Multi-touch sequences (Pro+)
     dashboard/
-      MetricsGrid.tsx            # Funnel-stage metric cards
-      AIAnalyst.tsx              # Rule-based insights from DashboardStats
+      TodayPanel.tsx             # What's waiting on the Operator, each row linking to where to deal with it
+      Pipeline.tsx               # Found → Written → Approved → Sent → Replied → Booked, linear bars + step rates
+      AIAnalyst.tsx              # "Suggestions": rule-based notes from DashboardStats (no invented benchmarks)
       ConversionChart.tsx        # Last-7-days sends/replies chart (real data)
       OnboardingChecklist.tsx    # First-run checklist
     settings/
@@ -40,6 +44,9 @@ src/
     Sidebar.tsx                  # Left nav
     Hero.tsx / Features.tsx / Pricing.tsx / FAQ.tsx / CTA.tsx / SocialProof.tsx
     LiveWorkflowDemo.tsx         # Animated demo on landing page
+    ApprovalPreview.tsx          # The profile→DM approval card (landing hero + sign-in aside)
+    auth/AuthShell.tsx           # Split layout + fields for /login and /reset-password
+    auth/TrialTimeline.tsx       # Dated trial steps (sign-up aside, /activate)
     Logo.tsx                     # Brand logo component
   contexts/
     AuthContext.tsx              # Supabase session + signIn/signUp/signOut/resetPassword
@@ -51,6 +58,7 @@ src/
     store.ts                     # WorkspaceStore seam — createStore() picks the adapter
     db.ts                        # Supabase adapter (row mapping, batching, subscriptions)
     storage.ts                   # Browser-local bits only (dev fallback, DM delay, queue page size)
+    today.ts                     # todayCounts(): drafts to review, DMs to hand off, replies owed, follow-ups due
     intake.ts                    # Lead intake — the only way a Lead is constructed
     prompt.ts                    # DM + reply prompts, follow-up ladders, Offer Ledger
     followups.ts                 # Which Leads are due a touch + the template renderer
@@ -129,6 +137,19 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   `src/lib/completion.test.ts` imports it, which is what both executes it in
   vitest and pulls it into `npm run typecheck`.
 
+## Landing pages and the A/B test
+- Three pages sell the product, built from one kit (`src/components/landing/kit.tsx`,
+  `content.ts`, `motion/`): **A** at `/` (live), **B** at `/lp/b`, **C** at `/lp/c`.
+  Every page renders inside `LandingShell` with its `variant`; the shell does the
+  test's bookkeeping, so a new page cannot forget it.
+- `src/lib/landingVariant.ts` owns it: the first variant a browser sees is kept
+  (first touch), set as the GA user property `landing_variant`, attached to the
+  GA events `start_trial_click`, `book_call_click` and `sign_up`, and written into
+  the new Supabase user's metadata (`raw_user_meta_data->>'landing_variant'`).
+- B and C set `robots: noindex` — they are the same offer as `/`.
+- The FAQ is short and says nothing about account risk either way (owner
+  decision, 2026-09-24; see `PRODUCT.md`).
+
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
 - `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
@@ -206,7 +227,7 @@ VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin 
 **Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
 ```
 CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-reply
-MONTHLY_DM_LIMIT                                   # generate-dm quota (default 500)
+MONTHLY_DM_LIMIT                                   # generate-dm quota (default 1500)
 APIFY_API_KEY / APIFY_FOLLOWERS_ACTOR_ID           # start-scrape / poll-scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
 ADMIN_EMAILS                                       # admin-api
@@ -357,14 +378,15 @@ npm run preview  # Preview production build
 **`docs/DESIGN-TOKENS.md` is the contract — read it before you type a colour.**
 Tokens live in `tailwind.config.js` (class names) and `src/lib/theme.ts` (raw
 hex/rgba, for Recharts props and inline styles, which no utility can reach).
-- Surfaces by depth, not by eyedropper: `surface` `#030604` (app background),
-  `surface-raised` `#050A08` (cards), `surface-sunken` `#030A06` (dashboard
-  cards), `surface-overlay` `#0A1510` (menus, popovers, inputs). No new
-  arbitrary `bg-[#hex]`.
-- Roles, not hues: `brand`/`positive` (emerald) primary action + good outcome,
-  `info` (cyan) **AI affordances only**, `caution` (amber), `danger` (red),
-  `neutral` (zinc) for all chrome. `violet` and `blue` are **retired** — fold
-  existing uses into `info` or `neutral`.
+- Surfaces by depth, not by eyedropper: `surface` `#08080a` (app background),
+  `surface-raised` `#101014` (cards), `surface-sunken` `#0c0c0f` (dashboard
+  cards), `surface-overlay` `#16161b` (menus, popovers). No new arbitrary
+  `bg-[#hex]`. `DESIGN.md` records the whole shipped system.
+- Roles, not hues: white is the primary action; `positive` (emerald) a good
+  outcome or confirming action; `danger` (red) destructive; `neutral` (true
+  gray) all chrome. `info`/`accent` (amber) and `caution` (yellow) are defined
+  but render white/neutral today. `brand` (orange), `violet` and `blue` are
+  **retired**.
 - Cards: `rounded-[1.5rem]` with 1px gradient border + `inset 0 1px 1px rgba(255,255,255,0.04)` box-shadow — as `CARD_BEZEL` from `src/lib/theme.ts`, never re-typed inline
 - Text scale: `text-[10px]` labels → `text-sm` body → `text-2xl` metric values
 - Toast: custom hook (`useRef` timer), bottom-right, auto-dismiss 4 s

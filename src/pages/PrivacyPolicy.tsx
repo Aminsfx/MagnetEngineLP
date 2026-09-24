@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { SUPPORT_EMAIL } from '../lib/plans';
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div className="mb-10">
@@ -12,9 +13,8 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 
 const PrivacyPolicy: React.FC = () => {
     return (
-        <div className="relative min-h-screen bg-black text-white overflow-hidden">
+        <div className="relative min-h-screen bg-surface text-white overflow-hidden selection:bg-white/20 selection:text-white">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 max-w-3xl mx-auto px-6 py-16">
                 <Link
@@ -36,7 +36,7 @@ const PrivacyPolicy: React.FC = () => {
                     </p>
                 </div>
 
-                <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-4 mb-10 text-sm text-brand-300">
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4 mb-10 text-sm text-neutral-200">
                     <strong>Summary:</strong> MagnetEngine does not sell your personal data. You never need to enter any API keys or third-party credentials — all AI and data services are provided and managed by us as part of your subscription.
                 </div>
 
@@ -137,9 +137,7 @@ const PrivacyPolicy: React.FC = () => {
                     </ul>
                     <p>
                         To exercise any of these rights, contact us at{' '}
-                        <a href="mailto:privacy@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">
-                            privacy@magnetengine.xyz
-                        </a>.
+                        <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">{SUPPORT_EMAIL}</a>.
                     </p>
                 </Section>
 
@@ -159,16 +157,15 @@ const PrivacyPolicy: React.FC = () => {
                     <p>
                         If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us at:
                     </p>
-                    <div className="bg-neutral-900/50 border border-white/10 rounded-xl p-4 mt-2">
+                    <div className="bg-surface-raised border border-white/10 rounded-xl p-4 mt-2">
                         <p className="text-white font-medium">MagnetEngine</p>
-                        <p>Email: <a href="mailto:privacy@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">privacy@magnetengine.xyz</a></p>
-                        <p>Legal inquiries: <a href="mailto:legal@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">legal@magnetengine.xyz</a></p>
+                        <p>Email: <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">{SUPPORT_EMAIL}</a></p>
                     </div>
                 </Section>
 
-                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-600">
+                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
                     <span>© 2026 MagnetEngine. All rights reserved.</span>
-                    <Link to="/terms" className="text-brand-500 hover:text-brand-400 transition-colors">Terms of Service →</Link>
+                    <Link to="/terms" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">Terms of Service →</Link>
                 </div>
             </div>
         </div>

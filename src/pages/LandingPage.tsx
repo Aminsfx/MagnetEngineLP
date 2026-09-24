@@ -1,43 +1,41 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-    ArrowRight, ArrowUpRight, Check, X, Plus, Minus,
-    Search, PenLine, Send, BadgeCheck,
+    ArrowRight, Check, X, Plus, Minus, Search, PenLine, Send,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { alpha, CARD_BEZEL, CHANNEL } from '../lib/theme';
+import { ApprovalPreview, BrandPanel as Panel, EXAMPLE_QUEUE_SIZE } from '../components/ApprovalPreview';
+import { CARD_BEZEL } from '../lib/theme';
 import { PRICES } from '../lib/plans';
-import MagneticField from '../components/MagneticField';
 
 /**
  * The marketing landing page.
  *
- * Rendered in the dashboard's own visual language rather than a separate
- * landing-page one: `surface` grounds, `CARD_BEZEL` tiles on `surface-sunken`,
- * `brand-500/10` icon chips, brand accents, Plus Jakarta Sans, and the
- * app's own Navbar and Footer. The page a visitor signs up from and the product
- * they land in are the same object, so the handoff at checkout has no seam.
+ * The visual world is the category standard, chosen deliberately over two
+ * own-world directions and executed against Linear and Framer as the quality
+ * bar: near-black grounds, hairline rules, one accent, tabular figures,
+ * generous vertical rhythm, and a single authored scroll moment rather than
+ * effects scattered per section. The direction contract lives in
+ * `.impeccable/surfaces/src-pages-landingpage-tsx.md`, not here.
  *
- * The card below mirrors MetricsGrid's tile exactly — bezel wrapper, sunken
- * fill, hover glow orb, hairline accent on hover — because matching the product
- * means matching how a surface behaves, not only what colour it is.
+ * What the convention usually gets wrong and this page refuses:
+ *  - No invented proof. No customer logos, no testimonials, no result
+ *    screenshots — there are none to show. A buyer who googles a fake name is
+ *    gone, and four invented logos plus five fabricated testimonials were
+ *    already removed from this page once.
+ *  - No hero screenshot floating in perspective. The product appears as live
+ *    DOM the visitor can actually read, because the mechanism IS the argument:
+ *    a bio on one side, the message written from it on the other.
+ *  - One risk reversal, the 3-day trial, with the charge date printed under
+ *    the button. A trial that hides when it bills reads as a trap.
+ *  - The Instagram-terms answer is stated plainly rather than buried.
  *
- * Copy notes, since these decide conversion and are easy to erode:
- *  - No customer logos. The previous hero carried four invented company names
- *    under "Trusted by scaling agencies & global teams"; a buyer who googles one
- *    and finds nothing is gone. A real, owner-maintained seat count replaces it.
- *  - One risk reversal: the 3-day trial that Terms section 7 defines. Nothing
- *    here promises a reply count or a result, because nothing here controls one.
- *    The charge date is printed under the button on purpose — a trial that hides
- *    when it bills reads as a trap, and the chargeback costs more than the sale.
- *  - The Instagram-safety answer states plainly that automated DMs breach IG's
- *    terms. That loses the buyers who would have cancelled anyway and keeps the
- *    ones who were going to read the Terms regardless.
- *
- * Claims are checked against the code — send pacing and the 40/day default come
- * from `extension/background.js`, quotas from `PLAN_LIMITS`. SEATS_CLAIMED is a
- * real number the owner edits, never a countdown that resets.
+ * Claims are checked against the code: send pacing and the 40/day default come
+ * from `extension/background.js`, the price from `PRICES`. SEATS_CLAIMED is a
+ * real number the owner edits, never a countdown that resets. The reply rate in
+ * "the math" is labelled as the reader's own assumption, because no sourced
+ * figure for it exists.
  */
 
 const SEATS_CLAIMED = 7;
@@ -52,257 +50,116 @@ const ANCHOR_PRICE = '$497';
 const COST_OF_A_HUMAN = '$2,400';
 const COST_OF_AN_AGENCY = '$3,000';
 
-
-// ─── Drawn imagery ────────────────────────────────────────────────────────────
-
-/**
- * Deterministic avatar gradient, so the same handle always looks the same.
- *
- * Confined to the warm band: the hash picks a hue between 18° and 42° and a
- * lightness, not a hue anywhere on the wheel. The old version walked all 360°,
- * which put six unrelated colours on a page whose whole palette is orange,
- * black and white.
- */
-function avatarGradient(seed: string): string {
-    let n = 0;
-    for (let i = 0; i < seed.length; i++) n = (n * 31 + seed.charCodeAt(i)) % 997;
-    const hue = 18 + (n % 25);
-    const light = 46 + (n % 4) * 7;
-    return `linear-gradient(135deg, hsl(${hue} 78% ${light}%), hsl(${hue + 8} 62% ${light - 22}%))`;
-}
-
-const Avatar: React.FC<{ handle: string; size?: number }> = ({ handle, size = 34 }) => (
-    <div
-        className="rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-white"
-        style={{ width: size, height: size, background: avatarGradient(handle), fontSize: size * 0.36 }}
-    >
-        {handle.slice(0, 2).toUpperCase()}
-    </div>
-);
-
-/** A scraped lead, as the product shows it. */
-const LeadRow: React.FC<{ handle: string; meta: string; tag?: string }> = ({ handle, meta, tag }) => (
-    <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-surface-overlay border border-white/6">
-        <Avatar handle={handle} />
-        <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-white truncate">@{handle}</span>
-                <BadgeCheck size={13} className="flex-shrink-0 text-brand-400" />
-            </div>
-            <div className="text-[11px] text-neutral-600 truncate">{meta}</div>
-        </div>
-        {tag && (
-            <span className="text-[10px] font-semibold px-2 py-1 rounded-md flex-shrink-0 bg-brand-500/10 border border-brand-500/15 text-brand-400">
-                {tag}
-            </span>
-        )}
-    </div>
-);
-
-/** The DM the AI wrote, as a chat mockup. The hero's centrepiece. */
-const DmThread: React.FC = () => (
-    <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
-        <div className="rounded-[calc(1.5rem-1px)] overflow-hidden bg-surface-sunken" style={CARD_BEZEL.inner}>
-            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/6">
-                <Avatar handle="sara.builds" size={28} />
-                <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-semibold text-white">@sara.builds</div>
-                    <div className="text-[10px] text-neutral-600">Active now</div>
-                </div>
-                <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-info-500/10 border border-info-500/15 text-info-400">
-                    AI draft
-                </span>
-            </div>
-
-            <div className="p-4 space-y-3">
-                <div className="rounded-2xl rounded-tr-md px-3.5 py-2.5 ml-auto max-w-[88%] bg-brand-500">
-                    <p className="text-[12.5px] leading-relaxed text-brand-950 font-medium">
-                        hey Sara — saw you run online fitness coaching for new moms, that postpartum angle
-                        is smart. quick one: are you still doing your own prospecting or did you hand that off?
-                    </p>
-                </div>
-                <div className="flex justify-end">
-                    <span className="text-[10px] text-neutral-700">Delivered · 7:42 AM</span>
-                </div>
-                <div className="rounded-2xl rounded-tl-md px-3.5 py-2.5 max-w-[80%] bg-surface-overlay border border-white/6">
-                    <p className="text-[12.5px] leading-relaxed text-neutral-200">
-                        ha, still doing it myself unfortunately 😅 what do you have in mind?
-                    </p>
-                </div>
-            </div>
-
-            <div className="px-4 py-2.5 flex items-center gap-2 border-t border-white/6 bg-brand-500/6">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                <span className="text-[11px] font-medium text-brand-400">
-                    Reply logged · lead moved to Warm
-                </span>
-            </div>
-        </div>
-    </div>
-);
+/** The decided monthly allowance. See the surface brief's unresolved note. */
+const MONTHLY_DMS = '1,500';
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
-
-/**
- * The dashboard's tile, verbatim: bezel wrapper, sunken fill, a glow orb that
- * blooms on hover and a hairline that fades in along the bottom edge. Matching
- * the product means matching how a card behaves, not only its colour.
- */
-const Card: React.FC<{
-    children: React.ReactNode;
-    className?: string;
-    hot?: boolean;
-}> = ({ children, className = '', hot }) => (
-    <div className="rounded-[1.5rem] p-[1px] h-full" style={hot ? { background: `linear-gradient(135deg, ${alpha(CHANNEL.brand, 0.22)} 0%, ${alpha(CHANNEL.white, 0.02)} 100%)` } : CARD_BEZEL.outer}>
-        <div
-            className={`rounded-[calc(1.5rem-1px)] h-full relative overflow-hidden group ${hot ? 'bg-brand-500/6' : 'bg-surface-sunken'} ${className}`}
-            style={CARD_BEZEL.inner}
-        >
-            <div
-                aria-hidden
-                className="absolute -bottom-8 -right-8 w-28 h-28 rounded-full blur-3xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-500"
-                style={{ background: alpha(CHANNEL.brand, 0.18) }}
-            />
-            <div className="relative z-10 h-full">{children}</div>
-            <div
-                aria-hidden
-                className="absolute bottom-0 left-5 right-5 h-[1px] bg-gradient-to-r from-transparent via-brand-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-            />
-        </div>
-    </div>
-);
-
-/** The dashboard's section label: 10px, uppercase, widely tracked, zinc. */
-const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="text-[10px] font-medium uppercase tracking-widest text-neutral-600 mb-4">
-        {children}
-    </div>
-);
 
 const Section: React.FC<{ children: React.ReactNode; id?: string; className?: string }> = ({
     children, id, className = '',
 }) => (
-    <section id={id} className={`relative px-6 py-24 md:py-28 bg-surface ${className}`}>
+    <section id={id} className={`relative py-24 md:py-32 px-6 ${className}`}>
         {children}
     </section>
 );
 
+/** Section heading. No kicker above it — the heading carries its own weight. */
+const Heading: React.FC<{ children: React.ReactNode; className?: string }> = ({
+    children, className = '',
+}) => (
+    <h2
+        className={`text-white font-semibold tracking-[-0.035em] leading-[1.08] text-balance ${className}`}
+        style={{ fontSize: 'clamp(1.9rem, 3.4vw, 2.85rem)' }}
+    >
+        {children}
+    </h2>
+);
+
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-const HzHero: React.FC = () => (
-    // `isolate` matters: without a stacking context here the section's own
-    // opaque `bg-surface` paints over its negative-z children, and both the
-    // field and the bloom below it disappear.
-    <section className="relative isolate overflow-hidden pt-36 pb-24 px-6 bg-surface">
-        {/* The moving field. Behind the bloom, so the bloom softens its core. */}
-        <div aria-hidden className="absolute inset-0 -z-10 pointer-events-none">
-            <MagneticField />
-        </div>
+/** The primary action, as it appears in the hero and the close. */
+const TrialButton: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <Link
+        to="/login?mode=signup"
+        className="group w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl whitespace-nowrap bg-brand-500 hover:bg-brand-400 text-brand-950 text-body-sm font-semibold transition-[background-color,transform] duration-200 active:scale-[0.98]"
+        style={{ boxShadow: '0 12px 32px -12px rgba(249,115,22,0.75)' }}
+    >
+        {children}
+        <ArrowRight size={16} strokeWidth={2.6} aria-hidden className="transition-transform duration-200 ease-out group-hover:translate-x-1" />
+    </Link>
+);
 
-        {/* Ambient brand bloom — the same atmosphere the Sidebar uses */}
+/** The secondary action: a human looks at the Operator's list before they pay. */
+const CallButton: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <button
+        type="button"
+        data-cal-link="magnetengine/15min"
+        data-cal-namespace="15min"
+        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+        className="w-full sm:w-auto px-6 py-3.5 rounded-xl whitespace-nowrap border border-white/8 bg-white/3 text-neutral-300 hover:text-white hover:border-white/15 hover:bg-white/6 text-body-sm font-medium transition-[background-color,border-color,color,transform] duration-200 active:scale-[0.98]"
+    >
+        {children}
+    </button>
+);
+
+/** The terms, printed wherever the trial is offered. */
+const TrialTerms: React.FC<{ className?: string }> = ({ className = '' }) => (
+    <p className={`text-meta text-neutral-400 ${className}`}>
+        Card required · cancel before day 4 and pay nothing · {PRICES.monthly.label}/month after
+    </p>
+);
+
+/**
+ * The first viewport. The claim sits left, the product sits right, and they
+ * read as one line of thought: "your next clients" beside the message written
+ * to one of them. The centred headline over a card below the fold was the
+ * category's layout; this puts the argument in the first screen.
+ */
+const Hero: React.FC = () => (
+    <section className="relative isolate overflow-hidden pt-28 pb-20 md:pt-36 md:pb-28 px-6">
+        {/* One restrained wash, behind the product rather than the headline. */}
         <div
             aria-hidden
-            className="absolute inset-x-0 top-0 pointer-events-none -z-10"
+            className="absolute inset-0 -z-10 pointer-events-none"
             style={{
-                bottom: '30%',
                 background:
-                    'radial-gradient(ellipse 80% 100% at 50% 100%, rgba(249,115,22,0.24) 0%, rgba(249,115,22,0.10) 35%, rgba(251,191,36,0.05) 65%, transparent 85%)',
-                filter: 'blur(70px)',
+                    'radial-gradient(ellipse 45% 60% at 72% 38%, rgba(249,115,22,0.12), rgba(249,115,22,0.03) 50%, transparent 75%)',
             }}
         />
 
-        <div className="max-w-6xl mx-auto relative z-10 grid lg:grid-cols-[1.05fr_0.95fr] gap-14 lg:gap-16 items-center">
+        <div className="max-w-6xl mx-auto grid xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-14 xl:gap-16 items-center">
             <div>
-                {/* A real, checkable number — not "V2.0 Now Live" */}
-                <div
-                    className="inline-block p-px rounded-full mb-8"
-                    style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(249,115,22,0.22), rgba(255,255,255,0.04))' }}
-                >
-                    <div
-                        className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-surface"
-                        style={{ boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.06)' }}
-                    >
-                        <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brand-500" />
-                        </span>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
-                            Founding Member
-                        </span>
-                        <span className="w-px h-3 bg-white/12" />
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-400">
-                            {SEATS_CLAIMED} of {SEATS_TOTAL} seats claimed
-                        </span>
-                    </div>
-                </div>
-
                 <h1
-                    className="font-bold text-white tracking-[-0.04em] leading-[0.98] mb-7"
-                    style={{ fontSize: 'clamp(2.6rem, 5.4vw, 4.5rem)' }}
+                    className="font-semibold text-white tracking-[-0.04em] leading-[0.98] text-balance"
+                    style={{ fontSize: 'clamp(2.6rem, 4.5vw, 4.25rem)' }}
                 >
-                    Your next 20 clients<br />
-                    are already following{' '}
-                    <span
-                        style={{
-                            background: 'linear-gradient(135deg, #fdba74 0%, #fb923c 40%, #fbbf24 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text',
-                        }}
-                    >
-                        someone else.
-                    </span>
+                    Your next 20 clients are already following someone else.
                 </h1>
 
-                <p className="text-[1.1rem] font-light leading-[1.65] text-neutral-400 mb-4 max-w-xl">
+                <p className="mt-7 text-lead text-neutral-400 max-w-[44ch]">
                     MagnetEngine finds them on Instagram, writes a real DM to each one —{' '}
-                    <span className="text-neutral-200 font-normal">not a template</span> — and sends it
-                    from your account while you sleep.
-                </p>
-                <p className="text-[15px] text-neutral-600 mb-10">
-                    You approve messages for ten minutes a day. That's the whole job.
+                    <span className="text-neutral-100 font-medium">not a template</span> — and sends it
+                    from your own Instagram, at a human pace.
                 </p>
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <a
-                        href="#pricing"
-                        className="group flex items-center gap-3 pl-6 pr-[7px] py-[7px] rounded-full bg-brand-500 hover:bg-brand-400 active:scale-[0.98]"
-                        style={{
-                            boxShadow: '0 0 28px rgba(249,115,22,0.3), 0 0 80px rgba(249,115,22,0.08)',
-                            transition: 'all 700ms cubic-bezier(0.32,0.72,0,1)',
-                        }}
-                    >
-                        <span className="text-[15px] font-semibold text-brand-950 leading-none">
-                            Get my first 500 DMs
-                        </span>
-                        <span
-                            className="w-8 h-8 rounded-full bg-brand-950/20 flex items-center justify-center group-hover:translate-x-0.5"
-                            style={{ transition: 'transform 700ms cubic-bezier(0.32,0.72,0,1)' }}
-                        >
-                            <ArrowRight size={14} className="text-brand-950" strokeWidth={2.5} />
-                        </span>
-                    </a>
-                    <button
-                        data-cal-link="magnetengine/15min"
-                        data-cal-namespace="15min"
-                        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                        className="px-6 py-3.5 rounded-full border border-white/8 bg-white/3 text-neutral-300 hover:text-white hover:border-white/15 hover:bg-white/6 active:scale-[0.98] text-[15px] font-medium"
-                        style={{ transition: 'all 700ms cubic-bezier(0.32,0.72,0,1)' }}
-                    >
-                        Show me my leads first
-                    </button>
+                <div className="mt-9 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <TrialButton>Start the 3-day trial</TrialButton>
+                    <CallButton>Book a 15-minute list check</CallButton>
                 </div>
+
+                <TrialTerms className="mt-4" />
+                <p className="mt-1.5 text-meta text-neutral-400">
+                    <span className="text-brand-400 font-semibold tabular-nums">{SEATS_CLAIMED}</span> of{' '}
+                    <span className="tabular-nums">{SEATS_TOTAL}</span> founding seats claimed
+                </p>
             </div>
 
-            {/* The picture: the product, drawn */}
-            <div className="relative">
-                <div className="relative lg:rotate-[1.2deg] transition-transform duration-500 hover:rotate-0">
-                    <DmThread />
-                </div>
-                <div className="mt-4 space-y-2 lg:-rotate-[0.8deg]">
-                    <LeadRow handle="grow.with.dan" meta="4.2k followers · Meta ads, Austin" tag="Match" />
-                    <LeadRow handle="leila.scales" meta="11.8k followers · SMMA, retainers" tag="Match" />
-                </div>
+            {/* the product, readable — on top of the queue it came from */}
+            <div className="w-full max-w-3xl xl:max-w-none xl:-mr-6">
+                <ApprovalPreview stacked />
+                <p className="mt-3 text-meta text-neutral-400">
+                    One of {EXAMPLE_QUEUE_SIZE} drafts in today's queue. This is the only screen you work in — ten minutes a day.
+                </p>
             </div>
         </div>
     </section>
@@ -310,50 +167,39 @@ const HzHero: React.FC = () => (
 
 // ─── Problem ──────────────────────────────────────────────────────────────────
 
-const HzProblem: React.FC = () => (
-    <Section id="problem">
-        <div className="max-w-4xl mx-auto">
-            <div className="text-center">
-                <Eyebrow>The actual problem</Eyebrow>
-                <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15] mb-16">
-                    You don't have a lead problem.<br />
-                    <span className="text-neutral-500">You have a "nobody knows you exist" problem.</span>
-                </h2>
-            </div>
+const PROBLEM = [
+    ['Where you are', 'Six clients. Referrals dried up. You post, it gets 40 views, and none of them can afford you.'],
+    ['Where you want to be', 'A calendar with names in it. Fifteen clients. Conversations happening whether or not you feel like starting them.'],
+    ["What's in the way", "Nobody is filling the top of your funnel. You know cold DMs work. You just can't send 200 a day and run the business too."],
+] as const;
 
-            <div className="grid md:grid-cols-3 gap-4">
-                {[
-                    {
-                        label: 'Where you are',
-                        body: 'Six clients. Referrals dried up. You post, it gets 40 views, and none of them can afford you.',
-                    },
-                    {
-                        label: 'Where you want to be',
-                        body: 'A calendar with names in it. Fifteen clients. Conversations happening whether or not you feel like starting them.',
-                    },
-                    {
-                        label: "What's in the way",
-                        body: "Nobody is filling the top of your funnel. You know cold DMs work. You just can't send 200 a day and run the business too.",
-                        highlight: true,
-                    },
-                ].map(({ label, body, highlight }) => (
-                    <Card key={label} hot={highlight} className="p-6">
-                        <div
-                            className={`text-[10px] font-medium uppercase tracking-widest mb-3 ${
-                                highlight ? 'text-brand-400' : 'text-neutral-600'
+const Problem: React.FC = () => (
+    <Section id="problem">
+        <div className="max-w-3xl mx-auto">
+            <Heading className="mb-14">
+                You don't have a lead problem.{' '}
+                <span className="text-neutral-500">You have a "nobody knows you exist" problem.</span>
+            </Heading>
+
+            <dl className="border-t border-white/8">
+                {PROBLEM.map(([label, body], i) => (
+                    <div key={label} className="grid md:grid-cols-[minmax(0,13rem)_1fr] gap-2 md:gap-8 py-7 border-b border-white/8">
+                        <dt
+                            className={`text-meta font-semibold md:pt-[3px] ${
+                                i === 2 ? 'text-brand-400' : 'text-neutral-400'
                             }`}
                         >
                             {label}
-                        </div>
-                        <p className="text-[15px] font-light leading-relaxed text-neutral-300">{body}</p>
-                    </Card>
+                        </dt>
+                        <dd className="text-body text-neutral-300">{body}</dd>
+                    </div>
                 ))}
-            </div>
+            </dl>
 
-            <p className="text-center mt-12 text-lg font-light leading-[1.7] text-neutral-400 max-w-2xl mx-auto">
-                A VA costs $800 a month and sends the same message to everyone, which is why
-                the reply rate is 1%. A $47 bot gets your account restricted.{' '}
-                <span className="text-white font-normal">There was no third option. Now there is.</span>
+            <p className="mt-12 text-lead text-neutral-400">
+                A VA costs $800 a month and sends the same message to everyone, which is why the
+                reply rate is 1%. A $47 bot gets your account restricted.{' '}
+                <span className="text-white font-medium">There was no third option. Now there is.</span>
             </p>
         </div>
     </Section>
@@ -364,300 +210,310 @@ const HzProblem: React.FC = () => (
 const STEPS = [
     {
         icon: Search,
-        step: '01',
         title: 'It finds them',
         body: 'Type "SMMA" or "business coach". MagnetEngine pulls matching Instagram profiles and filters out everyone who isn\'t worth your time — wrong follower count, wrong keywords, wrong account type.',
-        stat: '500 leads a month',
+        stat: 'Up to 250 profiles per search term',
     },
     {
         icon: PenLine,
-        step: '02',
         title: 'It writes each one individually',
         body: "The AI reads each person's actual bio and writes one message to one human. No merge tags. No \"Hey! Love your page 🔥\". If a message reads like a robot wrote it, we've failed and you'll see it in the queue.",
-        stat: 'One DM per profile',
+        stat: `${MONTHLY_DMS} personalised DMs a month`,
     },
     {
         icon: Send,
-        step: '03',
-        title: 'It sends while you sleep',
-        body: 'You approve the ones you like — 10 minutes with your coffee. The Chrome extension sends from your own browser, at a pace and daily cap you set. Replies land in one inbox with a draft response ready.',
-        stat: 'Your cap, your pace',
+        title: 'It sends at a human pace',
+        body: `You approve the ones you like — 10 minutes with your coffee. The Chrome extension sends from your own browser while an Instagram tab is open, at a pace and daily cap you set. Automated DMs are against Instagram's terms — pacing lowers that risk, it doesn't remove it. Replies land in one inbox with a draft response ready.`,
+        stat: '40 a day by default, one every 3–8 minutes',
     },
 ];
 
-const HzHowItWorks: React.FC = () => (
-    <Section id="features">
-        <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-16">
-                <Eyebrow>How it works</Eyebrow>
-                <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15]">
-                    Three things happen. You do one of them.
-                </h2>
-            </div>
+const HowItWorks: React.FC = () => (
+    <Section id="how">
+        <div className="max-w-4xl mx-auto">
+            <Heading className="mb-16 max-w-2xl">Three things happen. You do one of them.</Heading>
 
-            <div className="grid md:grid-cols-3 gap-4">
-                {STEPS.map(({ icon: Icon, step, title, body, stat }) => (
-                    <Card key={step} className="p-7 flex flex-col">
-                        <div className="flex items-start justify-between mb-6">
-                            <div className="w-9 h-9 rounded-xl border bg-brand-500/10 border-brand-500/15 flex items-center justify-center">
-                                <Icon className="w-4 h-4 text-brand-400" strokeWidth={2} />
-                            </div>
-                            <span className="text-[11px] font-mono text-neutral-700">{step}</span>
+            <ol className="relative">
+                {/* the rail: the sequence is the information, so it is drawn, and
+                    it fills in brand as the reader moves down it */}
+                <span aria-hidden className="absolute left-[15px] top-3 bottom-3 w-px bg-white/8 hidden sm:block">
+                    <span className="rail-fill absolute inset-0 bg-gradient-to-b from-brand-500/70 to-brand-500/20" />
+                </span>
+
+                {STEPS.map(({ icon: Icon, title, body, stat }) => (
+                    <li key={title} className="relative grid sm:grid-cols-[2rem_1fr] gap-4 sm:gap-7 pb-12 last:pb-0">
+                        <span className="relative z-10 hidden sm:flex w-8 h-8 rounded-full bg-surface border border-white/12 items-center justify-center flex-none">
+                            <Icon size={14} strokeWidth={2.2} aria-hidden className="text-brand-400" />
+                        </span>
+                        <div className="sm:pt-[3px]">
+                            <h3 className="text-white font-semibold text-[1.15rem] leading-snug tracking-[-0.02em]">
+                                {title}
+                            </h3>
+                            <p className="mt-2.5 text-body text-neutral-400 max-w-[62ch]">{body}</p>
+                            <p className="mt-3 text-meta font-medium text-brand-400 tabular-nums">{stat}</p>
                         </div>
-                        <h3 className="text-white font-semibold text-lg tracking-tight mb-3">{title}</h3>
-                        <p className="text-[15px] font-light leading-relaxed text-neutral-400 flex-grow">{body}</p>
-                        <div className="mt-6 pt-5 border-t border-white/6">
-                            <span className="text-[10px] font-medium uppercase tracking-widest text-brand-400">
-                                {stat}
-                            </span>
-                        </div>
-                    </Card>
+                    </li>
                 ))}
-            </div>
+            </ol>
         </div>
     </Section>
 );
 
 // ─── The math ─────────────────────────────────────────────────────────────────
 
-const HzMath: React.FC = () => (
-    <Section id="proof" className="overflow-hidden">
-        <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-brand-900/12 via-transparent to-transparent pointer-events-none"
-        />
-        <div className="max-w-3xl mx-auto relative z-10">
-            <div className="text-center mb-14">
-                <Eyebrow>The math</Eyebrow>
-                <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15]">
-                    You need one client a year<br />for this to pay for itself.
-                </h2>
-            </div>
+const MATH_ROWS = [
+    [`${MONTHLY_DMS} DMs sent a month`, 'your quota'],
+    ['× your reply rate', 'assume 8% until you have your own'],
+    ['= the conversations you start', 'the only thing being sold here'],
+] as const;
 
-            <Card className="p-8 md:p-10">
-                <div>
-                    {[
-                        ['500 DMs sent a month', 'your quota'],
-                        ['≈ 40 replies', 'at an 8% reply rate'],
-                        ['≈ 10 conversations worth having', 'a quarter of replies'],
-                        ['≈ 2–3 booked calls', 'if you answer within 12 hours'],
-                    ].map(([left, right], i) => (
+const TheMath: React.FC = () => (
+    <Section id="proof">
+        <div className="max-w-2xl mx-auto">
+            <Heading className="mb-12">You need one client a year for this to pay for itself.</Heading>
+
+            <Panel className="p-7 md:p-9">
+                <dl>
+                    {MATH_ROWS.map(([left, right], i) => (
                         <div
                             key={left}
-                            className={`flex items-baseline justify-between gap-4 py-4 ${i !== 0 ? 'border-t border-white/6' : ''}`}
+                            className={`flex items-baseline justify-between gap-5 py-4 ${
+                                i !== 0 ? 'border-t border-white/8' : ''
+                            }`}
                         >
-                            <span className="text-[15px] md:text-base font-medium text-white">{left}</span>
-                            <span className="text-xs md:text-sm font-light text-neutral-600 text-right flex-shrink-0">
-                                {right}
-                            </span>
+                            <dt className="text-body-sm font-medium text-white">{left}</dt>
+                            <dd className="text-meta text-neutral-500 text-right flex-none">{right}</dd>
                         </div>
                     ))}
-                </div>
+                </dl>
 
-                <div className="mt-8 pt-8 border-t border-brand-500/20">
-                    <p className="text-[15px] font-light leading-relaxed text-neutral-300">
-                        If a client is worth <span className="text-white font-medium">$3,000</span> to you,
-                        this has to work{' '}
-                        <span className="text-white font-medium">once in twelve months</span> to break even.
-                        Once a month and it's the best money you spend all year.
+                <div className="mt-7 pt-7 border-t border-brand-500/25">
+                    <p className="text-body-sm text-neutral-300">
+                        If a client is worth <span className="text-white font-medium">$3,000</span> to you, this
+                        has to work <span className="text-white font-medium">once in twelve months</span> to break
+                        even. Once a month and it's the best money you spend all year.
                     </p>
-                    <p className="text-sm font-light text-neutral-500 mt-4">
+                    <p className="text-meta text-neutral-500 mt-4">
                         I'm not selling you software. I'm selling you the conversations the software starts.
+                        The 8% above is an assumption to run your own numbers against, not a result we've
+                        measured — your niche and your offer decide it.
                     </p>
                 </div>
-            </Card>
+            </Panel>
         </div>
     </Section>
 );
 
 // ─── Comparison ───────────────────────────────────────────────────────────────
 
-const HzCompare: React.FC = () => {
-    const rows: [label: string, va: boolean, bot: boolean, us: boolean][] = [
-        ['Writes a different message per person', false, false, true],
-        ['Reads the profile before writing', false, false, true],
-        ['You approve everything before it sends', true, false, true],
-        ['Costs less than $250/month', false, true, true],
-        ['Runs without you remembering to', false, true, true],
-        ["Doesn't quit on you in month three", false, true, true],
-    ];
+const COMPARE: [label: string, va: boolean, bot: boolean, us: boolean][] = [
+    ['Writes a different message per person', false, false, true],
+    ['Reads the profile before writing', false, false, true],
+    ['You approve everything before it sends', true, false, true],
+    ['Costs less than $250/month', false, true, true],
+    ['Keeps a human pace and a daily cap', true, false, true],
+    ["Doesn't quit on you in month three", false, true, true],
+];
 
-    return (
-        <Section>
-            <div className="max-w-4xl mx-auto">
-                <div className="text-center mb-14">
-                    <Eyebrow>The honest comparison</Eyebrow>
-                    <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15]">
-                        You've got three options.
-                    </h2>
-                </div>
+const COMPARE_SHORT = ['VA', 'Bot', 'MagnetEngine'] as const;
 
-                <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
-                    <div className="rounded-[calc(1.5rem-1px)] bg-surface-sunken overflow-x-auto" style={CARD_BEZEL.inner}>
-                        <table className="w-full min-w-[560px]">
-                            <thead>
-                                <tr className="border-b border-white/8">
-                                    <th className="text-left p-5" />
-                                    <th className="p-5 text-neutral-400 text-xs font-semibold">
-                                        A VA<br /><span className="text-neutral-600 font-normal">$800/mo</span>
+const Compare: React.FC = () => (
+    <Section>
+        <div className="max-w-4xl mx-auto">
+            <Heading className="mb-12">You've got three options.</Heading>
+
+            <div className="rounded-[1.25rem] p-[1px]" style={CARD_BEZEL.outer}>
+                <div
+                    className="relative rounded-[calc(1.25rem-1px)] bg-surface-raised overflow-x-auto"
+                    style={CARD_BEZEL.inner}
+                >
+                    <table className="hidden sm:table w-full min-w-[580px] border-collapse">
+                        <caption className="sr-only">
+                            How a VA, a cheap bot and MagnetEngine compare
+                        </caption>
+                        <thead>
+                            <tr className="border-b border-white/8">
+                                <th scope="col" className="text-left p-5" />
+                                <th scope="col" className="p-5 text-meta font-semibold text-neutral-400">
+                                    A VA
+                                    <span className="block text-neutral-500 font-normal font-mono text-label mt-0.5">
+                                        $800/mo
+                                    </span>
+                                </th>
+                                <th scope="col" className="p-5 text-meta font-semibold text-neutral-400">
+                                    A $47 bot
+                                    <span className="block text-neutral-500 font-normal text-label mt-0.5">
+                                        + a ban risk
+                                    </span>
+                                </th>
+                                <th
+                                    scope="col"
+                                    className="p-5 text-meta font-semibold text-brand-400 bg-brand-500/8 border-x border-brand-500/20"
+                                >
+                                    MagnetEngine
+                                    <span className="block text-brand-500/80 font-normal font-mono text-label mt-0.5">
+                                        {PRICES.monthly.label}/mo
+                                    </span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {COMPARE.map(([label, va, bot, us], i) => (
+                                <tr key={label} className={i !== 0 ? 'border-t border-white/6' : ''}>
+                                    <th scope="row" className="p-5 text-left text-body-sm font-normal text-neutral-300">
+                                        {label}
                                     </th>
-                                    <th className="p-5 text-neutral-400 text-xs font-semibold">
-                                        A $47 bot<br /><span className="text-neutral-600 font-normal">+ a ban risk</span>
-                                    </th>
-                                    <th className="p-5 text-brand-400 text-xs font-semibold bg-brand-500/8 border-x border-brand-500/20">
-                                        MagnetEngine<br />
-                                        <span className="text-brand-500/80 font-normal">{PRICES.monthly.label}/mo</span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map(([label, va, bot, us], i) => (
-                                    <tr key={label} className={i !== 0 ? 'border-t border-white/4' : ''}>
-                                        <td className="p-5 text-neutral-300 text-sm font-light">{label}</td>
-                                        {[va, bot, us].map((v, j) => (
-                                            <td
-                                                key={j}
-                                                className={`p-5 text-center ${j === 2 ? 'bg-brand-500/8 border-x border-brand-500/20' : ''}`}
-                                            >
-                                                {v ? (
+                                    {[va, bot, us].map((v, j) => (
+                                        <td
+                                            key={j}
+                                            className={`p-5 text-center ${
+                                                j === 2 ? 'bg-brand-500/8 border-x border-brand-500/20' : ''
+                                            }`}
+                                        >
+                                            {v ? (
+                                                <>
                                                     <Check
-                                                        size={17}
-                                                        strokeWidth={2.5}
-                                                        className={j === 2 ? 'text-brand-400 mx-auto' : 'text-neutral-500 mx-auto'}
+                                                        size={16}
+                                                        strokeWidth={2.6}
+                                                        aria-hidden
+                                                        className={`mx-auto ${j === 2 ? 'text-brand-400' : 'text-neutral-400'}`}
                                                     />
-                                                ) : (
-                                                    <X size={17} strokeWidth={2.5} className="text-neutral-700 mx-auto" />
-                                                )}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                                    <span className="sr-only">Yes</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <X size={16} strokeWidth={2.6} aria-hidden className="mx-auto text-neutral-500" />
+                                                    <span className="sr-only">No</span>
+                                                </>
+                                            )}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    {/* Below `sm` a three-column table leaves MagnetEngine off-screen,
+                        so each row restacks with all three answers in view. */}
+                    <ul className="sm:hidden divide-y divide-white/6">
+                        {COMPARE.map(([label, ...answers]) => (
+                            <li key={label} className="p-4">
+                                <p className="text-body-sm text-neutral-300 mb-3">{label}</p>
+                                <div className="grid grid-cols-3 gap-1.5 text-label">
+                                    {answers.map((v, j) => (
+                                        <span
+                                            key={j}
+                                            className={`flex items-center justify-center gap-1 rounded-md py-1.5 ${
+                                                j === 2
+                                                    ? 'bg-brand-500/8 border border-brand-500/20 text-brand-400 font-semibold'
+                                                    : 'border border-white/6 text-neutral-500'
+                                            }`}
+                                        >
+                                            {v ? (
+                                                <Check size={12} strokeWidth={2.6} aria-hidden />
+                                            ) : (
+                                                <X size={12} strokeWidth={2.6} aria-hidden className="text-neutral-500" />
+                                            )}
+                                            {COMPARE_SHORT[j]}
+                                            <span className="sr-only">: {v ? 'Yes' : 'No'}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             </div>
-        </Section>
-    );
-};
+        </div>
+    </Section>
+);
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
 
-/** Outcome first, mechanism second. Nobody buys a scraper; they buy a full calendar. */
 const FEATURES = [
-    '1,500 personalised DMs per month',
+    `${MONTHLY_DMS} personalised DMs per month`,
     'Automated follow-ups',
     'Reply and booked-call tracking',
 ];
 
-/** Not a feature — the objection that "what else will this cost me?" raises. */
 const COSTS_INCLUDED = 'All AI and infrastructure costs included.';
-
-/**
- * The trial is the only risk reversal on this page. It replaced a 7-day refund:
- * a refund asks for money first and trust later, and every word of it is about
- * the exit. The charge date is stated on the button itself because a trial that
- * hides when it bills is the thing buyers have been burned by.
- */
 const TRIAL_LINE = 'Cancel anytime before it ends and you pay nothing.';
 
-const HzPricing: React.FC = () => {
-    return (
-        <Section id="pricing" className="overflow-hidden">
-            <div className="max-w-7xl mx-auto relative z-10">
-                <div className="text-center max-w-2xl mx-auto mb-14">
-                    <Eyebrow>Pricing</Eyebrow>
-                    <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15]">
-                        You are not buying software.<br />You are buying the hire you keep putting off.
-                    </h2>
+const ANCHORS: [string, string][] = [
+    ['Hiring someone to do it', `${COST_OF_A_HUMAN}/mo`],
+    ['Paying an agency to do it', `${COST_OF_AN_AGENCY}/mo`],
+    [`This, once the ${SEATS_TOTAL} seats are gone`, `${ANCHOR_PRICE}/mo`],
+];
+
+const Pricing: React.FC = () => (
+    <Section id="pricing">
+        <div className="max-w-2xl mx-auto">
+            <Heading className="mb-12 text-balance">
+                You are not buying software. You are buying the hire you keep putting off.
+            </Heading>
+
+            <Panel accent className="p-7 md:p-9">
+                <div className="flex items-center justify-between gap-4 mb-7">
+                    <span className="px-2.5 py-1 rounded-md text-label font-semibold bg-brand-500/12 border border-brand-500/20 text-brand-400">
+                        Founding member
+                    </span>
+                    <span className="text-meta text-neutral-500 font-mono tabular-nums">
+                        {SEATS_CLAIMED}/{SEATS_TOTAL} claimed
+                    </span>
                 </div>
 
-                <div className="relative max-w-lg mx-auto">
-                    <div
-                        aria-hidden
-                        className="absolute -inset-1 bg-gradient-to-r from-brand-600 via-accent-500 to-brand-600 rounded-[2rem] blur-xl opacity-20"
-                    />
-
-                    <div className="relative rounded-[1.75rem] p-8 bg-surface-raised border-2 border-brand-500/30 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col">
-                        <div className="mb-6 flex items-center justify-between">
-                            <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/10 border border-brand-500/15 text-brand-400">
-                                Founding Member
-                            </span>
-                            <span className="text-xs text-neutral-500 font-medium">
-                                {SEATS_CLAIMED}/{SEATS_TOTAL} claimed
-                            </span>
+                {/* The anchor ladder: what the job costs elsewhere, then our own
+                    future price, then what they pay. Stepping down from a checkable
+                    outside number beats striking through one of ours. */}
+                <dl className="mb-7 pb-7 border-b border-white/8 space-y-2.5">
+                    {ANCHORS.map(([label, price]) => (
+                        <div key={label} className="flex items-baseline justify-between gap-3">
+                            <dt className="text-meta text-neutral-500">{label}</dt>
+                            <dd className="text-meta font-mono text-neutral-500 line-through tabular-nums">
+                                {price}
+                            </dd>
                         </div>
+                    ))}
+                </dl>
 
-{/* The anchor ladder: what the job costs elsewhere, then our own future
-                            price, then what they pay. Stepping down from a checkable outside
-                            number beats striking through one of ours — a buyer has no reason
-                            to believe a price we invented and then crossed out ourselves. */}
-                        <div className="mb-5 pb-5 border-b border-white/6 space-y-2">
-                            <div className="flex items-baseline justify-between gap-3">
-                                <span className="text-neutral-500 text-sm">Hiring someone to do it</span>
-                                <span className="text-neutral-500 text-sm font-semibold line-through">
-                                    {COST_OF_A_HUMAN}/mo
-                                </span>
-                            </div>
-                            <div className="flex items-baseline justify-between gap-3">
-                                <span className="text-neutral-500 text-sm">Paying an agency to do it</span>
-                                <span className="text-neutral-500 text-sm font-semibold line-through">
-                                    {COST_OF_AN_AGENCY}/mo
-                                </span>
-                            </div>
-                            <div className="flex items-baseline justify-between gap-3">
-                                <span className="text-neutral-500 text-sm">
-                                    This, once the {SEATS_TOTAL} seats are gone
-                                </span>
-                                <span className="text-neutral-500 text-sm font-semibold line-through">
-                                    {ANCHOR_PRICE}/mo
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="mb-8">
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                                <span className="text-5xl font-bold tracking-tight text-white">
-                                    {PRICES.monthly.label}
-                                </span>
-                                <span className="text-xl font-semibold text-white">{PRICES.monthly.suffix}</span>
-                                <span className="px-2.5 py-1 rounded-full bg-brand-500/15 border border-brand-500/25 text-brand-400 text-[11px] font-semibold">
-                                    3-day free trial
-                                </span>
-                            </div>
-                            <p className="text-sm font-light leading-relaxed text-neutral-400 mt-3">
-                                {TRIAL_LINE}
-                            </p>
-                        </div>
-
-                        <p className="text-sm font-semibold text-white mb-4">What you get:</p>
-                        <div className="space-y-3.5 mb-8 flex-grow">
-                            {FEATURES.map((f) => (
-                                <div key={f} className="flex items-start gap-3">
-                                    <Check className="text-brand-500 mt-0.5 flex-shrink-0" size={17} strokeWidth={2.5} />
-                                    <span className="text-sm font-light leading-relaxed text-neutral-300">{f}</span>
-                                </div>
-                            ))}
-                            <p className="text-sm font-light leading-relaxed text-neutral-500 pt-1">
-                                {COSTS_INCLUDED}
-                            </p>
-                        </div>
-
-                        <Link
-                            to="/login?mode=signup"
-                            className="w-full py-4 rounded-xl font-semibold text-sm text-center block bg-brand-500 hover:bg-brand-400 text-brand-950 transition-all duration-300"
-                        >
-                            Start my 3-day trial
-                        </Link>
-                        <p className="text-center text-neutral-600 text-xs mt-4">
-                            Card required. You are charged {PRICES.monthly.label} on day 4 unless you cancel.
-                        </p>
+                <div className="mb-8">
+                    <div className="flex items-baseline gap-2.5 flex-wrap">
+                        <span className="text-[3rem] leading-none font-semibold tracking-[-0.04em] text-white tabular-nums">
+                            {PRICES.monthly.label}
+                        </span>
+                        <span className="text-[1.1rem] font-medium text-neutral-400">
+                            {PRICES.monthly.suffix}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-md bg-positive-500/12 border border-positive-500/25 text-positive-300 text-label font-semibold">
+                            3-day free trial
+                        </span>
                     </div>
+                    <p className="text-body-sm text-neutral-400 mt-3">{TRIAL_LINE}</p>
                 </div>
-            </div>
-        </Section>
-    );
-};
+
+                <ul className="space-y-3 mb-8">
+                    {FEATURES.map((f) => (
+                        <li key={f} className="flex items-start gap-3">
+                            <Check className="text-brand-500 mt-[3px] flex-none" size={16} strokeWidth={2.6} aria-hidden />
+                            <span className="text-body-sm text-neutral-300">{f}</span>
+                        </li>
+                    ))}
+                    <li className="text-body-sm text-neutral-500 pl-7">{COSTS_INCLUDED}</li>
+                </ul>
+
+                <Link
+                    to="/login?mode=signup"
+                    className="w-full py-4 rounded-xl font-semibold text-body-sm text-center block bg-brand-500 hover:bg-brand-400 text-brand-950 transition-colors duration-300"
+                >
+                    Start my 3-day trial
+                </Link>
+                <p className="text-center text-neutral-500 text-meta mt-4">
+                    Card required. You are charged {PRICES.monthly.label} on day 4 unless you cancel.
+                </p>
+            </Panel>
+        </div>
+    </Section>
+);
 
 // ─── FAQ ──────────────────────────────────────────────────────────────────────
 
@@ -665,7 +521,7 @@ const faqData = [
     {
         question: 'Is my Instagram account safe?',
         answer:
-            "Straight answer: automated DMs are against Instagram's terms of service, and anyone who tells you otherwise is lying to you. Here's how we handle that. MagnetEngine sends from your own browser session, with a gap between each message and a daily cap you control — the default is 40 a day, and we recommend ramping up over two weeks rather than starting at full volume. Nothing sends without your approval, and we never see or store your Instagram password. In practice, the people who get restricted are the ones blasting hundreds of copy-pasted messages an hour from a fresh account. That's exactly the behaviour this is built to avoid — which is also why every DM is written individually. Run it on an account that's been active 30+ days, and don't run it on an account you can't afford to have restricted.",
+            "Straight answer: automated DMs are against Instagram's terms of service, and anyone who tells you otherwise is lying to you. Here's how we handle that. MagnetEngine sends from your own browser session, with a gap between each message and a daily cap you control — the default is 40 a day, and we recommend ramping up over two weeks rather than starting at full volume. No first DM sends without your approval — replies only send on their own if you turn autopilot on — and we never see or store your Instagram password. In practice, the people who get restricted are the ones blasting hundreds of copy-pasted messages an hour from a fresh account. That's exactly the behaviour this is built to avoid — which is also why every DM is written individually. Run it on an account that's been active 30+ days, and don't run it on an account you can't afford to have restricted.",
     },
     {
         question: 'How is this different from the $47 Instagram bots?',
@@ -697,48 +553,42 @@ const faqData = [
 const FAQItem: React.FC<{ question: string; answer: string }> = ({ question, answer }) => {
     const [open, setOpen] = useState(false);
     return (
-        <div className="border-b border-white/6 group">
-            <button
-                onClick={() => setOpen(!open)}
-                className="flex w-full items-center justify-between text-left gap-6 py-6 focus:outline-none"
-            >
-                <span
-                    className={`text-[17px] font-medium transition-colors duration-300 ${
-                        open ? 'text-brand-400' : 'text-neutral-200 group-hover:text-white'
-                    }`}
+        <div className="border-b border-white/8">
+            <h3>
+                <button
+                    type="button"
+                    onClick={() => setOpen(!open)}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between text-left gap-6 py-6 group"
                 >
-                    {question}
-                </span>
-                <span
-                    className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
-                        open ? 'bg-brand-500/10 text-brand-400' : 'bg-white/6 text-neutral-400'
-                    }`}
-                >
-                    {open ? <Minus size={14} strokeWidth={2.5} /> : <Plus size={14} strokeWidth={2.5} />}
-                </span>
-            </button>
+                    <span className="text-body font-medium text-neutral-200 group-hover:text-white transition-colors duration-300">
+                        {question}
+                    </span>
+                    <span className="flex-none w-7 h-7 rounded-lg border border-white/8 flex items-center justify-center text-neutral-500 group-hover:text-brand-400 group-hover:border-brand-500/30 transition-colors duration-300">
+                        {open ? <Minus size={13} strokeWidth={2.6} /> : <Plus size={13} strokeWidth={2.6} />}
+                    </span>
+                </button>
+            </h3>
             <div
-                className="overflow-hidden transition-all duration-300 ease-in-out"
-                style={{ maxHeight: open ? '34rem' : 0, opacity: open ? 1 : 0 }}
+                className="grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
             >
-                <p className="text-[15px] font-light leading-relaxed text-neutral-400 pb-7 pr-8">{answer}</p>
+                <div className="overflow-hidden">
+                    <p className="text-body-sm text-neutral-400 pb-6 max-w-[68ch]">{answer}</p>
+                </div>
             </div>
         </div>
     );
 };
 
-const HzFAQ: React.FC = () => (
+const FAQ: React.FC = () => (
     <Section id="faq">
         <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-14">
-                <Eyebrow>What you're actually thinking</Eyebrow>
-                <h2 className="text-3xl md:text-[2.75rem] font-medium text-white tracking-tight leading-[1.15] mb-5">
-                    The questions everyone asks.
-                </h2>
-                <p className="text-lg font-light text-neutral-400">Answered like an adult, not a brochure.</p>
-            </div>
-            <div>
-                {faqData.map((item) => <FAQItem key={item.question} {...item} />)}
+            <Heading className="mb-10">The questions everyone asks.</Heading>
+            <div className="border-t border-white/8">
+                {faqData.map((f) => (
+                    <FAQItem key={f.question} {...f} />
+                ))}
             </div>
         </div>
     </Section>
@@ -746,67 +596,42 @@ const HzFAQ: React.FC = () => (
 
 // ─── Close ────────────────────────────────────────────────────────────────────
 
-const HzCTA: React.FC = () => (
-    <section id="cta" className="relative px-6 py-28 md:py-32 overflow-hidden bg-surface">
-        <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-brand-900/15 via-transparent to-transparent pointer-events-none"
-        />
-        <div className="max-w-3xl mx-auto text-center relative z-10">
-            <h2 className="text-4xl md:text-5xl font-semibold text-white tracking-tight leading-[1.1] mb-7">
-                Your competitors are DMing<br />your prospects right now.
-            </h2>
-            <p className="text-xl font-light leading-relaxed text-neutral-400 mb-11 max-w-2xl mx-auto">
-                They're doing it badly, with a template, at 40 a day. Imagine what happens when you do
-                it properly at 500 a month.
+const Close: React.FC = () => (
+    <Section id="cta" className="pb-32">
+        <div className="max-w-3xl mx-auto text-center">
+            <Heading className="mx-auto max-w-[20ch]">
+                The people you want as clients are posting today.
+            </Heading>
+            <p className="mt-6 text-body text-neutral-400 max-w-[48ch] mx-auto">
+                You can keep meaning to reach out, or you can have {MONTHLY_DMS} individual messages
+                go out this month while you work on something else.
             </p>
 
-            <div className="flex flex-col items-center gap-7">
-                <a
-                    href="#pricing"
-                    className="group inline-flex items-center gap-3 px-10 py-4 rounded-full bg-brand-500 hover:bg-brand-400 text-brand-950 text-lg font-semibold shadow-[0_0_30px_-5px_rgba(249,115,22,0.4)] hover:shadow-[0_0_40px_0px_rgba(249,115,22,0.6)] hover:-translate-y-1 transition-all duration-300"
-                >
-                    Claim a founding seat
-                    <ArrowUpRight size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                </a>
-                <p className="text-sm leading-[1.7] text-neutral-500 max-w-md">
-                    Or{' '}
-                    <button
-                        data-cal-link="magnetengine/15min"
-                        data-cal-namespace="15min"
-                        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                        className="text-neutral-300 hover:text-white underline underline-offset-4 transition-colors"
-                    >
-                        book 15 minutes
-                    </button>{' '}
-                    and I'll run a live scrape on your exact target list. If the leads look bad, I'll tell
-                    you and we're done.
-                </p>
+            <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <TrialButton>Start the 3-day trial</TrialButton>
+                <CallButton>Book the 15-minute call</CallButton>
             </div>
+
+            <TrialTerms className="mt-5" />
         </div>
-    </section>
+    </Section>
 );
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const LandingPage: React.FC = () => (
-    <div className="relative min-h-screen bg-surface">
-        <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-        <div className="fixed inset-0 bg-gradient-to-b from-black via-transparent to-black pointer-events-none z-0" />
-
+    <div className="bg-surface min-h-screen antialiased">
         <Navbar />
-
-        <main className="relative z-10">
-            <HzHero />
-            <HzProblem />
-            <HzHowItWorks />
-            <HzMath />
-            <HzCompare />
-            <HzPricing />
-            <HzFAQ />
-            <HzCTA />
+        <main>
+            <Hero />
+            <Problem />
+            <HowItWorks />
+            <TheMath />
+            <Compare />
+            <Pricing />
+            <FAQ />
+            <Close />
         </main>
-
         <Footer />
     </div>
 );

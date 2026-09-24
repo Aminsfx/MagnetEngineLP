@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { SUPPORT_EMAIL } from '../lib/plans';
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
     <div className="mb-10">
@@ -12,9 +13,8 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 
 const TermsOfService: React.FC = () => {
     return (
-        <div className="relative min-h-screen bg-black text-white overflow-hidden">
+        <div className="relative min-h-screen bg-surface text-white overflow-hidden selection:bg-white/20 selection:text-white">
             <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
 
             <div className="relative z-10 max-w-3xl mx-auto px-6 py-16">
                 <Link
@@ -36,7 +36,7 @@ const TermsOfService: React.FC = () => {
                     </p>
                 </div>
 
-                <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-4 mb-10 text-sm text-brand-300">
+                <div className="bg-white/[0.04] border border-white/10 rounded-xl p-4 mb-10 text-sm text-neutral-200">
                     <strong>Important:</strong> By creating an account or using MagnetEngine, you agree to these Terms. Please read them carefully, especially Section 6 regarding AI Services, Section 7 regarding the Free Trial and Billing, and Section 9 regarding Limitation of Liability.
                 </div>
 
@@ -102,7 +102,7 @@ const TermsOfService: React.FC = () => {
                         <li><strong className="text-white">Full access:</strong> The trial gives you the complete product, including lead scraping, AI message generation and sending, subject to the same quotas as a paid subscription.</li>
                         <li><strong className="text-white">Cancel before day 4 and pay nothing:</strong> If you cancel at any point during the three-day trial period, you are charged nothing and your access ends at the close of the trial.</li>
                         <li><strong className="text-white">Automatic billing:</strong> If you do not cancel, your card is charged the then-current subscription price on day 4, and on the same date of each following month until you cancel.</li>
-                        <li><strong className="text-white">How to cancel:</strong> Cancel in one click from your account page, or email <a href="mailto:support@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">support@magnetengine.xyz</a> from your account email before the trial ends.</li>
+                        <li><strong className="text-white">How to cancel:</strong> Cancel in one click from your account page, or email <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">{SUPPORT_EMAIL}</a> from your account email before the trial ends.</li>
                         <li><strong className="text-white">One trial per customer:</strong> The free trial is available once per customer. Repeat signups, reactivations and additional accounts are not eligible.</li>
                     </ul>
                     <p>
@@ -152,15 +152,13 @@ const TermsOfService: React.FC = () => {
                 <Section title="14. Contact">
                     <p>
                         If you have any questions about these Terms, please contact us at:{' '}
-                        <a href="mailto:legal@magnetengine.xyz" className="text-brand-500 hover:text-brand-400 transition-colors">
-                            legal@magnetengine.xyz
-                        </a>
+                        <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">{SUPPORT_EMAIL}</a>
                     </p>
                 </Section>
 
-                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-600">
+                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
                     <span>© 2026 MagnetEngine. All rights reserved.</span>
-                    <Link to="/privacy" className="text-brand-500 hover:text-brand-400 transition-colors">Privacy Policy →</Link>
+                    <Link to="/privacy" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors">Privacy Policy →</Link>
                 </div>
             </div>
         </div>

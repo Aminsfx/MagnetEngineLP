@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-    CreditCard, LogOut, RefreshCw, CheckCircle2, Clock,
-    Sparkles, ArrowRight, Mail, Check, Gift, Loader2,
-} from 'lucide-react';
+import { LogOut, RefreshCw, Mail, Check, Loader2, Lock } from 'lucide-react';
 import { WhopCheckoutEmbed } from '@whop/checkout/react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { WHOP_PLAN_IDS, PRICES, UPGRADE_CONTACT } from '../lib/plans';
+import { WHOP_PLAN_IDS, PRICES, UPGRADE_CONTACT, PLAN_LIMITS } from '../lib/plans';
 import type { BillingCycle } from '../lib/plans';
+import { SURFACE, POSITIVE } from '../lib/theme';
+import Logo from '../components/Logo';
+import { TrialTimeline } from '../components/auth/TrialTimeline';
 
 const FEATURES = [
-    '500 leads/month',
-    '3 campaigns/month',
+    `${PLAN_LIMITS.maxLeadsPerMonth.toLocaleString('en-US')} leads/month`,
+    `${PLAN_LIMITS.maxCampaignsPerMonth} campaigns/month`,
     'AI writes every DM for you, no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',
@@ -93,175 +93,167 @@ const PendingActivationPage: React.FC = () => {
 
     const planId = WHOP_PLAN_IDS[billing];
 
+    /*
+     * A checkout, laid out like one: what you're buying and when you'll be
+     * charged on the left, the payment form on the right. It used to be a
+     * centred column of badges, a glowing plan card and a step row of pills
+     * over the landing page's grid — a marketing page wearing a checkout.
+     */
     return (
-        <div className="relative min-h-screen bg-black overflow-hidden">
-            <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
-
-            <div className="relative z-10 max-w-2xl mx-auto px-4 py-16">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 mb-6">
-                        <Clock className="w-8 h-8 text-brand-400" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-white mb-3">Your account is almost ready</h1>
-                    <p className="text-neutral-400 text-sm leading-relaxed max-w-xl mx-auto">
-                        Welcome{user?.email ? <>, <span className="text-white font-medium">{user.email}</span></> : ''}!
-                        Your account was created successfully. To unlock the dashboard, complete your payment —
-                        your access activates as soon as it's confirmed.
-                    </p>
-                </div>
-
-                {/* Steps */}
-                <div className="flex items-center justify-center gap-3 mb-10 text-[11px] text-neutral-500 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-brand-500/25 bg-brand-500/8 text-brand-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> 1. Account created
-                    </span>
-                    <ArrowRight className="w-3 h-3 text-neutral-700" />
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/4 text-neutral-300">
-                        <CreditCard className="w-3.5 h-3.5" /> 2. Complete payment
-                    </span>
-                    <ArrowRight className="w-3 h-3 text-neutral-700" />
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/4 text-neutral-500">
-                        <Sparkles className="w-3.5 h-3.5" /> 3. Access unlocks
-                    </span>
-                </div>
-
-                {/* Single plan card */}
-                <div className="rounded-2xl p-8 flex flex-col bg-surface-raised border border-brand-500/30 shadow-[0_0_40px_-12px_rgba(249,115,22,0.3)] mb-10">
-                    <span className="self-start px-2.5 py-1 rounded-full bg-brand-500/15 border border-brand-500/25 text-brand-400 text-[10px] font-semibold mb-4">
-                        Founding Member
-                    </span>
-
-                    <h3 className="text-lg font-semibold text-white mb-4">
-                        One plan. Full access. Zero setup fee.
-                    </h3>
-
-                    {/* Billing toggle */}
-                    <div className="flex gap-1 bg-white/3 border border-white/5 rounded-xl p-1 w-fit mb-5">
-                        <button
-                            onClick={() => setBilling('monthly')}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                                billing === 'monthly'
-                                    ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
-                                    : 'text-neutral-600 hover:text-neutral-400'
-                            }`}
-                        >
-                            Monthly
-                        </button>
-                        <button
-                            onClick={() => setBilling('annual')}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                                billing === 'annual'
-                                    ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
-                                    : 'text-neutral-600 hover:text-neutral-400'
-                            }`}
-                        >
-                            Annual
-                        </button>
-                    </div>
-
-                    {/* Price */}
-                    <div className="flex items-baseline gap-2 flex-wrap mb-1">
-                        <span className="text-3xl font-bold text-white">
-                            {PRICES[billing].label}
-                        </span>
-                        <span className="text-base font-semibold text-white">
-                            {PRICES[billing].suffix}
-                        </span>
-                        {billing === 'annual' && (
-                            <span className="px-2.5 py-1 rounded-full bg-brand-500/15 border border-brand-500/25 text-brand-400 text-[10px] font-semibold">
-                                2 months free
+        <div className="min-h-[100dvh] bg-surface">
+            <header className="border-b border-white/8">
+                <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+                    <Logo size="sm" linkTo="/" />
+                    <div className="flex items-center gap-4 min-w-0">
+                        {user?.email && (
+                            <span className="hidden sm:inline text-meta text-neutral-400 truncate">
+                                Signed in as <span className="text-neutral-200">{user.email}</span>
                             </span>
                         )}
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="flex-none inline-flex items-center gap-1.5 text-meta font-medium text-neutral-300 hover:text-white transition-colors"
+                        >
+                            <LogOut className="w-3.5 h-3.5" aria-hidden />
+                            Sign out
+                        </button>
                     </div>
-                    <p className="text-xs text-neutral-500 mb-5">3-day free trial. Cancel before it ends and you pay nothing.</p>
+                </div>
+            </header>
 
-                    {/* Features */}
-                    <p className="text-xs font-semibold text-white mb-3">What's included:</p>
-                    <ul className="space-y-2 mb-5">
-                        {FEATURES.map(f => (
-                            <li key={f} className="flex items-start gap-2 text-xs text-neutral-400">
-                                <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0 mt-0.5" />
-                                {f}
-                            </li>
-                        ))}
-                    </ul>
+            <main className="max-w-6xl mx-auto px-6 py-12 lg:py-16 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-12 lg:gap-16 items-start">
+                {/* ── What you're buying ───────────────────────────────────── */}
+                <section aria-labelledby="summary-title">
+                    <h1 id="summary-title" className="font-semibold text-white tracking-[-0.035em] leading-[1.02] text-balance" style={{ fontSize: 'clamp(2rem, 3.6vw, 2.9rem)' }}>
+                        Start your 3-day trial
+                    </h1>
+                    <p className="mt-4 text-body text-neutral-400 max-w-[46ch]">
+                        Your account is ready. Add a card to open the dashboard — nothing is charged until the trial ends.
+                    </p>
 
-                    {/* Founding Member Bonus */}
-                    <div className="flex items-start gap-3 bg-brand-500/8 border border-brand-500/20 rounded-xl p-4 mb-6">
-                        <Gift className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-neutral-300">
-                            <strong className="text-white">Founding Member Bonus:</strong>{' '}
+                    {/* Billing */}
+                    <div className="mt-10 flex flex-wrap items-end justify-between gap-4 pb-6 border-b border-white/8">
+                        <div>
+                            <p className="text-label uppercase tracking-[0.12em] text-neutral-400">Founding member · one plan</p>
+                            <p className="mt-2 flex items-baseline gap-2">
+                                <span className="text-[2.75rem] leading-none font-semibold text-white tracking-[-0.04em] tabular-nums">
+                                    {PRICES[billing].label}
+                                </span>
+                                <span className="text-body text-neutral-400">{PRICES[billing].suffix}</span>
+                            </p>
+                        </div>
+                        <div role="radiogroup" aria-label="Billing" className="flex gap-1 p-1 rounded-xl bg-surface-raised border border-white/8">
+                            {(['monthly', 'annual'] as BillingCycle[]).map(cycle => (
+                                <button
+                                    key={cycle}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={billing === cycle}
+                                    onClick={() => setBilling(cycle)}
+                                    className={`px-4 py-2 rounded-lg text-meta font-semibold transition-colors ${
+                                        billing === cycle ? 'bg-white text-surface' : 'text-neutral-300 hover:text-white'
+                                    }`}
+                                >
+                                    {cycle === 'monthly' ? 'Monthly' : 'Annual · 2 months free'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* When things happen */}
+                    <div className="py-8 border-b border-white/8">
+                        <TrialTimeline at={1} billing={billing} />
+                    </div>
+
+                    {/* What's included */}
+                    <div className="py-8">
+                        <h2 className="text-meta font-semibold text-white mb-4">Included</h2>
+                        <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                            {FEATURES.map(f => (
+                                <li key={f} className="flex items-start gap-2.5 text-meta text-neutral-300">
+                                    <Check className="w-3.5 h-3.5 text-white flex-shrink-0 mt-[3px]" strokeWidth={2.6} aria-hidden />
+                                    {f}
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-6 text-meta text-neutral-300 max-w-[52ch]">
+                            <span className="font-semibold text-white">Founding member bonus:</span>{' '}
                             I'll personally optimize your first campaign with you on a 30-minute call.
                         </p>
                     </div>
+                </section>
 
-                    {/* Embedded Whop checkout */}
-                    {awaitingActivation ? (
-                        <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-                            <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
-                            <p className="text-sm text-white font-medium">Payment received — unlocking your account…</p>
-                            <p className="text-xs text-neutral-500">This usually takes a few seconds.</p>
+                {/* ── Payment ───────────────────────────────────────────────── */}
+                <section aria-label="Payment" className="lg:sticky lg:top-8">
+                    <div className="rounded-[1.25rem] border border-white/10 bg-surface-raised overflow-hidden">
+                        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/8 text-meta text-neutral-300">
+                            <Lock className="w-3.5 h-3.5" aria-hidden />
+                            Secure checkout by Whop
                         </div>
-                    ) : planId ? (
-                        <div className="rounded-xl overflow-hidden border border-white/8">
+
+                        {awaitingActivation ? (
+                            <div role="status" className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
+                                <Loader2 className="w-6 h-6 text-positive-400 animate-spin" aria-hidden />
+                                <p className="text-body-sm text-white font-medium">Payment received — opening your dashboard…</p>
+                                <p className="text-meta text-neutral-400">This usually takes a few seconds.</p>
+                            </div>
+                        ) : planId ? (
                             <WhopCheckoutEmbed
                                 key={billing}
                                 planId={planId}
                                 theme="dark"
-                                themeOptions={{ accentColor: '#f97316', backgroundColor: '#0e0e0e', borderRadius: 12 }}
+                                // Paying is the confirming action, so Whop's button takes the
+                                // dashboard's green: the one hue it has, and what it means.
+                                themeOptions={{ accentColor: POSITIVE[500], backgroundColor: SURFACE.raised, borderRadius: 12 }}
                                 prefill={user?.email ? { email: user.email } : undefined}
                                 disableEmail={!!user?.email}
                                 onComplete={handleCheckoutComplete}
                                 fallback={
-                                    <div className="flex items-center justify-center gap-2 py-12 text-neutral-500 text-sm">
-                                        <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+                                    <div role="status" className="flex items-center justify-center gap-2 py-16 text-neutral-400 text-body-sm">
+                                        <Loader2 className="w-4 h-4 animate-spin text-neutral-300" aria-hidden />
                                         Loading secure checkout…
                                     </div>
                                 }
                             />
-                        </div>
-                    ) : (
-                        <a
-                            href={UPGRADE_CONTACT}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all bg-brand-500 hover:bg-brand-400 text-brand-950"
-                        >
-                            <Mail className="w-4 h-4" />
-                            Contact us to pay
-                        </a>
-                    )}
-                </div>
+                        ) : (
+                            <div className="p-6">
+                                <p className="text-body-sm text-neutral-300 mb-4">
+                                    Online checkout isn't switched on yet. Email us and we'll set up your trial by hand.
+                                </p>
+                                <a
+                                    href={UPGRADE_CONTACT}
+                                    className="w-full flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-body-sm transition-colors bg-white hover:bg-neutral-200 text-surface"
+                                >
+                                    <Mail className="w-4 h-4" aria-hidden />
+                                    Email us to start
+                                </a>
+                            </div>
+                        )}
+                    </div>
 
-                {/* Already paid */}
-                <div className="rounded-2xl bg-surface-raised border border-white/8 p-6 text-center">
-                    <p className="text-sm text-neutral-400 mb-4">
-                        Already paid? Your account unlocks automatically within a minute of payment — click below to refresh.
-                    </p>
-                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                    {/* Already paid */}
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 px-1">
+                        <p className="text-meta text-neutral-400 max-w-[34ch]">
+                            Already paid? Access opens within a minute of payment.
+                        </p>
                         <button
+                            type="button"
                             onClick={handleCheck}
                             disabled={checking}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 bg-brand-500 hover:bg-brand-400 disabled:opacity-60 text-brand-950 font-semibold rounded-xl transition-all text-sm"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/15 text-meta font-semibold text-white hover:bg-white/5 disabled:opacity-60 transition-colors"
                         >
-                            <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
-                            Check activation status
-                        </button>
-                        <button
-                            onClick={handleLogout}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/10 text-neutral-400 hover:text-white hover:border-white/20 transition-all text-sm"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Sign out
+                            <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} aria-hidden />
+                            {checking ? 'Checking…' : 'Check again'}
                         </button>
                     </div>
                     {stillPending && (
-                        <p className="text-xs text-caution-400/90 mt-4">
-                            Not activated yet — if you've already paid, hang tight. Access unlocks as soon as payment is confirmed.
+                        <p role="status" className="mt-3 px-1 text-meta text-caution-300">
+                            Not active yet. If you've just paid, give it a minute and check again — it unlocks as soon as the payment is confirmed.
                         </p>
                     )}
-                </div>
-            </div>
+                </section>
+            </main>
         </div>
     );
 };

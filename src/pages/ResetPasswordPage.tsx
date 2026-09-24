@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, Loader2, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, CheckCircle } from 'lucide-react';
+import { AuthShell, AuthHeading, PasswordField, FormError, SubmitButton } from '../components/auth/AuthShell';
 import { useAuth } from '../contexts/AuthContext';
 import { updatePassword } from '../lib/auth';
 
@@ -36,7 +37,7 @@ const ResetPasswordPage: React.FC = () => {
             return;
         }
         if (newPw !== confirmPw) {
-            setError('Passwords do not match.');
+            setError("The two passwords don't match. Type the same one in both fields.");
             return;
         }
 
@@ -52,20 +53,14 @@ const ResetPasswordPage: React.FC = () => {
         }
     };
 
-    const shell = (content: React.ReactNode) => (
-        <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
-            <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
-            <div className="relative z-10 w-full max-w-md">{content}</div>
-        </div>
-    );
+    const shell = (content: React.ReactNode) => <AuthShell>{content}</AuthShell>;
 
     // Still resolving the recovery session
     if (loading || (!user && !waited)) {
         return shell(
-            <div className="text-center text-neutral-500">
-                <Loader2 className="w-6 h-6 animate-spin text-brand-500 mx-auto mb-4" />
-                <p className="text-sm">Verifying reset link…</p>
+            <div role="status" className="flex items-center gap-3 text-neutral-300">
+                <Loader2 className="w-5 h-5 animate-spin text-neutral-300" aria-hidden />
+                <p className="text-body-sm">Checking your reset link…</p>
             </div>
         );
     }
@@ -73,98 +68,53 @@ const ResetPasswordPage: React.FC = () => {
     // Recovery token missing / expired
     if (!user) {
         return shell(
-            <div className="text-center">
-                <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 mb-6">
-                    <AlertCircle className="w-8 h-8 text-red-400" />
-                </div>
-                <h1 className="text-2xl font-bold text-white mb-3">Link expired or invalid</h1>
-                <p className="text-neutral-400 text-sm leading-relaxed mb-6">
-                    This password-reset link is no longer valid. Request a new one from the sign-in page.
-                </p>
-                <Link to="/login" className="text-sm text-brand-500 hover:text-brand-400 transition-colors">
-                    ← Back to sign in
+            <>
+                <AuthHeading title="This link has expired">
+                    Reset links work once and expire after a while. Ask for a new one and use the newest email.
+                </AuthHeading>
+                <Link
+                    to="/login"
+                    className="inline-flex items-center justify-center w-full h-12 rounded-full bg-white hover:bg-neutral-200 text-surface text-body-sm font-semibold transition-colors"
+                >
+                    Request a new link
                 </Link>
-            </div>
+            </>
         );
     }
 
     if (done) {
         return shell(
-            <div className="text-center">
-                <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 mb-6">
-                    <CheckCircle className="w-8 h-8 text-brand-400" />
-                </div>
-                <h1 className="text-2xl font-bold text-white mb-3">Password updated</h1>
-                <p className="text-neutral-400 text-sm">Taking you to your dashboard…</p>
+            <div role="status">
+                <CheckCircle className="w-7 h-7 text-positive-400 mb-6" aria-hidden />
+                <AuthHeading title="Password updated">Taking you to your dashboard…</AuthHeading>
             </div>
         );
     }
 
     return shell(
         <>
-            <Link
-                to="/login"
-                className="inline-flex items-center text-sm text-neutral-500 hover:text-white transition-colors mb-8 group"
-            >
-                <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-                Back to sign in
-            </Link>
+            <AuthHeading title="Choose a new password">
+                For <span className="text-white font-medium">{user.email}</span>.
+            </AuthHeading>
 
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
-                <div className="text-center mb-6">
-                    <h1 className="text-2xl font-bold text-white mb-1">Choose a new password</h1>
-                    <p className="text-neutral-500 text-sm">for {user.email}</p>
-                </div>
+            <form onSubmit={handleSubmit} className="space-y-5">
+                <PasswordField
+                    id="new-password" label="New password" required minLength={6} autoComplete="new-password"
+                    value={newPw} onChange={e => setNewPw(e.target.value)}
+                    hint={<p className="text-label text-neutral-400">At least 6 characters</p>}
+                />
+                <PasswordField
+                    id="confirm-password" label="Type it again" required minLength={6} autoComplete="new-password"
+                    value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
+                />
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-neutral-400 mb-2">New Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                            <input
-                                type="password"
-                                required
-                                minLength={6}
-                                value={newPw}
-                                onChange={e => setNewPw(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                            />
-                        </div>
-                    </div>
+                {error && <FormError>{error}</FormError>}
 
-                    <div>
-                        <label className="block text-sm font-medium text-neutral-400 mb-2">Confirm New Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                            <input
-                                type="password"
-                                required
-                                minLength={6}
-                                value={confirmPw}
-                                onChange={e => setConfirmPw(e.target.value)}
-                                placeholder="Repeat password"
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                            />
-                        </div>
-                    </div>
-
-                    {error && (
-                        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/20">
-                            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-400">{error}</p>
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={isSaving}
-                        className="w-full bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold py-3 rounded-full transition-all shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
-                    >
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Password'}
-                    </button>
-                </form>
-            </div>
+                <SubmitButton loading={isSaving}>Save new password</SubmitButton>
+                <Link to="/login" className="inline-block text-meta font-medium text-neutral-300 underline decoration-white/25 underline-offset-4 hover:text-white hover:decoration-white">
+                    Back to sign in
+                </Link>
+            </form>
         </>
     );
 };

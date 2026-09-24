@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { landingVariant } from './landingVariant';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 
 export interface AuthResult {
@@ -26,7 +27,9 @@ export async function signUp(
     email,
     password,
     options: {
-      data: { first_name: firstName ?? '', last_name: lastName ?? '' },
+      // landing_variant: which A/B landing page this person first saw
+      // (src/lib/landingVariant.ts). Absent when they never saw one.
+      data: { first_name: firstName ?? '', last_name: lastName ?? '', landing_variant: landingVariant() ?? undefined },
       // Confirmation email link returns the user to the app (Supabase must
       // also allow this URL under Auth → URL Configuration → Redirect URLs)
       emailRedirectTo: `${window.location.origin}/login`,

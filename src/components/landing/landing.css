@@ -1,0 +1,147 @@
+/* ── Public landing pages (the /preview variants) ────────────────────────────
+   Everything here is scoped to the landing kit and imported only by it, so
+   none of it ships with the dashboard. Colours come from the tokens through
+   theme(); no hex is typed here. */
+
+/* The hero's one entrance: headline, subhead, actions, terms, in that order.
+   A short rise out of a blur — the text arrives in focus rather than merely
+   appearing. Visible by default: this is CSS only, so a failed script cannot
+   leave the hero blank. */
+.landing-in {
+  animation: landing-in 1000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes landing-in {
+  from { opacity: 0; transform: translateY(28px); filter: blur(8px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+.landing-rise {
+  animation: landing-rise 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes landing-rise {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The motion field fades out as the approval card rises over it, and a
+   scrim sits behind the headline so the field can never out-shout the text. */
+.hero-field {
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 52%, transparent 86%);
+  mask-image: linear-gradient(to bottom, black 0%, black 52%, transparent 86%);
+}
+
+.hero-scrim {
+  background: radial-gradient(
+    ellipse 48% 34% at 50% 30%,
+    theme('colors.surface.DEFAULT / 80%') 0%,
+    theme('colors.surface.DEFAULT / 45%') 55%,
+    transparent 85%
+  );
+}
+
+/* ── Variant B: the rising wall of messages ─────────────────────────────── */
+.dm-wall {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 16%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 16%, black 100%);
+}
+
+.dm-plane {
+  position: absolute;
+  left: 50%;
+  top: -4%;
+  display: flex;
+  gap: 18px;
+  width: max-content;
+  transform: translateX(-50%) perspective(1600px) rotateX(30deg) rotateZ(-7deg) scale(1.12);
+  transform-origin: 50% 0%;
+  opacity: 0.85;
+}
+
+.dm-col {
+  width: 208px;
+}
+
+.dm-track {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: dm-rise var(--dur, 55s) linear infinite;
+  animation-delay: var(--offset, 0s);
+  will-change: transform;
+}
+
+/* Three copies of each column's bubbles; sliding by one copy loops. */
+@keyframes dm-rise {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(-100% / 3 - 14px / 3)); }
+}
+
+.dm-bubble {
+  border-radius: 1.1rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid theme('colors.white / 6%');
+}
+
+.dm-bubble-out {
+  background: theme('colors.white / 4%');
+  margin-left: 18px;
+  border-bottom-right-radius: 0.35rem;
+}
+
+.dm-bubble-in {
+  background: transparent;
+  margin-right: 18px;
+  border-bottom-left-radius: 0.35rem;
+  border-color: theme('colors.positive.400 / 18%');
+}
+
+/* An approved draft: the edge turns green and the check lands, then it
+   settles back into the crowd. Staggered per bubble so only a few glow at once. */
+.dm-flash {
+  animation: dm-flash 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--flash-delay, 0s);
+}
+
+.dm-flash .dm-check {
+  animation: dm-check 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--flash-delay, 0s);
+}
+
+@keyframes dm-flash {
+  0%, 62%, 100% { border-color: theme('colors.white / 6%'); }
+  68%, 88%      { border-color: theme('colors.positive.400 / 45%'); }
+}
+
+@keyframes dm-check {
+  0%, 62%, 100% { opacity: 0.25; transform: scale(0.8); }
+  68%, 88%      { opacity: 1; transform: scale(1); }
+}
+
+.dm-wall[data-paused] .dm-track,
+.dm-wall[data-paused] .dm-flash,
+.dm-wall[data-paused] .dm-check {
+  animation-play-state: paused;
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .landing-in,
+  .landing-rise {
+    animation: landing-fade 400ms ease-out both;
+    animation-delay: 0ms;
+  }
+
+  .dm-track,
+  .dm-flash,
+  .dm-flash .dm-check {
+    animation: none;
+  }
+}
+
+@keyframes landing-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

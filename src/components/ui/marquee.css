@@ -1,0 +1,41 @@
+/* The marquee's motion. Each track is one copy of the content; all copies
+   move together by one copy's width plus the gap, which is exactly the
+   distance at which copy n+1 lands where copy n started. */
+
+.marquee {
+  --gap: 1rem;
+  display: flex;
+  gap: var(--gap);
+  overflow: hidden;
+  /* The strip dissolves at both ends instead of being cut by the container. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--gap);
+  animation: marquee var(--duration, 40s) linear infinite;
+}
+
+.marquee-reverse .marquee-track {
+  animation-direction: reverse;
+}
+
+.marquee-pause:hover .marquee-track,
+.marquee[data-paused] .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-100% - var(--gap))); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}

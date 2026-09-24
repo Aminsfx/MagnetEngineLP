@@ -8,7 +8,11 @@ import { Loader2 } from 'lucide-react';
 
 // Route-level code splitting: visitors hitting the landing page don't download
 // the dashboard bundle (recharts etc.), and vice versa.
-const LandingPage = lazy(() => import('./pages/LandingPage'));
+// The live landing page is variant A; B and C stay reachable for the owner's
+// A/B tests (src/lib/landingVariant.ts has the paths and the tracking).
+const LandingA = lazy(() => import('./pages/landing/VariantA'));
+const LandingB = lazy(() => import('./pages/landing/VariantB'));
+const LandingC = lazy(() => import('./pages/landing/VariantC'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PendingActivationPage = lazy(() => import('./pages/PendingActivationPage'));
@@ -22,7 +26,7 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const AuthLoader: React.FC<{ label: string }> = ({ label }) => (
   <div className="min-h-screen bg-surface flex items-center justify-center">
     <div className="flex items-center gap-3 text-neutral-600">
-      <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+      <Loader2 className="w-5 h-5 animate-spin text-neutral-300" />
       <span className="text-sm font-mono">{label}</span>
     </div>
   </div>
@@ -86,7 +90,13 @@ const App: React.FC = () => {
   return (
     <Suspense fallback={<AuthLoader label="Loading…" />}>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<LandingA />} />
+        <Route path="/lp/b" element={<LandingB />} />
+        <Route path="/lp/c" element={<LandingC />} />
+        {/* The addresses the three were first previewed at, kept working. */}
+        <Route path="/preview/a" element={<Navigate to="/" replace />} />
+        <Route path="/preview/b" element={<Navigate to="/lp/b" replace />} />
+        <Route path="/preview/c" element={<Navigate to="/lp/c" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route

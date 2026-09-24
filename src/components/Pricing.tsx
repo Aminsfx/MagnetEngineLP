@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Shield, Calendar, Gift } from 'lucide-react';
-import { PRICES, type BillingCycle } from '../lib/plans';
+import { PRICES, PLAN_LIMITS, type BillingCycle } from '../lib/plans';
 
 const FEATURES = [
-    '500 leads/month',
-    '3 campaigns/month',
+    `${PLAN_LIMITS.maxLeadsPerMonth.toLocaleString('en-US')} leads/month`,
+    `${PLAN_LIMITS.maxCampaignsPerMonth} campaigns/month`,
     'AI writes every DM for you, no API keys needed',
     'Production Mode sending',
     'Full approval queue + CRM',

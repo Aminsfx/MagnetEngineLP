@@ -1,28 +1,52 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Lock, Mail, Loader2, CheckCircle, AlertCircle, User, Eye, EyeOff } from 'lucide-react';
+import { MailCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { AuthShell, AuthHeading, Field, PasswordField, FormError, SubmitButton, TextAction } from '../components/auth/AuthShell';
+import { TrialTimeline } from '../components/auth/TrialTimeline';
+import { ApprovalPreview } from '../components/ApprovalPreview';
+import { trackEvent } from '../lib/landingVariant';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
+const MIN_PASSWORD = 6;
+
+/** The right half on sign-in: the thing waiting on the other side of the form. */
+const SignInAside: React.FC = () => (
+    <>
+        <ApprovalPreview stacked tone="mono" />
+        <p className="mt-4 text-body-sm text-neutral-400 max-w-[46ch]">
+            Your queue picks up where you left off — every draft written from the profile it was sent to.
+        </p>
+    </>
+);
+
+/** The right half on sign-up: exactly what happens next, dated. */
+const SignUpAside: React.FC = () => (
+    <>
+        <h2 className="text-[1.6rem] leading-tight font-semibold text-white tracking-[-0.02em] mb-8 max-w-[22ch]">
+            Here is everything that happens next.
+        </h2>
+        <TrialTimeline at={0} />
+    </>
+);
+
 const LoginPage: React.FC = () => {
-    // Deep link support: /login?mode=signup opens the Create Account tab
+    // Deep link support: /login?mode=signup opens sign-up
     const [searchParams] = useSearchParams();
-    const [mode, setMode] = useState<Mode>(
-        searchParams.get('mode') === 'signup' ? 'signup' : 'login'
-    );
-    const [showPw, setShowPw] = useState(false);
+    const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [confirmEmail, setConfirmEmail] = useState(false);
-    const [resetSent, setResetSent] = useState(false);
+    const [sentTo, setSentTo] = useState<null | 'confirm' | 'reset'>(null);
 
     const { signIn, signUp, resetPassword } = useAuth();
     const navigate = useNavigate();
+
+    const switchTo = (next: Mode) => { setMode(next); setError(null); };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,27 +56,23 @@ const LoginPage: React.FC = () => {
         try {
             if (mode === 'login') {
                 const err = await signIn(email, password);
-                if (err) {
-                    setError(err);
-                } else {
-                    navigate('/dashboard');
-                }
+                if (err) setError(err);
+                else navigate('/dashboard');
             } else if (mode === 'forgot') {
                 const err = await resetPassword(email);
-                if (err) {
-                    setError(err);
-                } else {
-                    setResetSent(true);
-                }
+                if (err) setError(err);
+                else setSentTo('reset');
             } else {
                 const result = await signUp(email, password, firstName.trim(), lastName.trim());
                 if (result === '__CONFIRM_EMAIL__') {
-                    setConfirmEmail(true);
+                    trackEvent('sign_up', { method: 'email' });
+                    setSentTo('confirm');
                 } else if (result) {
                     setError(result);
                 } else {
-                    // New accounts land on the activation page until the owner
-                    // confirms payment — ProtectedRoute enforces this too.
+                    trackEvent('sign_up', { method: 'email' });
+                    // New accounts land on the activation page until payment is
+                    // confirmed — ProtectedRoute enforces this too.
                     navigate('/activate');
                 }
             }
@@ -61,259 +81,93 @@ const LoginPage: React.FC = () => {
         }
     };
 
-    if (resetSent) {
+    // ── "Check your email" — after a reset request or an unconfirmed sign-up ──
+    if (sentTo) {
         return (
-            <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
-                <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-                <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
-                <div className="relative z-10 w-full max-w-md text-center">
-                    <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 mb-6 mx-auto">
-                        <CheckCircle className="w-8 h-8 text-brand-400" />
-                    </div>
-                    <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
-                    <p className="text-neutral-400 text-sm leading-relaxed mb-6">
-                        If an account exists for <span className="text-white font-medium">{email}</span>,
-                        we sent a password-reset link. Click it to choose a new password.
-                    </p>
-                    <button
-                        onClick={() => { setResetSent(false); setMode('login'); setError(null); }}
-                        className="text-sm text-brand-500 hover:text-brand-400 transition-colors"
-                    >
-                        ← Back to sign in
-                    </button>
-                </div>
-            </div>
+            <AuthShell aside={sentTo === 'confirm' ? <SignUpAside /> : <SignInAside />}>
+                <MailCheck className="w-7 h-7 text-white mb-6" aria-hidden />
+                <AuthHeading title="Check your email">
+                    {sentTo === 'confirm' ? (
+                        <>We sent a confirmation link to <span className="text-white font-medium">{email}</span>. Open it to confirm your account, then come back and sign in.</>
+                    ) : (
+                        <>If there's an account for <span className="text-white font-medium">{email}</span>, a reset link is on its way. It opens a page where you choose a new password.</>
+                    )}
+                </AuthHeading>
+                <p className="text-meta text-neutral-400 mb-6">Nothing after a minute? Check spam, or try again.</p>
+                <TextAction onClick={() => { setSentTo(null); switchTo('login'); }}>Back to sign in</TextAction>
+            </AuthShell>
         );
     }
 
-    if (confirmEmail) {
-        return (
-            <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
-                <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-                <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
-                <div className="relative z-10 w-full max-w-md text-center">
-                    <div className="inline-flex w-16 h-16 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 mb-6 mx-auto">
-                        <CheckCircle className="w-8 h-8 text-brand-400" />
-                    </div>
-                    <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
-                    <p className="text-neutral-400 text-sm leading-relaxed mb-6">
-                        We sent a confirmation link to <span className="text-white font-medium">{email}</span>.
-                        Click it to activate your account, then come back to log in.
-                    </p>
-                    <button
-                        onClick={() => { setConfirmEmail(false); setMode('login'); }}
-                        className="text-sm text-brand-500 hover:text-brand-400 transition-colors"
-                    >
-                        ← Back to sign in
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    const heading = {
+        login: { title: 'Sign in', sub: <>New here? <TextAction onClick={() => switchTo('signup')}>Start the 3-day trial</TextAction></> },
+        signup: { title: 'Start your 3-day trial', sub: <>Already have an account? <TextAction onClick={() => switchTo('login')}>Sign in</TextAction></> },
+        forgot: { title: 'Reset your password', sub: <>Enter the email you signed up with and we'll send you a link to choose a new one.</> },
+    }[mode];
 
     return (
-        <div className="relative min-h-screen bg-black flex items-center justify-center p-4 overflow-hidden">
-            {/* Background */}
-            <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
-            <div className="fixed inset-0 bg-gradient-to-b from-black via-brand-900/10 to-black pointer-events-none z-0" />
+        <AuthShell aside={mode === 'signup' ? <SignUpAside /> : <SignInAside />}>
+            <AuthHeading title={heading.title}>{heading.sub}</AuthHeading>
 
-            <div className="relative z-10 w-full max-w-md">
-                <Link
-                    to="/"
-                    className="inline-flex items-center text-sm text-neutral-500 hover:text-white transition-colors mb-8 group"
-                >
-                    <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-                    Back to landing page
-                </Link>
-
-                <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
-                    {/* Tab switcher */}
-                    <div className="flex bg-black/30 rounded-xl p-1 mb-8 border border-white/8">
-                        {(['login', 'signup'] as Mode[]).map((m) => (
-                            <button
-                                key={m}
-                                onClick={() => { setMode(m); setError(null); }}
-                                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                    mode === m
-                                        ? 'bg-brand-500 text-brand-950 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
-                                        : 'text-neutral-500 hover:text-white'
-                                }`}
-                            >
-                                {m === 'login' ? 'Sign In' : 'Create Account'}
-                            </button>
-                        ))}
+            <form onSubmit={handleSubmit} className="space-y-5">
+                {mode === 'signup' && (
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field
+                            id="first-name" label="First name" required autoComplete="given-name"
+                            value={firstName} onChange={e => setFirstName(e.target.value)}
+                        />
+                        <Field
+                            id="last-name" label="Last name" required autoComplete="family-name"
+                            value={lastName} onChange={e => setLastName(e.target.value)}
+                        />
                     </div>
+                )}
 
-                    <div className="text-center mb-6">
-                        <h1 className="text-2xl font-bold text-white mb-1">
-                            {mode === 'login' ? 'Welcome back' : mode === 'forgot' ? 'Reset your password' : 'Get started'}
-                        </h1>
-                        <p className="text-neutral-500 text-sm">
-                            {mode === 'login'
-                                ? 'Enter your credentials to access your dashboard'
-                                : mode === 'forgot'
-                                ? "Enter your email and we'll send you a reset link"
-                                : 'Create your MagnetEngine account'
-                            }
-                        </p>
-                    </div>
+                <Field
+                    id="email" label="Email" type="email" required autoComplete="email" inputMode="email"
+                    value={email} onChange={e => setEmail(e.target.value)} placeholder="you@youragency.com"
+                />
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {/* First + Last name — signup only */}
-                        {mode === 'signup' && (
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-400 mb-2">First Name</label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                                        <input
-                                            type="text"
-                                            required
-                                            autoComplete="given-name"
-                                            value={firstName}
-                                            onChange={e => setFirstName(e.target.value)}
-                                            placeholder="John"
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-400 mb-2">Last Name</label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                                        <input
-                                            type="text"
-                                            required
-                                            autoComplete="family-name"
-                                            value={lastName}
-                                            onChange={e => setLastName(e.target.value)}
-                                            placeholder="Doe"
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
+                {mode !== 'forgot' && (
+                    <PasswordField
+                        id="password"
+                        label="Password"
+                        required
+                        minLength={MIN_PASSWORD}
+                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        aside={mode === 'login' && (
+                            <TextAction className="!text-label" onClick={() => switchTo('forgot')}>Forgot password?</TextAction>
                         )}
-
-                        {/* Email */}
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-400 mb-2">
-                                Email Address
-                            </label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                                <input
-                                    id="email"
-                                    type="email"
-                                    required
-                                    autoComplete="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="name@company.com"
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Password — hidden in forgot mode */}
-                        {mode !== 'forgot' && (
-                            <div>
-                                <label className="block text-sm font-medium text-neutral-400 mb-2">
-                                    Password
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                                    <input
-                                        id="password"
-                                        type={showPw ? 'text' : 'password'}
-                                        required
-                                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        placeholder="••••••••"
-                                        minLength={6}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-11 text-white text-sm placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/30 transition-all"
-                                    />
-                                    <button
-                                        type="button"
-                                        tabIndex={-1}
-                                        onClick={() => setShowPw(v => !v)}
-                                        aria-label={showPw ? 'Hide password' : 'Show password'}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-300 transition-colors"
-                                    >
-                                        {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                                {mode === 'signup' && password.length > 0 && password.length < 6 && (
-                                    <p className="text-[11px] text-caution-400/90 mt-1.5">
-                                        Password must be at least 6 characters ({6 - password.length} more to go)
-                                    </p>
-                                )}
-                                {mode === 'login' && (
-                                    <div className="text-right mt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setMode('forgot'); setError(null); }}
-                                            className="text-xs text-neutral-500 hover:text-brand-400 transition-colors"
-                                        >
-                                            Forgot password?
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                        hint={mode === 'signup' && (
+                            <p className={`text-label ${password.length > 0 && password.length < MIN_PASSWORD ? 'text-caution-300' : 'text-neutral-400'}`}>
+                                At least {MIN_PASSWORD} characters
+                                {password.length > 0 && password.length < MIN_PASSWORD && ` — ${MIN_PASSWORD - password.length} more to go`}
+                            </p>
                         )}
+                    />
+                )}
 
-                        {/* Error state */}
-                        {error && (
-                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/20">
-                                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                                <p className="text-sm text-red-400">{error}</p>
-                            </div>
-                        )}
+                {error && <FormError>{error}</FormError>}
 
-                        {/* Sign-up info */}
-                        {mode === 'signup' && (
-                            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white/4 border border-white/8">
-                                <User className="w-4 h-4 text-neutral-400 flex-shrink-0 mt-0.5" />
-                                <p className="text-xs text-neutral-500 leading-relaxed">
-                                    By creating an account you agree to our{' '}
-                                    <Link to="/terms" className="text-brand-500/90 hover:text-brand-400 underline underline-offset-2">Terms of Service</Link>
-                                    {' '}and{' '}
-                                    <Link to="/privacy" className="text-brand-500/90 hover:text-brand-400 underline underline-offset-2">Privacy Policy</Link>.
-                                    After sign-up you'll pick a plan and complete payment to unlock your dashboard.
-                                </p>
-                            </div>
-                        )}
+                <SubmitButton loading={isLoading}>
+                    {mode === 'login' ? 'Sign in' : mode === 'forgot' ? 'Send reset link' : 'Create account'}
+                </SubmitButton>
 
-                        <button
-                            type="submit"
-                            id="auth-submit-btn"
-                            disabled={isLoading}
-                            className="w-full bg-brand-500 hover:bg-brand-400 text-brand-950 font-semibold py-3 rounded-full transition-all shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)] flex items-center justify-center gap-2 group disabled:opacity-70 mt-2"
-                        >
-                            {isLoading ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <>
-                                    {mode === 'login' ? 'Sign In' : mode === 'forgot' ? 'Send Reset Link' : 'Create Account'}
-                                    <ArrowLeft className="w-4 h-4 rotate-180 group-hover:translate-x-1 transition-transform" />
-                                </>
-                            )}
-                        </button>
+                {mode === 'signup' && (
+                    <p className="text-label text-neutral-400">
+                        Next you'll start the trial — card required, nothing charged for 3 days. By creating an account you
+                        agree to the <Link to="/terms" className="text-neutral-200 underline decoration-white/25 underline-offset-2 hover:decoration-white">Terms</Link> and{' '}
+                        <Link to="/privacy" className="text-neutral-200 underline decoration-white/25 underline-offset-2 hover:decoration-white">Privacy Policy</Link>.
+                    </p>
+                )}
 
-                        {mode === 'forgot' && (
-                            <button
-                                type="button"
-                                onClick={() => { setMode('login'); setError(null); }}
-                                className="w-full text-center text-xs text-neutral-500 hover:text-white transition-colors"
-                            >
-                                ← Back to sign in
-                            </button>
-                        )}
-                    </form>
-                </div>
-            </div>
-        </div>
+                {mode === 'forgot' && (
+                    <TextAction onClick={() => switchTo('login')}>Back to sign in</TextAction>
+                )}
+            </form>
+        </AuthShell>
     );
 };
 

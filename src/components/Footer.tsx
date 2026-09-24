@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Magnet } from 'lucide-react';
+import { SUPPORT_EMAIL } from '../lib/plans';
 
 const Footer: React.FC = () => {
   return (
@@ -10,16 +11,16 @@ const Footer: React.FC = () => {
           <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white shadow-[0_0_15px_-3px_rgba(255,255,255,0.2)]">
             <Magnet size={18} strokeWidth={2.5} className="text-surface rotate-90" />
           </div>
-          <span className="text-neutral-300 text-sm font-medium tracking-wide">MagnetEngine</span>
+          <span className="text-neutral-300 text-body-sm font-medium tracking-[-0.01em]">MagnetEngine</span>
         </div>
 
-        <div className="flex gap-8 text-sm text-neutral-500">
+        <div className="flex gap-8 text-meta text-neutral-400">
           <Link to="/privacy" className="hover:text-brand-400 transition-colors">Privacy</Link>
           <Link to="/terms" className="hover:text-brand-400 transition-colors">Terms</Link>
-          <a href="mailto:aminupsellz@gmail.com" className="hover:text-brand-400 transition-colors">Contact</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-brand-400 transition-colors">Contact</a>
         </div>
 
-        <div className="text-sm text-neutral-600 font-light">
+        <div className="text-meta text-neutral-500">
           © {new Date().getFullYear()} MagnetEngine. All rights reserved.
         </div>
       </div>
