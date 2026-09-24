@@ -15,7 +15,7 @@ CONTEXT THE BUILDER NEEDS (it has no memory of the planning chat)
   - `extension/popup.html` / `extension/popup.js` — progress popup
   - `src/pages/PrivacyPolicy.tsx` — the app already serves a privacy policy at `/privacy`
 - Real inputs, in full:
-  - Product name: MagnetEngine. Brand colors: emerald `#10B981` on near-black `#030A06`. Support email: `support@magnetengine.xyz`.
+  - Product name: MagnetEngine. Brand colors: white on near-black `#08080a`, emerald `#10b981` for good outcomes only (the dashboard's palette). Support email: `amine@magnetengine.xyz`.
   - Production web-app domain: `magnetengine.xyz` (derived from the support address in `src/lib/plans.ts`; if the deployed dashboard lives elsewhere the owner edits one manifest line — flag this in the output README).
   - What the extension actually does (single purpose, for the listing): it receives DM campaigns the user explicitly approved in their MagnetEngine dashboard and sends those DMs from the user's own logged-in Instagram session, one at a time with randomized human-like delays and a hard daily cap of 25.
 - Data shapes / examples: n/a (no data model changes).

@@ -63,7 +63,7 @@ function render(d) {
 
     document.getElementById('sentNum').textContent    = sent;
     document.getElementById('totalNum').textContent   = total;
-    document.getElementById('bar').style.width        = pct + '%';
+    document.getElementById('bar').style.transform    = `scaleX(${pct / 100})`;
     document.getElementById('statToday').textContent  = `${todayCnt}/${dailyCap}`;
     document.getElementById('statLeft').textContent   = left;
     document.getElementById('statFailed').textContent = failedCount;

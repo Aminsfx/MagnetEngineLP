@@ -1,8 +1,8 @@
 // Renders the extension icon at the four sizes Chrome requires.
 //
 // This is the landing page's mark, not a second logo: `src/components/Logo.tsx`
-// draws a white disc with Lucide's `Magnet` glyph rotated 90° in near-black
-// (#030604) at 2.5 stroke, and so does the SVG below — same glyph path, same
+// draws a white disc with Lucide's `Magnet` glyph rotated 90° in the ground
+// colour (`surface`, #08080a) at 2.5 stroke, and so does the SVG below — same glyph path, same
 // colours, same 55% glyph-to-disc ratio the component's `w-10`/`22px` pair gives.
 //
 // Run: npm run ext:icons
@@ -38,7 +38,7 @@ const STROKE = 2.5;
 const icon = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}">\
 <circle cx="${SIZE / 2}" cy="${SIZE / 2}" r="${SIZE / 2}" fill="#ffffff"/>\
 <g transform="translate(${OFFSET} ${OFFSET}) scale(${SCALE}) rotate(90 12 12)" \
-fill="none" stroke="#030604" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round">\
+fill="none" stroke="#08080a" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round">\
 ${MAGNET.map((d) => `<path d="${d}"/>`).join('')}\
 </g></svg>`;
 
