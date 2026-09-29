@@ -72,6 +72,13 @@ export interface ScrapeOutcome {
     notes: string[];
     /** The Operator pressed Stop; `leads` is what was found until then. */
     stopped: boolean;
+    /**
+     * A failure that ended the whole run after something was found — the
+     * lookups ran out, the service went busy. `leads` is what was found before
+     * it: those lookups are already paid for. With nothing found, the run
+     * throws instead.
+     */
+    halted?: string;
     /** Profiles whose details lookup failed — kept with what the list gave. */
     unenriched: number;
     /** This month's remaining lookups, as of the last call. */
@@ -133,6 +140,13 @@ export async function runScrape(
     const notes: string[] = [];
     let lookupsLeft: number | undefined;
     let stopped = false;
+    let halted: string | undefined;
+
+    // A run-wide failure ends the run, but never costs the rows already paid for.
+    const halt = (e: unknown) => {
+        if (rows.size === 0) throw e;
+        halted = e instanceof Error ? e.message : 'Lead search stopped unexpectedly.';
+    };
 
     const collectShare = req.enrich && !isList ? 55 : 95;
     const report = (message: string, percent: number) =>
@@ -162,7 +176,8 @@ export async function runScrape(
                     notes.push(e.message);
                     break;
                 }
-                throw e;
+                halt(e);
+                break;
             }
             lookupsLeft = page.limit - page.used;
 
@@ -191,22 +206,28 @@ export async function runScrape(
             );
         } while (cursor && (isList || fromQuery < limit) && pages < MAX_PAGES_PER_QUERY && dry < MAX_DRY_PAGES);
 
-        if (stopped) break;
+        if (stopped || halted) break;
     }
 
     // Profile details: one lookup per short row, a batch per call.
     const short = [...rows.entries()].filter(([key, row]) => !complete.has(key) && row.pk);
-    if (req.enrich && !stopped && short.length > 0) {
+    if (req.enrich && !stopped && !halted && short.length > 0) {
         const byPk = new Map(short.map(([key, row]) => [row.pk, key]));
         let done = 0;
         for (const batch of chunk(short, ENRICH_BATCH)) {
             if (shouldStop()) { stopped = true; break; }
             report(`Loading profile details — ${done} of ${short.length}…`, collectShare + (done / short.length) * (98 - collectShare));
 
-            const res = await callScrape<EnrichResponse>({
-                op: 'enrich',
-                ids: batch.map(([, row]) => row.pk),
-            });
+            let res: EnrichResponse;
+            try {
+                res = await callScrape<EnrichResponse>({
+                    op: 'enrich',
+                    ids: batch.map(([, row]) => row.pk),
+                });
+            } catch (e) {
+                halt(e);
+                break;
+            }
             lookupsLeft = res.limit - res.used;
             for (const full of res.rows) {
                 const key = byPk.get(full.pk) ?? full.username.toLowerCase();
@@ -219,8 +240,8 @@ export async function runScrape(
     const unenriched = req.enrich && !isList ? [...rows.keys()].filter(k => !complete.has(k)).length : 0;
 
     const { leads, skipped } = intake({ source: 'scrape', rows: [...rows.values()] as unknown as Record<string, unknown>[], campaignId });
-    onProgress?.({ message: `Done — ${leads.length} profile${leads.length !== 1 ? 's' : ''}${stopped ? ' (stopped early)' : ''}.`, percent: 100 });
-    return { leads, received: rows.size, skipped, notes, stopped, unenriched, lookupsLeft };
+    onProgress?.({ message: `Done — ${leads.length} profile${leads.length !== 1 ? 's' : ''}${stopped || halted ? ' (stopped early)' : ''}.`, percent: 100 });
+    return { leads, received: rows.size, skipped, notes, stopped, halted, unenriched, lookupsLeft };
 }
 
 /**

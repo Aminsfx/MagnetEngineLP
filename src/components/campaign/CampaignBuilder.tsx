@@ -228,9 +228,10 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             setLookupsLeft(outcome.lookupsLeft);
 
             const extra = [...outcome.notes];
+            if (outcome.halted) extra.unshift(`Search stopped early: ${outcome.halted} Everything found before that is below.`);
             if (outcome.unenriched > 0) {
                 const n = `${outcome.unenriched} profile${outcome.unenriched !== 1 ? 's' : ''}`;
-                extra.push(outcome.stopped
+                extra.push(outcome.stopped || outcome.halted
                     ? `Stopped before details loaded for ${n} — they have name and username only.`
                     : `${n} couldn't be loaded in full — kept with name and username only.`);
             }

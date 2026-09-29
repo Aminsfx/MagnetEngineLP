@@ -61,6 +61,38 @@ describe('runScrape', () => {
         expect(invoke).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps what was found when the lookups run out part-way through the details', async () => {
+        // The field report: 63 lookups spent, the 7th details batch refused, and every
+        // profile already paid for thrown away with the error.
+        invoke.mockImplementation(async (_name, body) => {
+            if (body.op === 'enrich' && calls('enrich').length > 6) {
+                throw new FunctionError('Lead search is unavailable right now — please contact support.', { code: 'scrape_unavailable' });
+            }
+            return demoScrape(body, { delayMs: 0 });
+        });
+        const out = await runScrape({ kind: 'following', queries: ['competitor'], limit: 100, enrich: true });
+
+        expect(out.leads).toHaveLength(100);
+        expect(out.halted).toBe('Lead search is unavailable right now — please contact support.');
+        expect(out.unenriched).toBe(40);                    // batches 7–10 never loaded
+        expect(calls('enrich')).toHaveLength(7);            // nothing spent after the refusal
+    });
+
+    it('keeps the earlier pages when a later page fails for the whole run', async () => {
+        invoke.mockImplementation(async (_name, body) => {
+            if (body.op === 'page' && calls('page').length > 1) {
+                throw new FunctionError('busy', { code: 'scrape_busy' });
+            }
+            return demoScrape(body, { delayMs: 0 });
+        });
+        const out = await runScrape({ kind: 'keyword', queries: ['coach', 'agency'], limit: 60, enrich: true });
+
+        expect(out.halted).toBe('busy');
+        expect(out.leads.length).toBeGreaterThan(0);
+        expect(calls('page')).toHaveLength(2);              // the second query is not attempted
+        expect(calls('enrich')).toHaveLength(0);            // a halted run spends nothing more
+    });
+
     it('Stop keeps what was found and spends nothing more', async () => {
         let pages = 0;
         invoke.mockImplementation(async (_name, body) => {
