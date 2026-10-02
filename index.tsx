@@ -1,15 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { inject as injectAnalytics } from '@vercel/analytics';
-import { injectSpeedInsights } from '@vercel/speed-insights';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { PlanProvider } from './src/contexts/PlanContext';
 import { ToastProvider } from './src/components/common/Toast';
 import App from './src/App';
-
-injectAnalytics();
-injectSpeedInsights();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -24,6 +21,8 @@ root.render(
         <PlanProvider>
           <ToastProvider>
             <App />
+            <Analytics />
+            <SpeedInsights />
           </ToastProvider>
         </PlanProvider>
       </AuthProvider>
