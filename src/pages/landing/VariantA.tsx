@@ -5,13 +5,13 @@ import {
     Pricing, FAQ, Close, type Step,
 } from '../../components/landing/kit';
 import { MONTHLY_DMS } from '../../components/landing/content';
-import { MagnetField } from '../../components/landing/motion/MagnetField';
+import { DMStream } from '../../components/landing/motion/DMStream';
 import type { NavItem } from '../../components/landing/Header';
 
 /**
  * Landing A — "The Magnet", live at `/`. Outcome first: booked calls without the
- * prospecting. The hero field is the product's own diagram, prospects pulled
- * into a core. The argument runs problem → mechanism → the math.
+ * prospecting. The hero field is the same wall of messages as B, no two alike.
+ * The argument runs problem → mechanism → the math.
  */
 
 const NAV: NavItem[] = [
@@ -71,7 +71,7 @@ const MATH_ROWS = [
 const VariantA: React.FC = () => (
     <LandingShell nav={NAV} variant="a">
         <Hero
-            field={<MagnetField />}
+            field={<DMStream />}
             title={
                 <>
                     Book sales calls from Instagram <Em>without prospecting.</Em>
