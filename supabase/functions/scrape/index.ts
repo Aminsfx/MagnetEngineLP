@@ -7,7 +7,12 @@
 // POST JSON, one of:
 //   { op: "page", source: { kind, query }, cursor?: string }
 //     → { rows: ProfileRow[], complete: boolean, cursor: string | null,
-//         target?: string, missing?: string[], used, limit }
+//         target?: string, missing?: string[], total?: number, items: number,
+//         used, limit }
+//     `total` is how many items the source holds, when Instagram says (a post's
+//     comment count, an account's following count); `items` is how many of
+//     them this page covered, in the same unit. Together they drive the
+//     client's progress bar and time estimate.
 //   { op: "enrich", ids: string[] }                           (at most 10)
 //     → { rows: ProfileRow[], used, limit }
 //
@@ -26,6 +31,7 @@
 
 import { json, servePost, serviceClient } from "../_shared/http.ts";
 import {
+  countItems,
   decodeCursor,
   encodeCursor,
   ENRICH_BATCH,
@@ -42,6 +48,7 @@ import {
   type ProfileRow,
   readNextPage,
   readTarget,
+  readTotal,
   resolveRequest,
   type Source,
   toRow,
@@ -160,10 +167,12 @@ async function page(body: Body, get: Get, key: string): Promise<Response | Recor
         return null;
       }
     });
-    return { rows: rows.filter(isRow), complete: true, cursor: null, missing };
+    const found = rows.filter(isRow);
+    return { rows: found, complete: true, cursor: null, missing, items: found.length };
   }
 
   const cur = decodeCursor(body.cursor);
+  let total: number | undefined;
   if (needsTarget(src.kind) && !cur.t) {
     let data: unknown;
     try {
@@ -182,6 +191,7 @@ async function page(body: Body, get: Get, key: string): Promise<Response | Recor
     }
     cur.t = target.id;
     cur.l = target.label;
+    total = target.total;
   }
 
   let data: unknown;
@@ -201,11 +211,14 @@ async function page(body: Body, get: Get, key: string): Promise<Response | Recor
   }
 
   const next = readNextPage(src.kind, data);
+  total = readTotal(src.kind, data) ?? total;
   return {
     rows,
     complete: false,
     cursor: next ? encodeCursor({ ...cur, p: next }) : null,
     target: cur.l,
+    items: countItems(src.kind, data, rows.length),
+    ...(total !== undefined ? { total } : {}),
   };
 }
 

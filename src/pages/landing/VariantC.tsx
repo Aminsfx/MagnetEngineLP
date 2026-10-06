@@ -43,7 +43,7 @@ const WEEK: { when: string; time: string; you: boolean; what: string }[] = [
         when: 'All day',
         time: '0 min',
         you: false,
-        what: 'The Chrome extension sends what you approved from your own browser, one every 3–8 minutes, up to your daily cap.',
+        what: 'The Chrome extension sends what you approved from your own browser, at a human pace.',
     },
     {
         when: 'A few days later',

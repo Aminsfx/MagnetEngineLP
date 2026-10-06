@@ -209,9 +209,220 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
     setInterval(pollInbox, POLL_MS);
 }
 
-// ── Instagram: Execute DM automation ────────────────────────────
+// ── Instagram: the Sender Tab ───────────────────────────────────
+// The background worker sends every DM of a campaign from ONE tab (the
+// Sender Tab), navigating it from profile to profile. On each page load this
+// script asks whether it is that tab. If it is, it covers the page with an
+// overlay that blocks the Operator's clicks and keys, and runs the DM the
+// worker hands it. Every other instagram.com tab stays untouched.
 if (window.location.hostname.includes("instagram.com")) {
     console.log("[MagnetEngine] Injected into Instagram.");
+
+    // ── The overlay ─────────────────────────────────────────────
+    // A shadow root keeps Instagram's CSS out and ours in. It blocks the
+    // pointer by covering the page, and the keyboard by swallowing trusted key
+    // events before Instagram sees them. Our own automation is untouched: its
+    // clicks are element.click() and its typing is execCommand, neither of
+    // which is a trusted key event.
+    const SenderOverlay = (() => {
+        const TITLE_PREFIX = '● Sending DMs · ';
+        const BLOCKED = ['keydown', 'keypress', 'keyup', 'paste', 'drop', 'contextmenu'];
+        let host = null;
+        let tabId = null;
+        let ticker = null;
+        let state = {};
+
+        const block = (e) => {
+            if (!e.isTrusted || e.target === host) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        };
+
+        function loadFonts() {
+            // @font-face does not work inside a shadow root; FontFace on the
+            // document does, under names Instagram will never use.
+            try {
+                const faces = [
+                    new FontFace('ME Grotesk', `url(${chrome.runtime.getURL('fonts/schibsted-grotesk-latin-wght-normal.woff2')})`, { weight: '400 900' }),
+                    new FontFace('ME Mono', `url(${chrome.runtime.getURL('fonts/sometype-mono-latin-wght-normal.woff2')})`, { weight: '400 700' }),
+                ];
+                for (const f of faces) f.load().then(() => document.fonts.add(f)).catch(() => {});
+            } catch { /* system fonts it is */ }
+        }
+
+        const CSS = `
+            :host { all: initial; }
+            .veil {
+                position: fixed; inset: 0; z-index: 2147483647;
+                background: rgba(0, 0, 0, 0.82);
+                backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+                display: flex; align-items: center; justify-content: center;
+                padding: 16px; box-sizing: border-box;
+                font-family: 'ME Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+                color: #fff; -webkit-font-smoothing: antialiased;
+                cursor: not-allowed;
+            }
+            .card {
+                cursor: default;
+                width: 100%; max-width: 380px; box-sizing: border-box;
+                background: #08080a;
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                border-radius: 24px;
+                box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.04), 0 24px 80px rgba(0, 0, 0, 0.6);
+                padding: 26px 26px 22px;
+            }
+            .eyebrow {
+                display: flex; align-items: center; gap: 8px;
+                font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+                color: #a3a3a3;
+            }
+            .dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); animation: pulse 1.8s ease-out infinite; }
+            .dot.idle { background: #a3a3a3; animation: none; }
+            @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); } 100% { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); } }
+            h1 { margin: 14px 0 8px; font-size: 21px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; }
+            p { margin: 0; font-size: 13.5px; line-height: 1.55; color: #d4d4d4; }
+            .status {
+                margin-top: 20px; padding: 14px 16px; border-radius: 16px;
+                background: #101014; border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+            .now { font-size: 13.5px; font-weight: 600; color: #fff; }
+            .num { font-family: 'ME Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+            .meta { margin-top: 4px; font-size: 12px; color: #a3a3a3; }
+            .bar { margin-top: 12px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+            .fill { height: 100%; background: #fff; border-radius: 4px; transform-origin: left; transition: transform 0.6s ease; }
+            .actions { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+            .hint { font-size: 11.5px; color: #a3a3a3; line-height: 1.45; }
+            button {
+                all: unset; cursor: pointer; flex-shrink: 0;
+                padding: 9px 16px; border-radius: 12px;
+                font-family: inherit; font-size: 13px; font-weight: 600;
+                color: #fff; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.15);
+                transition: background 0.15s ease;
+            }
+            button:hover { background: rgba(255, 255, 255, 0.12); }
+            button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
+            button[disabled] { opacity: 0.5; cursor: default; }
+            @media (prefers-reduced-motion: reduce) { .dot { animation: none; } .fill { transition: none; } }
+        `;
+
+        function fmt(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        }
+
+        function render() {
+            if (!host) return;
+            const root = host.shadowRoot;
+            const {
+                campaignQueue = [], originalTotal = 0, isExecuting = false,
+                currentTask = null, nextAlarmTime = null, isPaused = false,
+            } = state;
+            const left = campaignQueue.length + (isExecuting ? 1 : 0);
+            const total = Math.max(originalTotal, left);
+            const sent = Math.max(0, total - left);
+
+            let now;
+            let live = true;
+            if (isExecuting && currentTask && isPaused) {
+                now = `Finishing the DM to <span class="num">@${escapeHtml(currentTask.handle)}</span>, then pausing…`;
+            } else if (isExecuting && currentTask) {
+                now = `Sending to <span class="num">@${escapeHtml(currentTask.handle)}</span>…`;
+            } else if (isPaused) {
+                now = 'Pausing…';
+                live = false;
+            } else if (nextAlarmTime && nextAlarmTime > Date.now()) {
+                now = `Next DM in <span class="num">${fmt(nextAlarmTime - Date.now())}</span>`;
+            } else {
+                now = 'Getting the next DM ready…';
+            }
+
+            root.querySelector('.dot').classList.toggle('idle', !live);
+            root.querySelector('.now').innerHTML = now;
+            root.querySelector('.meta').innerHTML =
+                `<span class="num">${sent}</span> of <span class="num">${total}</span> sent · <span class="num">${Math.max(0, total - sent)}</span> to go`;
+            root.querySelector('.fill').style.transform = `scaleX(${total ? sent / total : 0})`;
+            root.querySelector('button').disabled = isPaused;
+
+            if (!document.title.startsWith(TITLE_PREFIX)) document.title = TITLE_PREFIX + document.title;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        const KEYS = ['campaignQueue', 'originalTotal', 'isExecuting', 'currentTask', 'nextAlarmTime', 'isPaused'];
+
+        function onStorage(changes, area) {
+            if (area !== 'local') return;
+            // Released (paused, capped, logged out) or replaced: hand the tab back.
+            if (changes.senderTabId && changes.senderTabId.newValue !== tabId) {
+                unmount();
+                return;
+            }
+            let dirty = false;
+            for (const k of KEYS) {
+                if (changes[k]) { state[k] = changes[k].newValue; dirty = true; }
+            }
+            if (dirty) render();
+        }
+
+        function mount(id) {
+            tabId = id;
+            if (host) return;
+            loadFonts();
+
+            host = document.createElement('magnetengine-sender');
+            const root = host.attachShadow({ mode: 'open' });
+            root.innerHTML = `
+                <style>${CSS}</style>
+                <div class="veil" role="dialog" aria-modal="true" aria-labelledby="me-title">
+                    <div class="card">
+                        <div class="eyebrow"><span class="dot"></span>MagnetEngine</div>
+                        <h1 id="me-title">This tab is sending your DMs</h1>
+                        <p>Leave it open and let it work. Every approved DM goes out from here, one after another. Use Instagram in any other tab as normal.</p>
+                        <div class="status" aria-live="polite">
+                            <div class="now"></div>
+                            <div class="meta"></div>
+                            <div class="bar"><div class="fill"></div></div>
+                        </div>
+                        <div class="actions">
+                            <span class="hint">Pausing gives you this tab back.</span>
+                            <button type="button">Pause sending</button>
+                        </div>
+                    </div>
+                </div>`;
+            root.querySelector('button').addEventListener('click', () => {
+                chrome.runtime.sendMessage({ action: RUNTIME.PAUSE }, () => void chrome.runtime.lastError);
+            });
+            // Clicks on the veil itself go nowhere.
+            root.querySelector('.veil').addEventListener('mousedown', (e) => {
+                if (e.target === e.currentTarget) e.preventDefault();
+            });
+            (document.body || document.documentElement).appendChild(host);
+
+            for (const type of BLOCKED) window.addEventListener(type, block, true);
+            chrome.storage.onChanged.addListener(onStorage);
+            chrome.storage.local.get(KEYS, (r) => { state = r || {}; render(); });
+            ticker = setInterval(render, 1000);
+
+            // Instagram re-renders its root; keep the overlay attached.
+            new MutationObserver(() => {
+                if (host && !host.isConnected) (document.body || document.documentElement).appendChild(host);
+            }).observe(document.documentElement, { childList: true, subtree: false });
+        }
+
+        function unmount() {
+            if (!host) return;
+            for (const type of BLOCKED) window.removeEventListener(type, block, true);
+            chrome.storage.onChanged.removeListener(onStorage);
+            clearInterval(ticker);
+            host.remove();
+            host = null;
+            if (document.title.startsWith(TITLE_PREFIX)) document.title = document.title.slice(TITLE_PREFIX.length);
+        }
+
+        return { mount };
+    })();
 
     // ── Utility: Wait for a DOM element via MutationObserver ────
     function waitForElement(selector, timeout = 20000) {
@@ -277,7 +488,10 @@ if (window.location.hostname.includes("instagram.com")) {
         return findByExactText("Send");
     }
 
-    // ── Utility: Type text char-by-char into contenteditable ────
+    // ── Utility: Type text into contenteditable, a word at a time ──
+    // A word per keystroke-burst rather than a character: the Sender Tab is
+    // often in the background now, where Chrome stretches every timer to at
+    // least a second — character-by-character, a long DM would take minutes.
     async function humanType(element, text) {
         element.click();
         await sleep(300);
@@ -293,10 +507,9 @@ if (window.location.hostname.includes("instagram.com")) {
         sel.addRange(range);
         await sleep(200);
 
-        // Type character by character
-        for (const char of text) {
-            document.execCommand('insertText', false, char);
-            await sleep(30 + Math.random() * 60); // 30-90ms human-like delay
+        for (const chunk of text.match(/\s+|\S+/g) || []) {
+            document.execCommand('insertText', false, chunk);
+            await sleep(60 + Math.random() * 140);
         }
     }
 
@@ -309,60 +522,45 @@ if (window.location.hostname.includes("instagram.com")) {
     }
 
     // ── Signal task completion to background ─────────────────────
+    // The worker clears the task and decides what the tab does next; the page
+    // never closes itself any more — it is the next DM's tab too.
     function reportComplete(result, handle) {
         console.log(`[MagnetEngine] Reporting ${result} for @${handle}`);
         chrome.runtime.sendMessage({
             action: RUNTIME.TASK_COMPLETE,
-            result: result, // 'success', 'failed', 'skipped'
+            result: result, // 'success' | 'failed' | 'skipped' | 'logged_out'
             handle: handle
-        });
+        }, () => void chrome.runtime.lastError);
     }
 
-    // ── Main execution flow ─────────────────────────────────────
-    chrome.storage.local.get(['currentTask'], async (result) => {
-        const task = result.currentTask;
-        if (!task || !task.message) {
-            console.log("[MagnetEngine] No active task. Idle.");
-            return;
-        }
-
+    // ── One DM ──────────────────────────────────────────────────
+    async function runTask(task) {
         console.log("[MagnetEngine] ═══ EXECUTING TASK ═══");
         console.log("[MagnetEngine] Target: @" + task.handle);
-        console.log("[MagnetEngine] Message preview:", task.message.substring(0, 60) + "...");
 
         try {
             // ── STEP 1: Wait for page load ──────────────────────
-            console.log("[MagnetEngine] Step 1: Waiting for page load...");
             await sleep(5000);
 
             // ── STEP 1.5: Check login state ─────────────────────
+            // Logged out, every DM would fail the same way. The worker puts this
+            // one back, pauses, and hands the tab over so the Operator can log in.
             if (!isLoggedIn()) {
                 console.error("[MagnetEngine] ABORT: Not logged into Instagram.");
-                chrome.storage.local.remove('currentTask');
-                reportComplete('skipped', task.handle);
-                await sleep(2000);
-                chrome.runtime.sendMessage({ action: "closeCurrentTab" });
+                reportComplete('logged_out', task.handle);
                 return;
             }
 
             // ── STEP 2: Find and click "Message" button ─────────
-            console.log("[MagnetEngine] Step 2: Looking for Message button...");
-            let messageBtn = findByExactText("Message");
-
+            const messageBtn = findByExactText("Message");
             if (!messageBtn) {
                 console.error("[MagnetEngine] ABORT: 'Message' button not found.");
-                chrome.storage.local.remove('currentTask');
                 reportComplete('skipped', task.handle);
-                await sleep(2000);
-                chrome.runtime.sendMessage({ action: "closeCurrentTab" });
                 return;
             }
-
-            console.log("[MagnetEngine] Step 2: Clicking Message...");
             messageBtn.click();
 
             // ── STEP 3: Wait for textbox to appear ──────────────
-            console.log("[MagnetEngine] Step 3: Waiting for chat textbox...");
             let textbox;
             try {
                 textbox = await waitForElement('div[role="textbox"][contenteditable="true"]', 15000);
@@ -374,71 +572,68 @@ if (window.location.hostname.includes("instagram.com")) {
                         textbox = await waitForElement('div[contenteditable="true"]', 5000);
                     } catch {
                         console.error("[MagnetEngine] ABORT: Textbox never appeared.");
-                        chrome.storage.local.remove('currentTask');
                         reportComplete('failed', task.handle);
-                        await sleep(2000);
-                        chrome.runtime.sendMessage({ action: "closeCurrentTab" });
                         return;
                     }
                 }
             }
-
-            console.log("[MagnetEngine] Step 3: Textbox found!");
             await sleep(2000);
 
             // ── STEP 4: Type the message ────────────────────────
-            console.log("[MagnetEngine] Step 4: Typing message...");
             await humanType(textbox, task.message);
-            console.log("[MagnetEngine] Step 4: Typing complete.");
             await sleep(2000);
 
             // ── STEP 5: Click the Send button ───────────────────
-            console.log("[MagnetEngine] Step 5: Finding Send button...");
-
             // Try up to 3 times with delays (button may take time to activate)
             let sendBtn = null;
             for (let attempt = 1; attempt <= 3; attempt++) {
                 sendBtn = findSendButton();
                 if (sendBtn) break;
-                console.log(`[MagnetEngine] Step 5: Send button not found, attempt ${attempt}/3...`);
                 await sleep(2000);
             }
 
             if (sendBtn) {
-                console.log("[MagnetEngine] Step 5: Clicking Send!");
                 sendBtn.click();
                 await sleep(2000);
                 console.log("[MagnetEngine] ═══ SUCCESS: DM sent to @" + task.handle + " ═══");
-                chrome.storage.local.remove('currentTask');
                 reportComplete('success', task.handle);
             } else {
-                console.error("[MagnetEngine] Step 5: Send button not found after 3 attempts.");
-                // DON'T clear task — try Enter as absolute last resort
-                console.log("[MagnetEngine] Step 5: Attempting Enter key as fallback...");
+                // Enter as the last resort, then check the textbox emptied.
                 textbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
                 await sleep(3000);
-
-                // Check if the message was sent (textbox should be empty)
                 const textboxContent = textbox.textContent || textbox.innerText || '';
                 if (textboxContent.trim().length === 0) {
                     console.log("[MagnetEngine] ═══ SUCCESS (via Enter): DM sent to @" + task.handle + " ═══");
-                    chrome.storage.local.remove('currentTask');
                     reportComplete('success', task.handle);
                 } else {
                     console.error("[MagnetEngine] FAILED: Message was typed but could not be sent.");
-                    chrome.storage.local.remove('currentTask');
                     reportComplete('failed', task.handle);
                 }
             }
-
-            // ── STEP 6: Close tab ───────────────────────────────
-            await sleep(3000);
-            chrome.runtime.sendMessage({ action: "closeCurrentTab" });
-
         } catch (error) {
             console.error("[MagnetEngine] Unexpected error:", error);
-            chrome.storage.local.remove('currentTask');
             reportComplete('failed', task.handle);
         }
-    });
+    }
+
+    // ── Am I the Sender Tab? ────────────────────────────────────
+    // Asked once on load, and once more shortly after: on the very first send
+    // the worker records this tab's id only after creating it, which can land
+    // just after this page starts.
+    function checkSender(retry) {
+        try {
+            chrome.runtime.sendMessage({ action: RUNTIME.SENDER_CHECK }, (res) => {
+                if (chrome.runtime.lastError || !res) return;
+                if (!res.isSender) {
+                    if (retry) setTimeout(() => checkSender(false), 2500);
+                    return;
+                }
+                SenderOverlay.mount(res.tabId);
+                if (res.task && res.task.message) runTask(res.task);
+            });
+        } catch (e) {
+            console.debug('[MagnetEngine] sender check failed:', e && e.message);
+        }
+    }
+    checkSender(true);
 }

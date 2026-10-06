@@ -58,7 +58,7 @@ const STEPS: Step[] = [
         icon: Send,
         title: 'It sends and follows up',
         body: "From your own browser, at a human pace, with follow-ups for anyone who doesn't answer. Replies land in one inbox with a draft ready.",
-        stat: '40 a day by default, 3–8 min apart',
+        stat: 'Sent from your own account',
     },
 ];
 

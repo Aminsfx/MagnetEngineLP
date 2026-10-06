@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
     billedUnits,
+    countItems,
     decodeCursor,
     encodeCursor,
     extractUsers,
@@ -11,6 +12,7 @@ import {
     parseSource,
     readNextPage,
     readTarget,
+    readTotal,
     resolveRequest,
     toRow,
     toShortcode,
@@ -169,6 +171,30 @@ describe('extractUsers — each source reads users from one place only', () => {
         };
         expect(extractUsers('commenters', data).map(u => u.username)).toEqual(['asker', 'replier']);
         expect(readNextPage('commenters', data)).toBeNull();
+    });
+
+    it('commenters: the comment count is the total, and a page covers each thread with its replies', () => {
+        const data = {
+            response: {
+                comment_count: 212,
+                comments: [
+                    { pk: 'c1', user: user(1, 'a'), child_comment_count: 3, preview_child_comments: [{ pk: 'c2', user: user(9, 'owner') }] },
+                    { pk: 'c3', user: user(2, 'b') },
+                ],
+            },
+            next_page_id: 'p2',
+        };
+        expect(readTotal('commenters', data)).toBe(212);
+        expect(countItems('commenters', data, 3)).toBe(5);  // 1 + 3 replies, then 1
+        expect(readTotal('hashtag', data)).toBeUndefined();
+        expect(countItems('hashtag', data, 7)).toBe(7);
+    });
+
+    it('following / followers: the target lookup carries the list size, followers capped at what Instagram shows', () => {
+        const u = { ...user(5, 'acct'), follower_count: 90000, following_count: 812 };
+        expect(readTarget({ kind: 'following', query: 'acct' }, u)?.total).toBe(812);
+        expect(readTarget({ kind: 'followers', query: 'acct' }, u)?.total).toBe(50);
+        expect(readTarget({ kind: 'similar', query: 'acct' }, u)?.total).toBeUndefined();
     });
 
     it('followers: the g2 `response.users` page', () => {

@@ -29,11 +29,19 @@ export interface AdminUsersResponse {
     hasMore: boolean;
 }
 
+export interface AdminSyncContactsResponse {
+    ok: boolean;
+    synced: number;
+    skipped: number;
+    failed: number;
+}
+
 type AdminRequest =
     | { action: 'overview' }
     | { action: 'users'; page?: number; perPage?: number }
     | { action: 'activate'; email: string }
-    | { action: 'revoke'; email: string };
+    | { action: 'revoke'; email: string }
+    | { action: 'sync-contacts' };
 
 export async function callAdminApi<T>(session: Session, body: AdminRequest): Promise<T> {
     const base = import.meta.env.VITE_SUPABASE_URL as string;

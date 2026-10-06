@@ -106,7 +106,7 @@ const SHAPE: Record<Exclude<SourceKind, 'profiles'>, { size: number; total: numb
     followers: { size: 50, total: 50 },     // Instagram's outsider cap (FOLLOWERS_VISIBLE)
     following: { size: 50, total: 180 },
     likers: { size: 120, total: 120 },
-    commenters: { size: 15, total: 60 },
+    commenters: { size: 15, total: 200 },
     location: { size: 24, total: 150 },
     similar: { size: 45, total: 45 },
 };
@@ -222,7 +222,7 @@ export async function demoScrape(
             rows.push(full);
         }
         used += src.query.split(',').length;
-        return { rows, complete: true, cursor: null, missing, used, limit: LIMIT };
+        return { rows, complete: true, cursor: null, missing, items: rows.length, used, limit: LIMIT };
     }
 
     if (/nobody|deleted/.test(src.query)) notFound(src);
@@ -249,6 +249,9 @@ export async function demoScrape(
         complete: false,
         cursor: more ? JSON.stringify({ p: String(page + 1) }) : null,
         target: targetLabel(src),
+        // Like the real function: only these sources say how much they hold.
+        ...(['followers', 'following', 'commenters'].includes(src.kind) ? { total } : {}),
+        items: rows.length,
         used,
         limit: LIMIT,
     };

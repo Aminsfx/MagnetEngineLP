@@ -17,6 +17,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "npm:standardwebhooks@1.0.0";
 import { onboardingEmail, paymentConfirmedEmail, sendEmail } from "../_shared/emails.ts";
+import { notifyOwner, runInBackground } from "../_shared/notify.ts";
+import { segmentIds, syncContact } from "../_shared/contacts.ts";
 
 // Activation is gated to the canonical "membership became valid" event AND a
 // recognized plan id (see below). payment.succeeded is intentionally NOT an
@@ -107,6 +109,12 @@ Deno.serve(async (req) => {
   }
   if (!userId) {
     console.warn(`[whop-webhook] ${type}: no user matches ${email} — activate manually via /admin`);
+    if (ACTIVATE_EVENTS.includes(type)) {
+      await notifyOwner({
+        title: "⚠️ Payment with no matching account",
+        lines: [`Whop email: ${email}`, `Plan: ${planId ?? "(none)"}`, "Find their signup email and activate them in /admin."],
+      });
+    }
     return json(202, { skipped: "no matching user" });
   }
 
@@ -124,6 +132,10 @@ Deno.serve(async (req) => {
       console.warn(
         `[whop-webhook] ${type} for ${email}: plan ${planId ?? "(none)"} not in configured plans — skipping (activate via /admin if legit)`,
       );
+      await notifyOwner({
+        title: "⚠️ Payment on an unrecognized plan",
+        lines: [email, `Plan: ${planId ?? "(none)"}`, "Not activated — activate in /admin if legit."],
+      });
       return json(202, { skipped: "unrecognized plan" });
     }
 
@@ -164,6 +176,14 @@ Deno.serve(async (req) => {
         scheduledAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         idempotencyKey: `onboarding/${userId}`,
       });
+
+      await notifyOwner({
+        title: "💰 New payment",
+        lines: [firstName ? `${firstName} <${email}>` : email, `Plan: ${planLabel}`],
+      });
+      await runInBackground(
+        syncContact({ email, firstName }, segmentIds(["all", "customers"])),
+      );
     }
 
     return json(202, { ok: true, activated: email, emailed: firstActivation });
@@ -175,5 +195,6 @@ Deno.serve(async (req) => {
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("user_id", userId);
   if (error) return json(500, { error: error.message });
+  await notifyOwner({ title: "❌ Membership cancelled", lines: [email, "Access revoked."] });
   return json(202, { ok: true, revoked: email });
 });

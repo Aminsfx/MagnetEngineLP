@@ -1,15 +1,15 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Lead } from '../../lib/types';
 import {
-    runScrape, explainEmptyScrape, parseQueries,
-    MAX_PER_QUERY, FOLLOWERS_VISIBLE, SCRAPE_DEMO, type ScrapeProgress, type SourceKind,
+    runScrape, explainEmptyScrape, parseQueries, formatEta, ScrapeControl,
+    MAX_PER_QUERY, FOLLOWERS_VISIBLE, SCRAPE_DEMO, type ScrapePhase, type ScrapeProgress, type SourceKind,
 } from '../../lib/scrape';
 import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
     X, ArrowRight, Plus, Settings, UserCheck,
     FileSpreadsheet, Hash, Heart, MessageCircle,
-    MapPin, Sparkles, AtSign, Info, CircleStop,
+    MapPin, Sparkles, AtSign, Info, CircleStop, Pause, Play,
     type LucideIcon,
 } from 'lucide-react';
 import { NICHE_PRESETS } from '../../lib/presets';
@@ -143,7 +143,9 @@ const SOURCES: SourceOption[] = [
     },
 ];
 
-const LIMIT_OPTIONS = [10, 25, 50, 100, 150, 200, MAX_PER_QUERY];
+/** MAX_PER_QUERY is "everything": page until the source runs out or the Operator finishes. */
+const EVERYTHING = MAX_PER_QUERY;
+const LIMIT_OPTIONS = [50, 100, 250, 500, 1000, EVERYTHING];
 
 /** Fill for the scrape progress bar — white on black, like every other action surface. */
 function progressFill(progress: number): string {
@@ -167,14 +169,17 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
     // ── Source + inputs ──────────────────────────────────────────
     const [kind, setKind]       = useState<SourceKind>('keyword');
     const [raw, setRaw]         = useState('');
-    const [limit, setLimit]     = useState(50);
+    const [limit, setLimit]     = useState(EVERYTHING);
     const [enrich, setEnrich]   = useState(true);
 
     // ── Run state ────────────────────────────────────────────────
     const [isScraping, setIsScraping] = useState(false);
-    const [stopping, setStopping]     = useState(false);
-    const stopRef = useRef(false);
+    const controlRef = useRef<ScrapeControl | null>(null);
     const [progress, setProgress]     = useState<ScrapeProgress | null>(null);
+    // The phase a pause interrupted, and the phase Finish was pressed in —
+    // Finish ends one phase, so the button comes back for the next one.
+    const [activePhase, setActivePhase] = useState<Exclude<ScrapePhase, 'paused'>>('collecting');
+    const [finishingIn, setFinishingIn] = useState<ScrapePhase | null>(null);
     const [error, setError]           = useState('');
     const [notes, setNotes]           = useState<string[]>([]);
     const [lookupsLeft, setLookupsLeft] = useState<number | undefined>();
@@ -215,15 +220,20 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         if (queries.length === 0) { setError(`Enter at least one ${source.unit[0]}.`); return; }
 
         resetRun();
-        stopRef.current = false;
-        setStopping(false);
+        const control = new ScrapeControl();
+        controlRef.current = control;
+        setActivePhase('collecting');
+        setFinishingIn(null);
         setIsScraping(true);
 
         try {
             const outcome = await runScrape(
                 { kind, queries, limit: perQuery, enrich },
-                setProgress,
-                () => stopRef.current,
+                p => {
+                    if (p.phase !== 'paused') setActivePhase(p.phase);
+                    setProgress(p);
+                },
+                control,
             );
             setLookupsLeft(outcome.lookupsLeft);
 
@@ -232,13 +242,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             if (outcome.unenriched > 0) {
                 const n = `${outcome.unenriched} profile${outcome.unenriched !== 1 ? 's' : ''}`;
                 extra.push(outcome.stopped || outcome.halted
-                    ? `Stopped before details loaded for ${n} — they have name and username only.`
+                    ? `Finished before details loaded for ${n} — they have name and username only.`
                     : `${n} couldn't be loaded in full — kept with name and username only.`);
             }
 
             if (outcome.leads.length === 0) {
                 setError(explainEmptyScrape(outcome, outcome.stopped
-                    ? 'You stopped before anything was found.'
+                    ? 'You finished before anything was found.'
                     : 'Try a different search, or another source.'));
             } else {
                 setResults(outcome.leads);
@@ -249,16 +259,26 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             setError(err instanceof Error ? err.message : 'Scrape failed. Check your connection and try again.');
             setProgress(null);
         } finally {
+            controlRef.current = null;
             setIsScraping(false);
-            setStopping(false);
+            setFinishingIn(null);
         }
     // resetRun and source are derived from the deps below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [kind, raw, perQuery, enrich]);
 
-    const handleStop = () => {
-        stopRef.current = true;
-        setStopping(true);
+    const handlePause = () => {
+        controlRef.current?.pause();
+        // The run reports 'paused' once the lookup in flight returns; until then, say so.
+        setProgress(p => p && { ...p, phase: 'paused', message: 'Pausing after this lookup…', etaSeconds: undefined });
+    };
+    const handleResume = () => {
+        controlRef.current?.resume();
+        setProgress(p => p && { ...p, phase: activePhase, message: 'Resuming…' });
+    };
+    const handleFinish = () => {
+        setFinishingIn(activePhase);
+        controlRef.current?.finish();
     };
 
     const toggleSelect = (id: string) =>
@@ -307,7 +327,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         resetRun();
     };
 
-    const percent = progress?.percent ?? 0;
+    const paused = progress?.phase === 'paused';
+    const finishing = finishingIn !== null && finishingIn === activePhase;
+    const found = progress?.found ?? 0;
+    const finishLabel = activePhase === 'details'
+        ? 'Skip the rest of the details'
+        : `Use the ${found} found`;
 
     return (
         <div className="space-y-5 relative">
@@ -485,7 +510,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 <div>
                                     <label htmlFor="campaignbu-limit" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                                         Profiles per {source.unit[0]}
-                                        <span className="ml-2 text-neutral-400 font-normal">max {MAX_PER_QUERY}</span>
+                                        <span className="ml-2 text-neutral-400 font-normal">pause any time and keep what's found</span>
                                     </label>
                                     <div className="relative">
                                         <select id="campaignbu-limit"
@@ -495,7 +520,9 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                             className="w-full appearance-none bg-surface border border-white/8 rounded-xl px-4 pr-9 py-3 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-white/50 cursor-pointer"
                                         >
                                             {LIMIT_OPTIONS.map(n => (
-                                                <option key={n} value={n}>{n} profiles</option>
+                                                <option key={n} value={n}>
+                                                    {n === EVERYTHING ? `Everything (up to ${EVERYTHING.toLocaleString('en-US')})` : `${n} profiles`}
+                                                </option>
                                             ))}
                                         </select>
                                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
@@ -553,6 +580,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                             <p className="text-label text-neutral-400">
                                 {queries.length > 0 && (isList
                                     ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} to look up</>
+                                    : perQuery === EVERYTHING
+                                    ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} · every profile each one has</>
                                     : <>
                                         {queries.length} {source.unit[queries.length === 1 ? 0 : 1]}
                                         {' '}× {source.cap ? `~${perQuery}` : perQuery} = {source.cap ? 'about' : 'up to'} {queries.length * perQuery} profiles
@@ -563,17 +592,38 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 )}
                             </p>
                             {isScraping ? (
-                                <button
-                                    type="button"
-                                    onClick={handleStop}
-                                    disabled={stopping}
-                                    className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/15 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors text-sm"
-                                >
-                                    {stopping
-                                        ? <><Loader2 className="w-4 h-4 animate-spin" />Stopping…</>
-                                        : <><CircleStop className="w-4 h-4" />Stop — keep what's found</>
-                                    }
-                                </button>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                    {!isList && (paused ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleResume}
+                                            disabled={finishing}
+                                            className="flex items-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/15 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors text-sm"
+                                        >
+                                            <Play className="w-4 h-4" />Resume
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handlePause}
+                                            disabled={finishing}
+                                            className="flex items-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/15 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors text-sm"
+                                        >
+                                            <Pause className="w-4 h-4" />Pause
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={handleFinish}
+                                        disabled={finishing || (activePhase === 'collecting' && found === 0)}
+                                        className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold rounded-xl transition-colors text-sm"
+                                    >
+                                        {finishing
+                                            ? <><Loader2 className="w-4 h-4 animate-spin" />Finishing…</>
+                                            : <><CircleStop className="w-4 h-4" />{finishLabel}</>
+                                        }
+                                    </button>
+                                </div>
                             ) : (
                                 <button
                                     type="button"
@@ -592,19 +642,31 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                             <div className="space-y-2" aria-live="polite">
                                 <div className="flex items-center justify-between gap-3">
                                     <span className="text-label text-neutral-400 font-mono truncate">{progress.message}</span>
-                                    <span className="text-label font-bold font-mono text-white">{percent}%</span>
+                                    <span className="text-label font-bold font-mono text-white flex-shrink-0">
+                                        {progress.percent !== undefined ? `${progress.percent}%` : `${found} found`}
+                                    </span>
                                 </div>
                                 <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full rounded-full transition-all duration-700 ease-out"
+                                        className={`h-full rounded-full transition-all duration-700 ease-out ${progress.percent === undefined ? 'opacity-40' : ''}`}
                                         style={{
-                                            width: `${percent}%`,
-                                            background: progressFill(percent),
+                                            // No known size (a hashtag, a search): a running bar, not an invented percentage.
+                                            width: `${progress.percent ?? 100}%`,
+                                            background: progressFill(progress.percent ?? 0),
                                             backgroundSize: '200% 100%',
-                                            animation: isScraping ? 'chargeShimmer 1.8s linear infinite' : 'none',
+                                            animation: isScraping && !paused ? 'chargeShimmer 1.8s linear infinite' : 'none',
                                         }}
                                     />
                                 </div>
+                                {isScraping && (
+                                    <p className="text-label text-neutral-400">
+                                        {paused
+                                            ? 'Nothing is being spent while paused. Resume to keep going, or use what you have.'
+                                            : progress.etaSeconds !== undefined
+                                                ? `${formatEta(progress.etaSeconds)} left at this pace — pause any time and keep what's found.`
+                                                : "Instagram doesn't say how many there are for this source — it keeps going until they run out or you finish."}
+                                    </p>
+                                )}
                             </div>
                         )}
 

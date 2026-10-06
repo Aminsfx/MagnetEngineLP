@@ -61,8 +61,8 @@ const STEPS: Step[] = [
     {
         icon: Send,
         title: 'It sends like a person',
-        body: 'From your own Instagram, in your own browser, with a gap between messages and a daily cap you set.',
-        stat: '40 a day by default, 3–8 min apart',
+        body: 'From your own Instagram, in your own browser, with a natural gap between messages.',
+        stat: 'Sent from your own Instagram',
     },
 ];
 
@@ -71,7 +71,7 @@ const COMPARE: [label: string, va: boolean, bot: boolean, us: boolean][] = [
     ['Reads the profile before writing', false, false, true],
     ['You approve everything before it sends', true, false, true],
     ['Costs less than $250/month', false, true, true],
-    ['Keeps a human pace and a daily cap', true, false, true],
+    ['Sends at a human pace', true, false, true],
     ["Doesn't quit on you in month three", false, true, true],
 ];
 

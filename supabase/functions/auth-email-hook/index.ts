@@ -25,6 +25,8 @@ import {
   welcomeEmail,
   type EmailContent,
 } from "../_shared/emails.ts";
+import { notifyOwner, runInBackground } from "../_shared/notify.ts";
+import { segmentIds, syncContact } from "../_shared/contacts.ts";
 
 interface HookPayload {
   user: {
@@ -133,6 +135,20 @@ Deno.serve(async (req) => {
         message: result.error ?? result.skipped ?? "email send failed",
       },
     });
+  }
+
+  // New signup → ping the Owner and add the user to the Resend "all users"
+  // segment. Both run in the background, after the auth email is out.
+  if (data.email_action_type === "signup") {
+    const lastName = (user.user_metadata?.last_name as string | undefined) ?? null;
+    const name = [firstName, lastName].filter(Boolean).join(" ");
+    await notifyOwner({
+      title: "🆕 New signup",
+      lines: [name ? `${name} <${user.email}>` : user.email, "Confirmation email sent — awaiting payment."],
+    });
+    await runInBackground(
+      syncContact({ email: user.email, firstName, lastName }, segmentIds(["all"])),
+    );
   }
 
   return json(200, {});

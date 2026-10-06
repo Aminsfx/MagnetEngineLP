@@ -71,7 +71,8 @@ const MAGNET_PROTOCOL = {
     PAUSE: 'pauseCampaign',
     RESUME: 'resumeCampaign',
     CLEAR: 'clearCampaign',
-    CLOSE_TAB: 'closeCurrentTab',
+    /** An instagram.com page asks whether it is the Sender Tab, and for its DM. */
+    SENDER_CHECK: 'senderCheck',
   },
 
   /** Hosts whose pages may talk to the extension. Keep in sync with manifest matches. */

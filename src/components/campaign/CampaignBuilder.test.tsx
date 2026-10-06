@@ -37,19 +37,62 @@ describe('CampaignBuilder', () => {
 
         await user.click(screen.getByRole('button', { name: /^Following/ }));
         await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
-        await user.selectOptions(screen.getByLabelText(/^Profiles per account/), '25');
-        expect(screen.getByText(/1 account × 25 = up to 25 profiles/)).toBeInTheDocument();
+        await user.selectOptions(screen.getByLabelText(/^Profiles per account/), '50');
+        expect(screen.getByText(/1 account × 50 = up to 50 profiles/)).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /Start scrape/ }));
-        const add = await screen.findAllByRole('button', { name: /Add 25 to Queue/ });
+        const add = await screen.findAllByRole('button', { name: /Add 50 to Queue/ });
 
         await user.click(add[0]);
         expect(onLeadsScraped).toHaveBeenCalledTimes(1);
         const leads = onLeadsScraped.mock.calls[0][0];
-        expect(leads).toHaveLength(25);
+        expect(leads).toHaveLength(50);
         expect(leads[0].campaignName).toMatch(/^Followed by @competitor · /);
         expect(leads.every((l: { bio?: string }) => l.bio)).toBe(true); // details loaded
     });
+
+    it('defaults to everything, and can pause, resume, and finish with what was found', async () => {
+        const user = userEvent.setup();
+        // The demo following list is 180 profiles, 50 a page. Pages 2 and 3 are
+        // held until the test lets them go, so the run is still going each
+        // time the Operator presses Pause.
+        const gates = new Map<number, () => void>();
+        let pages = 0;
+        vi.mocked(invokeFunction).mockImplementation(async (_name, body) => {
+            if (body.op === 'page') {
+                const n = ++pages;
+                if (n === 2 || n === 3) await new Promise<void>(r => gates.set(n, r));
+            }
+            return demoScrape(body, { delayMs: 0 });
+        });
+        const onLeadsScraped = vi.fn();
+        render(<CampaignBuilder onLeadsScraped={onLeadsScraped} />);
+
+        await user.click(screen.getByRole('button', { name: /^Following/ }));
+        await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
+        expect(screen.getByText(/every profile each one has/)).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /Start scrape/ }));
+        await waitFor(() => expect(gates.has(2)).toBe(true));
+        await user.click(screen.getByRole('button', { name: /^Pause$/ }));
+        gates.get(2)!();
+
+        expect(await screen.findByText(/Paused — 100 profiles found so far/)).toBeInTheDocument();
+        expect(pages).toBe(2);                              // nothing spent while paused
+        await user.click(screen.getByRole('button', { name: /^Resume$/ }));
+        await waitFor(() => expect(gates.has(3)).toBe(true));
+
+        await user.click(screen.getByRole('button', { name: /^Pause$/ }));
+        gates.get(3)!();
+        await user.click(await screen.findByRole('button', { name: /^Use the 150 found$/ }));
+        const add = await screen.findAllByRole('button', { name: /Add 150 to Queue/ }, { timeout: 5000 });
+        await user.click(add[0]);
+
+        const leads = onLeadsScraped.mock.calls[0][0];
+        expect(leads).toHaveLength(150);                     // finished before the list's 180 ran out
+        expect(pages).toBe(3);
+        expect(leads.every((l: { bio?: string }) => l.bio)).toBe(true); // details still loaded
+    }, 15_000);                                             // 15 details batches, slow under a full parallel run
 
     it("states Instagram's ~50-follower cap instead of offering a limit it can't meet", async () => {
         const user = userEvent.setup();

@@ -16,16 +16,26 @@ export const MONTHLY_DMS = '1,500';
 export const TRIAL_CTA = 'Start the 3-day trial';
 
 /**
- * Short on purpose: one or two sentences each, owner's call (2026-09-24). The
- * page talks about what the product does, not about the risks of outreach
- * automation — so no question here may answer "is it safe?" either way. A
- * reassurance would be a claim nobody can stand behind; the risk itself stays
- * where it belongs, in the Terms of Service.
+ * Short on purpose: one or two sentences each, owner's call (2026-09-24).
+ *
+ * The account question is answered with what is true of how MagnetEngine
+ * works — no password asked for, no login stored, sends from the Operator's
+ * own signed-in browser — and never with a promise that the account cannot be
+ * restricted (owner decision, 2026-10-06; see PRODUCT.md). Automated DMs are
+ * against Instagram's terms, so a guarantee is a claim nobody can stand
+ * behind; the risk itself stays where it belongs, in the Terms of Service.
+ *
+ * No send figures here either (owner, 2026-10-06): the page says the product
+ * sends, not how many a day.
  */
 export const FAQ_ITEMS = [
     {
         question: 'How does it send the messages?',
-        answer: 'Through the MagnetEngine Chrome extension, from your own Instagram account. One message every 3–8 minutes, up to a daily limit you set.',
+        answer: 'Through the MagnetEngine Chrome extension, from your own Instagram account, at a human pace.',
+    },
+    {
+        question: 'Will this get my Instagram account banned?',
+        answer: "We never ask for your Instagram password and never store your login. The messages go out from the Instagram you're already signed into, in your own browser — one at a time, like a person, and only the ones you approved.",
     },
     {
         question: 'Is every message really different?',

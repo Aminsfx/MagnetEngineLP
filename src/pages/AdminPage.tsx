@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import {
     Shield, Users, DollarSign, Clock, XCircle, Sparkles, RefreshCw,
     CheckCircle, AlertCircle, UserPlus, BookOpen, ExternalLink,
-    Loader2, ArrowLeft, UserCheck, UserX,
+    Loader2, ArrowLeft, UserCheck, UserX, Mail,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
     callAdminApi,
     type AdminOverview,
+    type AdminSyncContactsResponse,
     type AdminUserRow,
     type AdminUsersResponse,
 } from '../lib/adminApi';
@@ -27,6 +28,8 @@ const AdminPage: React.FC = () => {
     const [manualEmail, setManualEmail] = useState('');
     const [manualBusy, setManualBusy] = useState(false);
     const [manualResult, setManualResult] = useState<{ ok: boolean; text: string } | null>(null);
+    const [syncBusy, setSyncBusy] = useState(false);
+    const [syncResult, setSyncResult] = useState<{ ok: boolean; text: string } | null>(null);
 
     const loadAll = useCallback(async () => {
         if (!session) return;
@@ -78,6 +81,26 @@ const AdminPage: React.FC = () => {
         }
     };
 
+    // Push every confirmed user into the Resend segments that Broadcasts send to.
+    const handleSyncContacts = async () => {
+        if (!session) return;
+        setSyncBusy(true);
+        setSyncResult(null);
+        try {
+            const r = await callAdminApi<AdminSyncContactsResponse>(session, { action: 'sync-contacts' });
+            setSyncResult({
+                ok: r.failed === 0,
+                text: `Synced ${r.synced} users to Resend` +
+                    (r.skipped ? ` · ${r.skipped} unconfirmed skipped` : '') +
+                    (r.failed ? ` · ${r.failed} failed (see admin-api logs)` : ''),
+            });
+        } catch (err) {
+            setSyncResult({ ok: false, text: err instanceof Error ? err.message : 'Sync failed.' });
+        } finally {
+            setSyncBusy(false);
+        }
+    };
+
     const fmtDate = (iso: string | null) =>
         iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
@@ -118,6 +141,14 @@ const AdminPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-3">
                         <button
+                            onClick={handleSyncContacts}
+                            disabled={syncBusy}
+                            title="Add every confirmed user to your Resend segments so Broadcasts reach them"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-neutral-400 hover:text-white hover:border-white/20 transition-all text-sm disabled:opacity-50"
+                        >
+                            {syncBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} Sync to Resend
+                        </button>
+                        <button
                             onClick={loadAll}
                             disabled={loading}
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-neutral-400 hover:text-white hover:border-white/20 transition-all text-sm disabled:opacity-50"
@@ -132,6 +163,17 @@ const AdminPage: React.FC = () => {
                         </Link>
                     </div>
                 </div>
+
+                {syncResult && (
+                    <div className={`flex items-start gap-2 p-3 rounded-xl border text-xs mb-8 ${
+                        syncResult.ok
+                            ? 'bg-positive-500/8 border-positive-500/20 text-positive-400'
+                            : 'bg-danger-500/8 border-danger-500/20 text-danger-400'
+                    }`}>
+                        {syncResult.ok ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                        {syncResult.text}
+                    </div>
+                )}
 
                 {error && (
                     <div className="flex items-start gap-2.5 p-4 rounded-xl bg-danger-500/8 border border-danger-500/20 mb-8">
@@ -346,6 +388,8 @@ const AdminPage: React.FC = () => {
                                     { label: 'Supabase', href: 'https://supabase.com/dashboard/project/tttktkfrclaivxjhzbxn' },
                                     { label: 'Vercel', href: 'https://vercel.com/dashboard' },
                                     { label: 'Cal.com bookings', href: 'https://app.cal.com/bookings/upcoming' },
+                                    { label: 'Resend broadcasts', href: 'https://resend.com/broadcasts' },
+                                    { label: 'Resend email logs', href: 'https://resend.com/emails' },
                                 ].map(l => (
                                     <a
                                         key={l.label}

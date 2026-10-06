@@ -19,8 +19,13 @@
 
 export const HIKER_BASE = "https://api.hikerapi.com";
 
-/** Per-query ceiling. The landing pages promise "up to 250 profiles per search". */
-export const MAX_PER_QUERY = 250;
+/**
+ * Per-query ceiling — a safety net, not a target. The Operator's default is
+ * "everything": the client pages until the source runs out, they pause and
+ * keep what's found, or this. Every page and every detail lookup is billed
+ * against MONTHLY_SCRAPE_LIMIT, which is the real brake.
+ */
+export const MAX_PER_QUERY = 2000;
 
 /** Profiles looked up per call — one upstream request each. */
 export const ENRICH_BATCH = 10;
@@ -210,6 +215,8 @@ export const FOLLOWERS_VISIBLE = 50;
 export interface Target {
   id: string;
   label: string;
+  /** How many items the list holds, when the lookup says — the progress bar and ETA read it. */
+  total?: number;
   /** Instagram lists no followers for a private account, to anyone. */
   isPrivate?: boolean;
 }
@@ -223,7 +230,15 @@ export function readTarget(src: Source, data: unknown): Target | null {
       const u = unwrapUser(data);
       const id = u ? idOf(u) : "";
       if (!u || !id) return null;
-      return { id, label: `@${String(u.username ?? src.query)}`, isPrivate: u.is_private === true };
+      const count = src.kind === "followers"
+        ? Math.min(Number(u.follower_count), FOLLOWERS_VISIBLE)
+        : src.kind === "following" ? Number(u.following_count) : NaN;
+      return {
+        id,
+        label: `@${String(u.username ?? src.query)}`,
+        isPrivate: u.is_private === true,
+        ...(Number.isFinite(count) && count >= 0 ? { total: count } : {}),
+      };
     }
     case "likers":
     case "commenters": {
@@ -312,6 +327,39 @@ export function readNextPage(kind: SourceKind, data: unknown): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * How many items the whole source holds, when a page says so. Only a post's
+ * comments carry it on every page (`comment_count`, replies included); the
+ * account lists get theirs from the target lookup instead (`Target.total`).
+ */
+export function readTotal(kind: SourceKind, data: unknown): number | undefined {
+  if (kind !== "commenters") return undefined;
+  const d = data as Record<string, unknown> | null;
+  const inner = d && typeof d.response === "object" ? d.response as Record<string, unknown> : d;
+  const n = Number(inner?.comment_count ?? d?.comment_count);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * Items this page consumed, counted in the same unit as the total — so the
+ * client can say how far through the source it is. For comments that is each
+ * top-level comment plus its replies, because `comment_count` counts both; a
+ * page of 15 threads can account for 40 comments.
+ */
+export function countItems(kind: SourceKind, data: unknown, rows: number): number {
+  if (kind !== "commenters") return rows;
+  let n = 0;
+  walk(data, (node, key) => {
+    if (!Array.isArray(node) || key !== "comments") return;
+    for (const c of node) {
+      if (!isObj(c)) continue;
+      const replies = Number(c.child_comment_count);
+      n += 1 + (Number.isFinite(replies) && replies > 0 ? replies : 0);
+    }
+  });
+  return n || rows;
 }
 
 // ─── Reading users out of a page ─────────────────────────────────────────────

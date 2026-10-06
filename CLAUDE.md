@@ -148,8 +148,10 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   GA events `start_trial_click`, `book_call_click` and `sign_up`, and written into
   the new Supabase user's metadata (`raw_user_meta_data->>'landing_variant'`).
 - B and C set `robots: noindex` — they are the same offer as `/`.
-- The FAQ is short and says nothing about account risk either way (owner
-  decision, 2026-09-24; see `PRODUCT.md`).
+- The FAQ is short. It answers "will this get my account banned?" with how the
+  product works (no password, no stored login, sends from the Operator's own
+  browser) and never promises the account is safe (owner decision, 2026-10-06;
+  see `PRODUCT.md`). No landing page quotes a daily send figure.
 
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
@@ -210,14 +212,20 @@ APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
   poll. The browser calls `scrape` with `{ op: 'page', source, cursor }` one page at a time
   (the cursor carries the resolved user/media/location id so the lookup is paid once), then
   `{ op: 'enrich', ids }` in batches of 10 for rows a list endpoint left short (no bio, no
-  follower count). Stop is honoured between calls and keeps what was found.
+  follower count). A `ScrapeControl` is honoured between calls: **Pause** holds the run with
+  nothing spent and the cursors kept, **Resume** carries on, **Finish** stops paging and still
+  loads details for what was found (pressed during details, it skips the rest). Pages report
+  `total` (a post's `comment_count`, an account's following count) and `items`, so the client
+  shows real progress and an ETA from its own measured pace; a source with no total gets neither.
 - **Parsing lives in `_shared/hiker.ts`**, which holds no Deno globals by contract:
   `src/lib/hiker.test.ts` imports it and runs `extractUsers`/`toRow` against real payload
   shapes. Each source reads users from ONE place (a post's author, a comment's author, a
   `users` array) — never "anything user-shaped", or a hashtag scrape collects everyone tagged.
 - **`ProfileRow` uses HikerAPI's own field names** (`follower_count`, `media_count`,
   `is_business`, `city_name`); `intake()`'s alias table knows them. No translation step.
-- **250 per query** (`MAX_PER_QUERY`) — the landing pages promise "up to 250 profiles per search".
+- **"Everything" by default** — `MAX_PER_QUERY` (2,000) is a safety ceiling, not a target; the
+  monthly lookup quota is the real brake. The landing pages still say "up to 250 profiles per
+  search", which stays true but undersells it.
 - **Metered.** Every billed upstream request (`x-hiker-info: reqs=N`) is counted in
   `scrape_usage`; `MONTHLY_SCRAPE_LIMIT` (default 5000) → `429 scrape_quota`.
 - **Errors carry a code.** `not_found` / `private_target` / `bad_source` are about one query —
@@ -249,6 +257,8 @@ WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
 ADMIN_EMAILS                                       # admin-api
 RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
 SEND_EMAIL_HOOK_SECRET                             # auth-email-hook
+TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / OWNER_NOTIFY_EMAIL  # Owner signup/payment alerts (_shared/notify.ts; optional)
+RESEND_SEGMENT_ALL / RESEND_SEGMENT_CUSTOMERS      # Resend Broadcast segments (_shared/contacts.ts; optional) — docs/NOTIFICATIONS_SETUP.md
 SOP_DOC_URL / ONBOARDING_CALL_URL                  # onboarding email links (optional; SOP defaults to bundled PDF, call URL defaults to cal.com/magnetengine/30min)
 ```
 Set via `supabase secrets set KEY=value`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
@@ -413,4 +423,4 @@ hex/rgba, for Recharts props and inline styles, which no utility can reach).
 2. **localStorage as fallback persistence** — Supabase when configured; leads/config survive refresh either way
 3. **AI DM generation is template-based** in the wizard step; live AI calls use the selected provider key from localStorage
 4. **CampaignBuilder fallback**: if user scrapes results but selects none, clicking "Add to Queue" adds all results (prevents silent no-op)
-5. **250 lead cap**: `MAX_PER_QUERY` in `_shared/hiker.ts`; the UI dropdown max is 250 per query
+5. **Scrape "everything"**: the UI defaults to every profile a source has, up to `MAX_PER_QUERY` (2,000) in `_shared/hiker.ts`; the Operator pauses or finishes when they have enough

@@ -90,6 +90,7 @@ export default tseslint.config(
         isAppMessage: 'readonly',
         messageKind: 'readonly',
         readCampaign: 'readonly',
+        readSendSettings: 'readonly',
         describeExtension: 'readonly',
         importScripts: 'readonly',
       },

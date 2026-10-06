@@ -11,11 +11,12 @@
 //      their email to be in the ADMIN_EMAILS secret. Everyone else gets 403.
 // All privileged reads/writes then use the service-role client (bypasses RLS).
 //
-// POST JSON: { action: 'overview' | 'users' | 'activate' | 'revoke',
+// POST JSON: { action: 'overview' | 'users' | 'activate' | 'revoke' | 'sync-contacts',
 //              email?, page?, perPage? }
 
 import { json, servePost } from "../_shared/http.ts";
 import { onboardingEmail, sendEmail } from "../_shared/emails.ts";
+import { segmentIds, syncContact } from "../_shared/contacts.ts";
 
 const MONTHLY_PRICE = 197;
 
@@ -144,6 +145,7 @@ servePost<Body>("admin-api", async ({ body, sb }) => {
         await sendEmail(email, onboardingEmail(firstName), {
           idempotencyKey: `onboarding/${userId}`,
         });
+        await syncContact({ email, firstName }, segmentIds(["all", "customers"]));
       }
 
       return json(200, { ok: true, activated: email });
@@ -155,6 +157,57 @@ servePost<Body>("admin-api", async ({ body, sb }) => {
       .eq("user_id", userId);
     if (error) throw error;
     return json(200, { ok: true, revoked: email });
+  }
+
+  // ── sync-contacts ────────────────────────────────────────────────────────
+  // One-off backfill: push every confirmed user into the Resend "all users"
+  // segment (and active members into "customers") so a Broadcast reaches
+  // them. New signups/payments are synced live; safe to re-run any time.
+  if (action === "sync-contacts") {
+    if (segmentIds(["all"]).length === 0) {
+      return json(400, { error: "RESEND_SEGMENT_ALL secret is not set — see docs/NOTIFICATIONS_SETUP.md" });
+    }
+
+    const { data: subs, error: subsErr } = await sb
+      .from("subscriptions")
+      .select("user_id")
+      .eq("status", "active");
+    if (subsErr) throw subsErr;
+    const activeIds = new Set((subs ?? []).map((s) => s.user_id));
+
+    let synced = 0;
+    let skipped = 0;
+    let failed = 0;
+    let page = 1;
+    for (;;) {
+      const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) throw error;
+      for (const u of data.users) {
+        // Never-confirmed addresses are often typos — mailing them hurts deliverability.
+        if (!u.email || !u.email_confirmed_at) {
+          skipped += 1;
+          continue;
+        }
+        const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
+        const kinds: ("all" | "customers")[] = activeIds.has(u.id) ? ["all", "customers"] : ["all"];
+        const result = await syncContact(
+          {
+            email: u.email,
+            firstName: (meta.first_name as string | undefined) ?? null,
+            lastName: (meta.last_name as string | undefined) ?? null,
+          },
+          segmentIds(kinds),
+        );
+        if (result.ok) synced += 1;
+        else failed += 1;
+        // Stay under Resend's per-second API rate limit.
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      if (data.users.length < 1000) break;
+      page += 1;
+    }
+
+    return json(200, { ok: true, synced, skipped, failed });
   }
 
   return json(400, { error: `unknown action: ${action}` });

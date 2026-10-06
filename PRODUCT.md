@@ -92,11 +92,13 @@ Environmental facts that shape every design decision:
   agree over a Handshake, and work the installed build cannot perform is refused
   with a reason the Operator can read rather than posted into silence.
 - **Automated DMs breach Instagram's Terms of Service.** The Terms of Service
-  page states this. The landing page does not discuss account risk at all —
-  owner decision, 2026-09-24: marketing talks about what the product does, not
-  the downsides of outreach automation. The other half of that decision is
-  binding too: no page may claim the account is safe, because that is a claim
-  nobody can stand behind.
+  page states this. The landing FAQ answers "will this get my account
+  banned?" with how the product works and nothing more — no password asked
+  for, no login stored, sends from the Operator's own signed-in browser, one
+  at a time, only what they approved (owner decision, 2026-10-06, replacing
+  the 2026-09-24 "say nothing" rule). What stays binding: no page may promise
+  the account is safe or cannot be restricted, because that is a claim nobody
+  can stand behind. The landing pages also quote no daily send figure.
 - **Access is payment-gated.** Sign-up → `/activate` (Whop embedded checkout) →
   dashboard. There is no client-side write path to a subscription.
 
