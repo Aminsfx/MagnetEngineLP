@@ -1,0 +1,13 @@
+{
+  "id": "P012",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I'd probably poke at the 10 free DMs, but I wouldn't pay $147 a month on something with zero customer results and a dashboard that sounds like another thing I'd have to babysit. I'm under $5k a month, so a tool I cancel after a trial is the likely outcome.",
+  "objection": "It only sends while my Chrome has an Instagram tab open, so it's me sitting there for hours anyway, and no one has shown it books a single call. $147 on faith is a lot when my leads still live in a Google Sheet.",
+  "would_change_my_mind": "Real results from founding members (booked calls from the DMs, not just sent counts), plus a price closer to $79 or a lower tier with fewer DMs.",
+  "price_too_cheap": 15,
+  "price_cheap": 39,
+  "price_expensive": 89,
+  "price_too_expensive": 130
+}

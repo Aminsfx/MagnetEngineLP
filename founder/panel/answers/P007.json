@@ -1,0 +1,13 @@
+{
+  "id": "P007",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "My Instagram is my storefront and my proof, and this sends automated DMs from it. If it gets flagged I lose months of content and clients, and $147 a month with no results published and payments final after day 3 isn't a risk I'll take on my main account.",
+  "objection": "It sends from my own account through an extension, so a restriction or ban lands on my real storefront, and nobody has shown me it doesn't. It also says the extension needs an Instagram tab open, so I'd have that tab open for hours every day anyway.",
+  "would_change_my_mind": "Published results from real customers like me, plus a clear way to run it on a separate throwaway account so my main one is never at risk.",
+  "price_too_cheap": 29,
+  "price_cheap": 59,
+  "price_expensive": 99,
+  "price_too_expensive": 147
+}

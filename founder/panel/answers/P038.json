@@ -1,0 +1,13 @@
+{
+  "id": "P038",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "The 3-day trial that bills on day 4 with payments final is exactly the setup I'd expect from something I'd regret, and there are no customer results anywhere, only '7 of 100 seats'. I'm not putting $147 of my own money on a card for a tool nobody has shown works.",
+  "objection": "Card up front, bills after 3 days, no refunds, and zero published results. Three days isn't enough to see replies from DMs anyway, so I'd be paying before I could know if it works.",
+  "would_change_my_mind": "A real refund window after the first charge (or a trial that needs no card), plus a few named customers showing replies and booked calls from the DMs.",
+  "price_too_cheap": 29,
+  "price_cheap": 69,
+  "price_expensive": 149,
+  "price_too_expensive": 250
+}

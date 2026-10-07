@@ -1,0 +1,13 @@
+{
+  "id": "P016",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "price",
+  "reason": "$147 a month is nearly a tenth of what I make in a month, and other DM tools run a third of that. I don't have a paying client I can point to that says this works, so I'd keep typing my openers by hand.",
+  "objection": "I make about $1,700 a month and this is $147 with no results from anyone yet. The guarantee only pays if I send 300 DMs and get zero calls, so if I get one lousy call I'm out the money anyway. And my pipeline is empty because I'm busy, not because I can't find a tool.",
+  "would_change_my_mind": "A price around $59 to $79, or a few real founding-member results from people in my situation (small agency, under $5k a month) showing booked calls.",
+  "price_too_cheap": 15,
+  "price_cheap": 39,
+  "price_expensive": 79,
+  "price_too_expensive": 120
+}

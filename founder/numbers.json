@@ -1,0 +1,91 @@
+{
+ "business": "MagnetEngine",
+ "unit": "client-month",
+ "price": 147,
+ "variable": [
+  {
+   "label": "AI DM drafts: 1,500/mo x ~3,000 in + 140 out tokens on Sonnet 4.6, +10% retries (ESTIMATE)",
+   "cost": 18.32
+  },
+  {
+   "label": "AI reply drafts: ~200/mo x ~4,000 in + 400 out tokens (ESTIMATE)",
+   "cost": 3.6
+  },
+  {
+   "label": "HikerAPI lookups: ~300 requests for 1,500 leads, $0.001-$0.02 each (ESTIMATE)",
+   "cost": 2.0
+  },
+  {
+   "label": "Whop fees: 2.7% + $0.30 processing + 3% platform (ESTIMATE, check docs.whop.com/fees)",
+   "cost": 8.68
+  },
+  {
+   "label": "Booked-Call Guarantee refunds: 20% of first months claimed, ~6-month average life (ESTIMATE)",
+   "cost": 4.9
+  },
+  {
+   "label": "Restriction refund: 3% of client-months claimed (ESTIMATE)",
+   "cost": 4.41
+  },
+  {
+   "label": "Free 10-DM previews + non-converting 7-day trials, per paying customer (ESTIMATE)",
+   "cost": 0.78
+  }
+ ],
+ "fixed_monthly": [
+  {
+   "label": "Supabase Pro (ESTIMATE)",
+   "cost": 25
+  },
+  {
+   "label": "Vercel Pro (ESTIMATE)",
+   "cost": 20
+  },
+  {
+   "label": "Resend (ESTIMATE)",
+   "cost": 20
+  },
+  {
+   "label": "Domain, email, misc tools (ESTIMATE)",
+   "cost": 10
+  },
+  {
+   "label": "Acquisition spend placeholder: content tools, small paid tests (ASSUMPTION, owner to set)",
+   "cost": 500
+  }
+ ],
+ "startup": [
+  {
+   "label": "Chrome Web Store developer registration",
+   "cost": 5
+  },
+  {
+   "label": "Lawyer review of Terms + guarantee wording (ESTIMATE)",
+   "cost": 750
+  },
+  {
+   "label": "Pilot cohort: variable cost of 10 free pilot months (ESTIMATE)",
+   "cost": 326
+  },
+  {
+   "label": "Launch content and paid tests (ASSUMPTION)",
+   "cost": 1000
+  }
+ ],
+ "days_per_month": 1,
+ "plan_per_day": 40,
+ "ramp_per_day": [
+  2,
+  4,
+  7,
+  10,
+  13,
+  16,
+  19,
+  22,
+  25,
+  28,
+  31,
+  34
+ ]
+}

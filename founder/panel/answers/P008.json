@@ -1,0 +1,13 @@
+{
+  "id": "P008",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I've already paid for a DM tool that got me almost no replies and an action block, so 'sends from your own Instagram' just sounds like the same risk with nicer wording. $147 a month with zero customer results published isn't something I can justify until I land the next client.",
+  "objection": "It sends from my own account, and my last tool got that account action-blocked. Nobody has shown me results, and 7 of 100 seats taken tells me almost nobody has tried it. If my account gets flagged, I lose the account I earn my living from, and the payments are final after day 3.",
+  "would_change_my_mind": "Real results from a named SDR or agency that has run it for 30+ days with no action blocks, ideally with a screenshot of their reply rate. A lower price or a month-to-month refund window would help too.",
+  "price_too_cheap": 20,
+  "price_cheap": 49,
+  "price_expensive": 99,
+  "price_too_expensive": 147
+}

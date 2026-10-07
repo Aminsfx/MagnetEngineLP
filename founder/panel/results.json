@@ -1,0 +1,251 @@
+{
+ "business": "MagnetEngine (AI-written, human-approved cold Instagram DM outreach)",
+ "seed": 7,
+ "dealt": 100,
+ "answered": 100,
+ "skipped": [],
+ "buys": 0,
+ "passes": 100,
+ "buy_rate": 0.0,
+ "by_segment": [
+  [
+   "Early-stage agency owner or freelancer (under $5k/month revenue)",
+   35,
+   0.0
+  ],
+  [
+   "Appointment setter or SDR who runs outreach for a client",
+   10,
+   0.0
+  ],
+  [
+   "Online coach or course creator selling a high-ticket program",
+   25,
+   0.0
+  ],
+  [
+   "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+   30,
+   0.0
+  ]
+ ],
+ "by_behaviour": [
+  [
+   "Burned by a DM bot before",
+   16,
+   0.0
+  ],
+  [
+   "Sends DMs by hand every day",
+   22,
+   0.0
+  ],
+  [
+   "Tool tinkerer",
+   14,
+   0.0
+  ],
+  [
+   "Follows a guru's outreach playbook",
+   10,
+   0.0
+  ],
+  [
+   "Protective of their Instagram account",
+   14,
+   0.0
+  ],
+  [
+   "Content-first, mostly inbound",
+   12,
+   0.0
+  ],
+  [
+   "Already pays a setter or VA",
+   12,
+   0.0
+  ]
+ ],
+ "by_income": [
+  [
+   "$48,000 to $147,000",
+   33,
+   0.0
+  ],
+  [
+   "under $48,000",
+   33,
+   0.0
+  ],
+  [
+   "$147,000 and up",
+   34,
+   0.0
+  ]
+ ],
+ "why_not": [
+  [
+   "trust",
+   79,
+   [
+    "I already paid for a DM tool that got me almost no replies and an action block, so anything that automates Instagram DMs makes me flinch. There are no customer results at all, and a card-required trial that turns into final payments at $147 is a lot of risk when I make under $5k a month.",
+    "$147 is a big bite out of what I make, and there's not one review or case study showing it actually books calls. I might poke at the trial, but I'd cancel before day 4 and I wouldn't be paying."
+   ],
+   [
+    "P001",
+    "P003"
+   ]
+  ],
+  [
+   "price",
+   9,
+   [
+    "I make about $1,500 a month and $147 is a big bite out of that, three or four times what other DM tools cost. Typing openers by hand is exhausting, but I can't put that much on a card for software with zero published results.",
+    "$147 a month is a big chunk of money when I make about $21k a year and my pipeline dries up every other month, and other Instagram DM tools cost a third of that. Card up front, payments final after day 3, and my main account is my storefront, so I'm not putting it on the line for a tool with zero published results."
+   ],
+   [
+    "P002",
+    "P010"
+   ]
+  ],
+  [
+   "need",
+   8,
+   [
+    "My leads come from posting and comment-to-DM, and cold DMs are only a side thing when the pipeline's thin. If I'm stuck it's my offer or my content, not that I can't send enough DMs, so $147 a month for more outreach doesn't fix my actual problem.",
+    "I already pay a setter who works my inbox, and if my calls are slow I figure it's my offer or my content, not the DMs. Nothing here shows me it beats the person I already have."
+   ],
+   [
+    "P012",
+    "P014"
+   ]
+  ],
+  [
+   "timing",
+   3,
+   [
+    "I cannot justify another $147 a month until I land my next client, and my guru's playbook already tells me which DM tool to use and this isn't it. A card-required trial with payments final after day 4 is a lot to risk when my pipeline is dry.",
+    "I'm already doing DMs by hand and it kind of works, and I can't justify another $147 a month until I land my next client. A card-required trial that turns into final payments on day 4 is a lot to risk when I'm busy with client work."
+   ],
+   [
+    "P006",
+    "P050"
+   ]
+  ],
+  [
+   "quality",
+   1,
+   [
+    "I already hate typing openers by hand, so the pain is real, but every AI DM I've seen sounds robotic and my prospects can smell it. $147 is nothing against what I make, but a card-required trial with zero published results and only 3 days to judge replies isn't enough for me to bet my own Instagram account on it."
+   ],
+   [
+    "P016"
+   ]
+  ]
+ ],
+ "why_yes": [],
+ "flip": [
+  "Real results from a few agency owners like me (replies and booked calls, with names I can check), plus a trial with no card required or a refund guarantee past day 3.",
+  "A price around $49 or less, or real results from people like me (booked calls from an account my size) plus a refund window longer than three days.",
+  "A few real customers showing booked calls from it, or a price under about $50 a month with no card needed for the trial.",
+  "Real reply and booked-call numbers from a few customers in my niche, plus seeing sample DMs written for my own prospects during the trial that I'd actually send.",
+  "Real, named results from people selling a high-ticket program like mine, plus a few actual sample DMs from real profiles that don't sound like AI. My guru recommending it would also do it.",
+  "Real results from people who sell like me, such as booked calls from the DMs, or a guru I already follow recommending it and showing it work.",
+  "Published results from real customers like me, plus a clear way to run it on a separate throwaway account so my main one is never at risk.",
+  "Real results from a named SDR or agency that has run it for 30+ days with no action blocks, ideally with a screenshot of their reply rate. A lower price or a month-to-month refund window would help too.",
+  "Real results from a few coaches or agency owners like me (replies and booked calls, not just DMs sent), or a longer trial or a money-back window instead of 'payments are final'.",
+  "A price around $50 to $60 a month, plus real customer results from people at my size and a clear answer on what happens to my account if Instagram flags it.",
+  "A few real users in my situation showing their accounts are fine after months of use, plus actual booked-call numbers, and a price closer to $50-60 a month.",
+  "Real case studies from agencies my size showing booked calls from this, plus a longer trial or a refund window, or a much lower price like $49 a month.",
+  "Real screenshots or a short video of actual DMs it wrote for agency-type prospects with real reply and booked-call numbers from an agency owner like me, or a free trial with no card where I can see 10 drafts on my own niche first.",
+  "Real booked-call numbers from coaches like me, ideally a case where it replaced a setter's cost, plus a way to try it without a card.",
+  "Real results from a few agency owners my size, such as booked calls from a month of use with their accounts still fine, plus a no-card trial or a refund window so I can test it on a secondary account first.",
+  "Real sample DMs written for actual profiles that read like a person wrote them, plus a few named agency owners showing reply and booked-call numbers, and a longer trial or a refund window.",
+  "Real results from agency owners at my level, like screenshots of booked calls, or my guru recommending it with an affiliate link. A trial with no card, or a longer one, would also help.",
+  "A 7-day or 14-day trial with no card, or a real refund window after the first charge. Even one or two named agency owners showing actual reply and booking numbers would do it.",
+  "Named case studies from coaches like me, with real reply and booked-call numbers and how many DMs they sent. Or a longer trial, or a money-back window after the first month.",
+  "A few real customers in my kind of offer showing booked calls from it, plus a clear straight answer on what happens to my account if Instagram flags the sending.",
+  "Named agency owners showing real reply and booked-call numbers after a few months on their main accounts, with no restrictions. Or a straight explanation of the actual send limits and what happens to my account if Instagram flags it, ideally with a way to run it on a secondary account first.",
+  "Real customers, with names I can check, showing replies and booked calls without their accounts getting restricted. A price closer to $50-70 would also help, or a refund if the account gets blocked.",
+  "Real numbers from agency owners like me (replies and booked calls from the same kind of DMs), or a guru I already follow running it, plus a few weeks of trial instead of 3 days.",
+  "Real results from agency owners like me (replies and booked calls per 100 DMs, with screenshots), plus a trial long enough (7 to 14 days) to run a real batch and see replies before the card is charged.",
+  "Real results from people like me (replies and booked calls, with their accounts still fine), or a trial with no card and a price under $100.",
+  "Real results from agency owners like me (replies and booked calls from actual sent DMs, with sample DMs I can read), plus a longer trial or a refund window long enough to run a week of outreach.",
+  "Real results from someone my size, like screenshots of replies and booked calls from a founding member, plus a lower price and a clear refund if my account gets flagged.",
+  "Real results from people at my size, like replies and booked calls from a handful of named users, plus a longer trial or a refund window of at least 14 days. A price around $49 to $79 would also get me to try it.",
+  "A price under $70 a month, or a longer free trial or a refund window, plus real results from people like me who booked actual clients.",
+  "A price near $50 to $60 a month, or real results from people in my spot, like reply and booking numbers from SDRs or agency owners. A trial that doesn't need a card would also help.",
+  "A few named coaches or agency owners, on camera, showing booked calls and their accounts still fine after months. Plus a refund window of 14 to 30 days instead of 'payments are final'.",
+  "Real results from coaches like me, with actual DMs it wrote and the replies they got, plus an honest account of what has happened to people's accounts. I'd also want a way to try it on a throwaway account first, without a card.",
+  "Real results from agency owners like me (replies and booked calls from actual accounts), or a price closer to $60-80, or a no-card trial long enough to see replies come in.",
+  "Real results from an agency owner like me (replies and booked calls, with the account still healthy after a couple of months), or a free run on a small batch where I can see the drafts and the reply rate before the card gets charged.",
+  "Published results from coaches like me (replies and booked calls, with real names I can check), plus clear proof of how accounts have held up after months of use, or a way to run it on a throwaway account first.",
+  "A price around $59 to $79 a month, or real results from named users who do my kind of outreach, plus a trial without a card.",
+  "A few real coaches or agency owners showing months of sending from their own accounts with no restrictions and with booked calls, ideally with a trial that doesn't need a card up front.",
+  "A real refund window after the first charge (or a trial that needs no card), plus a few named customers showing replies and booked calls from the DMs.",
+  "Real agency owners showing booked calls and months of sending with no restrictions, or a trial long enough (14 days) to run it on a throwaway account first.",
+  "Real results from agency owners my size, like booked calls per month, plus a plan around $59-79 with no card needed for the trial.",
+  "Real results from people at my size (replies and booked calls, with the account still fine), plus a refund window of 14 days or more instead of final payments after day 3.",
+  "Real screenshots or a case study from someone in my niche showing replies and booked calls from the DMs, plus a clear refund if it doesn't book anything in the first month.",
+  "A few real users in my situation (small agency or freelancer) showing replies and booked calls from it, ideally with the price dropped to around $79 a month.",
+  "Real agency owners showing before/after reply and booked-call numbers from cold DMs on their own main accounts, with no restrictions after a few months, plus a way to run it on a secondary account first.",
+  "Real screenshots or a case study of someone my size booking calls from it. A longer trial or a money-back guarantee would also help, or a price under $100.",
+  "A real refund window after the first charge (say 14 to 30 days), or a longer trial, plus a few named customers showing actual replies and booked calls.",
+  "Real reply and booked-call numbers from agency owners like me, or a no-card trial where I can see a few drafts written for my actual niche and judge them myself.",
+  "A few real agency owners at my size showing booked calls from it, or my guru recommending it. Without the card up front, or a price around $49 to $69 a month, I'd probably try it.",
+  "A few real agency owners showing reply and booked-call numbers from this, plus a longer trial or a refund window, so I can see replies on my own account before I'm locked in.",
+  "Real results from a coach like me, such as booked calls from a named customer, plus a free trial that needs no card or a refund window after billing starts.",
+  "A few real agency owners showing reply and booked-call numbers from cold DMs this tool wrote, or a trial long enough (14 days) to run a real batch of outreach before the card is charged.",
+  "Real results from agencies like mine: booked-call numbers, and some record of accounts that sent for a few months without getting action-blocked. A trial long enough to see replies would also help.",
+  "Real booked-call numbers from named agency owners, or a trial long enough (a week or two) to see replies from my own niche before the card is charged.",
+  "Real results from people at my size, plus a refund window of 14 days or more (or a trial long enough to actually get replies without a card up front).",
+  "Real results from agency owners or setters at my size, with screenshots of replies and booked calls. Also a plan under $60 with no card needed for the trial, or a refund if my account gets limited.",
+  "Real agency owners at my size showing reply and booked-call numbers from actual DMs, with before/after examples of the drafts, or a trial that doesn't need a card up front.",
+  "A few real agency owners showing reply and booked-call numbers from their own accounts, or a trial long enough (14 days) or a refund window so I can see actual replies before I pay.",
+  "A trial of 7 days or more, or a refund window after the first charge. Add a few real customers with real booked-call numbers, ideally an agency or coach like me.",
+  "Named coaches or agency owners with real booked-call numbers who have run it for months on their main account with no restrictions, or a way to run it on a secondary account without keeping a tab open all day.",
+  "A trial long enough to see replies (7 to 14 days) or a refund window after the first charge, plus a few real results from people selling what I sell.",
+  "Real results from agency owners like me, with their numbers and how long their accounts have been running on it. Also a way to run it on a secondary outreach account instead of my main one.",
+  "Real booked-call numbers from agency owners like me, or the guru I follow recommending it, plus a few sample DMs written on my own prospects that don't read like AI.",
+  "Proof from agency owners like me who ran it for 30+ days on a real account with no restrictions, or a clear way to run it on a throwaway or secondary account first, plus a guarantee that covers my account if it gets flagged.",
+  "Real results from agency owners like me (reply and booked-call numbers with names I can check), plus a clear statement of what happens if my account gets blocked, at a price closer to $60-80.",
+  "Real published results from coaches like me (reply and booked-call numbers from actual accounts), plus a longer trial or a money-back window so I can judge reply rates instead of just looking at drafts.",
+  "Real results from a few agency owners or freelancers like me, with actual numbers for replies and booked calls. A free trial with no card up front would also get me to try it.",
+  "A few real customers showing replies and booked calls from it, or a trial with no card required. Even then I'd likely wait until I have a client paying for it.",
+  "A real agency owner's numbers (DMs sent, replies, calls booked) I can check, or a trial long enough to run a week of real outreach, or a refund window after the first charge.",
+  "A few real customers in my situation (small agency, cold IG DMs) showing actual booked calls, or a trial long enough (a couple of weeks) or a refund if it books me nothing.",
+  "Real results from agency owners at my size (booked calls, not just replies), plus a way to try it without a card, or a price under about $80 a month that I could drop the month I don't land a client.",
+  "Real booked-call numbers from a few named users in a niche like mine, or a longer trial or money-back window so I can see replies come in before it bills.",
+  "A real setter or agency owner showing their own reply and booked-call numbers over a few weeks with no action block, and a price closer to $60-70 a month, or a trial without a card.",
+  "Real sample DMs written from real profiles that I can't tell from my own, plus a few SDRs or agency owners showing reply and booked-call numbers. A trial with no card up front would also help.",
+  "A guru or coach I already follow using it and showing real booked calls from it, or a way to run it without keeping a tab open all day.",
+  "Real screenshots or numbers from a few customers like me (reply rates, booked calls, no blocks), or a price around $50-60 a month with a real refund window.",
+  "A guru I already follow using it and showing real booked calls from it, or a few real before-and-after examples of the DMs getting replies, at a lower price.",
+  "Real customers who run it on their main account, with proof they've used it for months without a restriction, plus a trial I can run with no card on file.",
+  "Real coaches or agency owners at my level showing months of use on their own accounts with no restrictions and actual booked calls, or a longer trial or a refund window so I can test it on a throwaway account first.",
+  "A few agency owners at my size showing real booked calls from it, with screenshots, and some clear proof that the account doesn't get flagged. A free trial that doesn't need a card would also get me to look.",
+  "Seeing real example DMs it wrote for actual profiles in my niche before I enter a card, or a longer trial or a no-card trial, or one real customer showing booked calls from it.",
+  "Real customer results from coaches selling high-ticket programs, such as booked calls per 100 DMs, or a cheaper plan with no card needed for the trial.",
+  "A real customer with a similar-sized account showing results and saying their account was fine after months of use, plus a refund window of at least 14 days instead of final payments after day 3.",
+  "Real example DMs it wrote for accounts like mine, plus a few agency owners at my size showing actual replies and booked calls. A trial without a card up front would also do it.",
+  "A 7 to 14 day trial, or a refund window after the first charge, plus a few real agency owners showing booked calls from it.",
+  "Real results from agency owners like me, such as reply and booked-call numbers from named customers, or a longer trial (7 to 14 days) so I can see actual replies before I'm charged.",
+  "A real refund window, or a trial with no card up front. Failing that, a few named agency owners my size showing replies and booked calls from their own accounts, with no action blocks.",
+  "Published results from people at my level (under $5k a month) who ran it on their main account for a few months without a restriction, plus a trial with no card up front.",
+  "Published results from agency owners at my size who booked $1k+/month clients from cold DMs with it, plus a pay-as-you-go or much cheaper plan I could switch on only in the months my pipeline is thin.",
+  "Real screenshots or numbers from agency owners like me showing reply and booked-call rates from the AI-written DMs, plus a longer trial or refund window so I can run a real week of outreach.",
+  "A price around $49 to $67 a month, or a free trial with no card, plus a few real results from agencies my size that show it booked calls.",
+  "Real results from a few coaches like me (replies and booked calls with names I can check), plus a trial that doesn't need a card or a refund window after the first charge.",
+  "Real booked-call numbers from agency owners like me, or a guru I already follow showing it working and recommending it. A free trial with no card would also get me to try it.",
+  "A longer trial or a real refund window, plus a few real customers showing replies and booked calls, and a lower starting price around $49 to $79.",
+  "A guru I already follow using it, or a few real customers showing booked calls from it, plus a 7-day trial or a refund window after the first charge.",
+  "Real results from someone at my level, like booked calls from a few weeks of use, plus a price under about $60 a month or a no-card trial long enough to test it on a thin-pipeline month.",
+  "A price under about $50 a month, or a month-to-month plan with a refund, plus a few real agency owners my size showing they booked calls with it.",
+  "Real results and named customers with accounts like mine who ran it for months without a restriction, plus a refund window after the first charge or a trial that doesn't need a card.",
+  "Real screenshots or a call with an agency owner like me showing reply and booked-call numbers from this tool over a few weeks, with no account restrictions, plus a trial that doesn't need a card.",
+  "A price around $59 to $79 a month, or real results from agency owners at my size showing booked calls, plus a trial that doesn't need a card up front.",
+  "A few real agency owners showing actual reply and booked-call numbers from it, plus a trial long enough (a week or more) to get real replies before the card is charged, or a refund if it doesn't book a call."
+ ],
+ "purchases_first_month_per_buyer": null,
+ "price_answers": 100
+}

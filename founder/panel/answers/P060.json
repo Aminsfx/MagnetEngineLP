@@ -1,0 +1,13 @@
+{
+  "id": "P060",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "A 3-day trial that bills on day 4 with payments final, and zero customer results, is not something I put my card into. I already pay a setter who works my inbox, and I have no proof this beats them.",
+  "objection": "Three days is not enough to see a single booked call, and then I'm locked into a charge I can't get back. With no published results and 7 seats taken, I'd be the guinea pig.",
+  "would_change_my_mind": "A trial long enough to see replies (7 to 14 days) or a refund window after the first charge, plus a few real results from people selling what I sell.",
+  "price_too_cheap": 29,
+  "price_cheap": 79,
+  "price_expensive": 199,
+  "price_too_expensive": 400
+}

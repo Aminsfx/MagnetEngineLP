@@ -1,0 +1,13 @@
+{
+  "id": "P030",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "price",
+  "reason": "$147 a month is three or four times what other Instagram DM tools charge, and I only do cold outreach when my pipeline is thin. Most of my leads come from posting and comment-to-DM, and I track them in a Google Sheet that already works.",
+  "objection": "$147 a month for something I'd use part of the time, with no customer results published and a card up front. If it bills on day 4 the payment is final, and I'm not betting that on a product with 7 founding customers.",
+  "would_change_my_mind": "A price near $50 to $60 a month, or real results from people in my spot, like reply and booking numbers from SDRs or agency owners. A trial that doesn't need a card would also help.",
+  "price_too_cheap": 15,
+  "price_cheap": 39,
+  "price_expensive": 79,
+  "price_too_expensive": 120
+}

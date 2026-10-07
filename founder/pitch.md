@@ -1,0 +1,6 @@
+MagnetEngine: software that finds your ideal clients on Instagram, has AI read each one's profile and write that person their own first DM, and holds every draft for you to approve before anything sends.
+Approved DMs go out from your own Instagram (your main account or a second one), in your own Chrome browser, one at a time at a human pace. It never asks for your Instagram password.
+Before you enter a card: type in your niche and see 10 DMs it writes for real prospects in it.
+Replies land in one inbox with an AI-drafted answer waiting, follow-ups are scheduled for you, and a dashboard tracks replies and booked calls. About ten minutes a day of review. No API keys needed. 1,500 AI-written DMs and 1,500 leads a month.
+$147 a month, 7-day free trial. Then the Booked-Call Guarantee: send at least 300 approved DMs in your first 30 days, and if not one turns into a booked call, that month is refunded in full. If Instagram restricts your account while you send at the default pace, that month is refunded too.
+Founding cohort: the first 25 members get a free setup call and keep $147 for life (offer ends December 31, 2026). No customer results published yet; the founding members' results, shared with their permission, will be the first.

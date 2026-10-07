@@ -1,0 +1,222 @@
+[
+ {
+  "id": "P001",
+  "name": "Omar",
+  "age": 21,
+  "segment": "Online coach or course creator selling a high-ticket program",
+  "income": 137000,
+  "behaviour": "Burned by a DM bot before",
+  "behaviour_how": "Paid for a cheap mass-DM tool, got almost no replies and an action block, and now distrusts anything that says automation.",
+  "objection": "There are no reviews or case studies, so how do I know it books calls?",
+  "habit": "you watch SMMA and outreach videos on YouTube at night"
+ },
+ {
+  "id": "P002",
+  "name": "Raj",
+  "age": 30,
+  "segment": "Online coach or course creator selling a high-ticket program",
+  "income": 31000,
+  "behaviour": "Follows a guru's outreach playbook",
+  "behaviour_how": "Learned cold DMs from a course or a YouTube SMMA guru and does what the playbook says, including which tools to use.",
+  "objection": "I cannot justify another subscription until I land the next client",
+  "habit": "you work from a laptop with twenty Chrome tabs open"
+ },
+ {
+  "id": "P003",
+  "name": "Emil",
+  "age": 32,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 310000,
+  "behaviour": "Already pays a setter or VA",
+  "behaviour_how": "Pays a person (often offshore, base plus commission) to prospect and work the inbox, and is unsure whether software could replace them.",
+  "objection": "I would have to keep an Instagram tab open for hours every day",
+  "habit": "you are juggling two or three clients and your pipeline dries up every other month"
+ },
+ {
+  "id": "P004",
+  "name": "Owen",
+  "age": 43,
+  "segment": "Appointment setter or SDR who runs outreach for a client",
+  "income": 63000,
+  "behaviour": "Tool tinkerer",
+  "behaviour_how": "Tries every new growth tool on a free trial, cancels most of them, and compares prices before committing.",
+  "objection": "$147 a month is three or four times what other Instagram DM tools charge",
+  "habit": "you track your leads in a Google Sheet"
+ },
+ {
+  "id": "P005",
+  "name": "Sana",
+  "age": 45,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 433000,
+  "behaviour": "Sends DMs by hand every day",
+  "behaviour_how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy.",
+  "objection": "I cannot justify another subscription until I land the next client",
+  "habit": "you track your leads in a Google Sheet"
+ },
+ {
+  "id": "P006",
+  "name": "Maya",
+  "age": 33,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 31000,
+  "behaviour": "Burned by a DM bot before",
+  "behaviour_how": "Paid for a cheap mass-DM tool, got almost no replies and an action block, and now distrusts anything that says automation.",
+  "objection": "My cold DMs are not the problem; my offer or my content is",
+  "habit": "you have a discovery-call link in your bio that rarely gets clicked"
+ },
+ {
+  "id": "P007",
+  "name": "Selin",
+  "age": 33,
+  "segment": "Appointment setter or SDR who runs outreach for a client",
+  "income": 23000,
+  "behaviour": "Content-first, mostly inbound",
+  "behaviour_how": "Gets leads from posting and comment-to-DM; does a little cold outreach when the pipeline is thin.",
+  "objection": "Will this get my Instagram account restricted or banned?",
+  "habit": "you are juggling two or three clients and your pipeline dries up every other month"
+ },
+ {
+  "id": "P008",
+  "name": "Ruby",
+  "age": 35,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 20000,
+  "behaviour": "Protective of their Instagram account",
+  "behaviour_how": "Their main account is their storefront and their proof; losing it would cost months of content and clients.",
+  "objection": "I would have to keep an Instagram tab open for hours every day",
+  "habit": "you work from a laptop with twenty Chrome tabs open"
+ },
+ {
+  "id": "P009",
+  "name": "Nora",
+  "age": 22,
+  "segment": "Online coach or course creator selling a high-ticket program",
+  "income": 53000,
+  "behaviour": "Burned by a DM bot before",
+  "behaviour_how": "Paid for a cheap mass-DM tool, got almost no replies and an action block, and now distrusts anything that says automation.",
+  "objection": "There are no reviews or case studies, so how do I know it books calls?",
+  "habit": "you work from a laptop with twenty Chrome tabs open"
+ },
+ {
+  "id": "P010",
+  "name": "Fatima",
+  "age": 24,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 58000,
+  "behaviour": "Protective of their Instagram account",
+  "behaviour_how": "Their main account is their storefront and their proof; losing it would cost months of content and clients.",
+  "objection": "$147 a month is three or four times what other Instagram DM tools charge",
+  "habit": "you check your Instagram DMs first thing every morning"
+ },
+ {
+  "id": "P011",
+  "name": "Tariq",
+  "age": 27,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 311000,
+  "behaviour": "Sends DMs by hand every day",
+  "behaviour_how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy.",
+  "objection": "There are no reviews or case studies, so how do I know it books calls?",
+  "habit": "you have a discovery-call link in your bio that rarely gets clicked"
+ },
+ {
+  "id": "P012",
+  "name": "Felix",
+  "age": 29,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 58000,
+  "behaviour": "Tool tinkerer",
+  "behaviour_how": "Tries every new growth tool on a free trial, cancels most of them, and compares prices before committing.",
+  "objection": "I would have to keep an Instagram tab open for hours every day",
+  "habit": "you track your leads in a Google Sheet"
+ },
+ {
+  "id": "P013",
+  "name": "Zoe",
+  "age": 24,
+  "segment": "Online coach or course creator selling a high-ticket program",
+  "income": 55000,
+  "behaviour": "Follows a guru's outreach playbook",
+  "behaviour_how": "Learned cold DMs from a course or a YouTube SMMA guru and does what the playbook says, including which tools to use.",
+  "objection": "My cold DMs are not the problem; my offer or my content is",
+  "habit": "you track your leads in a Google Sheet"
+ },
+ {
+  "id": "P014",
+  "name": "Dev",
+  "age": 36,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 264000,
+  "behaviour": "Tool tinkerer",
+  "behaviour_how": "Tries every new growth tool on a free trial, cancels most of them, and compares prices before committing.",
+  "objection": "Will this get my Instagram account restricted or banned?",
+  "habit": "you are juggling two or three clients and your pipeline dries up every other month"
+ },
+ {
+  "id": "P015",
+  "name": "Yusuf",
+  "age": 24,
+  "segment": "Online coach or course creator selling a high-ticket program",
+  "income": 195000,
+  "behaviour": "Already pays a setter or VA",
+  "behaviour_how": "Pays a person (often offshore, base plus commission) to prospect and work the inbox, and is unsure whether software could replace them.",
+  "objection": "A 3-day trial that bills on day 4, with payments final, feels like a trap",
+  "habit": "you track your leads in a Google Sheet"
+ },
+ {
+  "id": "P016",
+  "name": "Theo",
+  "age": 43,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 20000,
+  "behaviour": "Sends DMs by hand every day",
+  "behaviour_how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy.",
+  "objection": "$147 a month is three or four times what other Instagram DM tools charge",
+  "habit": "you are juggling two or three clients and your pipeline dries up every other month"
+ },
+ {
+  "id": "P017",
+  "name": "Alma",
+  "age": 37,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 29000,
+  "behaviour": "Sends DMs by hand every day",
+  "behaviour_how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy.",
+  "objection": "$147 a month is three or four times what other Instagram DM tools charge",
+  "habit": "you work from a laptop with twenty Chrome tabs open"
+ },
+ {
+  "id": "P018",
+  "name": "Freya",
+  "age": 30,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 442000,
+  "behaviour": "Protective of their Instagram account",
+  "behaviour_how": "Their main account is their storefront and their proof; losing it would cost months of content and clients.",
+  "objection": "Will this get my Instagram account restricted or banned?",
+  "habit": "you have a discovery-call link in your bio that rarely gets clicked"
+ },
+ {
+  "id": "P019",
+  "name": "Harper",
+  "age": 29,
+  "segment": "Early-stage agency owner or freelancer (under $5k/month revenue)",
+  "income": 37000,
+  "behaviour": "Content-first, mostly inbound",
+  "behaviour_how": "Gets leads from posting and comment-to-DM; does a little cold outreach when the pipeline is thin.",
+  "objection": "There are no reviews or case studies, so how do I know it books calls?",
+  "habit": "you watch SMMA and outreach videos on YouTube at night"
+ },
+ {
+  "id": "P020",
+  "name": "Emma",
+  "age": 45,
+  "segment": "Growing SMMA or agency owner ($10k-$50k/month revenue)",
+  "income": 170000,
+  "behaviour": "Sends DMs by hand every day",
+  "behaviour_how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy.",
+  "objection": "I would have to keep an Instagram tab open for hours every day",
+  "habit": "you have a discovery-call link in your bio that rarely gets clicked"
+ }
+]

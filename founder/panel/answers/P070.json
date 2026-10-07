@@ -1,0 +1,13 @@
+{
+  "id": "P070",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "timing",
+  "reason": "I'm under $5k a month and already pay a setter, so $147 more before I've landed my next client is a hard no this month. A card-required trial where payments are final after day 3 also feels risky when I'm this tight.",
+  "objection": "I can't justify another subscription until I land the next client, and there are no customer results anywhere, so I'd be paying $147 to be the guinea pig. I also can't tell if this replaces my setter or just adds a cost on top.",
+  "would_change_my_mind": "Real results from agency owners at my size (booked calls, not just replies), plus a way to try it without a card, or a price under about $80 a month that I could drop the month I don't land a client.",
+  "price_too_cheap": 25,
+  "price_cheap": 49,
+  "price_expensive": 89,
+  "price_too_expensive": 130
+}

@@ -1,0 +1,39 @@
+{
+  "business": "MagnetEngine (AI-written, human-approved cold Instagram DM outreach)",
+  "target": "People who sell a $1,000+/month retainer or a $2,000+ project through cold Instagram DMs: SMMA and marketing agency owners, online coaches, and B2B service freelancers (SEO, ads, web design), at $0 to $50k a month in revenue",
+  "where": "Online, mostly US, UK, Canada and Australia, plus offshore agency owners selling to those markets",
+  "age": [21, 45],
+  "segments": [
+    {"name": "Early-stage agency owner or freelancer (under $5k/month revenue)", "share": 0.35, "income": [12000, 60000]},
+    {"name": "Growing SMMA or agency owner ($10k-$50k/month revenue)", "share": 0.30, "income": [90000, 450000]},
+    {"name": "Online coach or course creator selling a high-ticket program", "share": 0.25, "income": [30000, 250000]},
+    {"name": "Appointment setter or SDR who runs outreach for a client", "share": 0.10, "income": [20000, 70000]}
+  ],
+  "behaviours": [
+    {"name": "Sends DMs by hand every day", "share": 0.22, "how": "Spends one to three hours a day finding profiles and typing openers; it works a bit, but it is exhausting and stops whenever client work gets busy."},
+    {"name": "Burned by a DM bot before", "share": 0.16, "how": "Paid for a cheap mass-DM tool, got almost no replies and an action block, and now distrusts anything that says automation."},
+    {"name": "Tool tinkerer", "share": 0.14, "how": "Tries every new growth tool on a free trial, cancels most of them, and compares prices before committing."},
+    {"name": "Protective of their Instagram account", "share": 0.14, "how": "Their main account is their storefront and their proof; losing it would cost months of content and clients."},
+    {"name": "Already pays a setter or VA", "share": 0.12, "how": "Pays a person (often offshore, base plus commission) to prospect and work the inbox, and is unsure whether software could replace them."},
+    {"name": "Content-first, mostly inbound", "share": 0.12, "how": "Gets leads from posting and comment-to-DM; does a little cold outreach when the pipeline is thin."},
+    {"name": "Follows a guru's outreach playbook", "share": 0.10, "how": "Learned cold DMs from a course or a YouTube SMMA guru and does what the playbook says, including which tools to use."}
+  ],
+  "objections": [
+    "$147 a month is three or four times what other Instagram DM tools charge",
+    "Will this get my Instagram account restricted or banned?",
+    "There are no reviews or case studies, so how do I know it books calls?",
+    "AI-written DMs always sound robotic; prospects can tell",
+    "A 3-day trial that bills on day 4, with payments final, feels like a trap",
+    "I would have to keep an Instagram tab open for hours every day",
+    "I cannot justify another subscription until I land the next client",
+    "My cold DMs are not the problem; my offer or my content is"
+  ],
+  "habits": [
+    "you check your Instagram DMs first thing every morning",
+    "you are juggling two or three clients and your pipeline dries up every other month",
+    "you watch SMMA and outreach videos on YouTube at night",
+    "you track your leads in a Google Sheet",
+    "you work from a laptop with twenty Chrome tabs open",
+    "you have a discovery-call link in your bio that rarely gets clicked"
+  ]
+}
