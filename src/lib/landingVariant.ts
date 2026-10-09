@@ -3,7 +3,9 @@
  *
  * Three pages sell the same product: A at `/`, B at `/lp/b`, C at `/lp/c`.
  * The first one a visitor sees is remembered in this browser and carried to
- * two places the owner can read:
+ * three places the owner can read:
+ *  - PostHog: the same events, and `landing_variant` on every later event
+ *    from that browser (a super property);
  *  - Google Analytics: a `landing_variant` user property plus the events
  *    `start_trial_click` (a trial button on a landing page) and `sign_up`
  *    (an account created), each tagged with the variant;
@@ -22,6 +24,8 @@ export type LandingVariant = 'a' | 'b' | 'c';
 
 /** Where each variant lives. A is the site's front door; App.tsx routes these. */
 export const LANDING_PATH: Record<LandingVariant, string> = { a: '/', b: '/lp/b', c: '/lp/c' };
+
+import { captureEvent, registerProperties } from './posthog';
 
 const KEY = 'me_landing_variant';
 
@@ -54,10 +58,13 @@ export function rememberLandingVariant(v: LandingVariant): void {
         /* storage unavailable: tag this visit only */
     }
     gtag()?.('set', 'user_properties', { landing_variant: first });
+    registerProperties({ landing_variant: first });
 }
 
-/** A Google Analytics event, tagged with the landing variant when there is one. */
+/** An analytics event (Google Analytics + PostHog), tagged with the landing variant when there is one. */
 export function trackEvent(name: string, params: Record<string, unknown> = {}): void {
     const variant = landingVariant();
-    gtag()?.('event', name, variant ? { ...params, landing_variant: variant } : params);
+    const tagged = variant ? { ...params, landing_variant: variant } : params;
+    gtag()?.('event', name, tagged);
+    captureEvent(name, tagged);
 }

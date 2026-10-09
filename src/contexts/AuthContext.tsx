@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
+import { identifyUser } from '../lib/posthog';
 
 interface AuthContextValue {
   user: User | null;
@@ -42,6 +43,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   }, []);
+
+  // Analytics follows the account. `user` keeps its reference across token
+  // refreshes (above), so this runs on sign-in/out, not on every refocus.
+  useEffect(() => {
+    if (!loading) identifyUser(user);
+  }, [user, loading]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     const result = await authSignIn(email, password);
