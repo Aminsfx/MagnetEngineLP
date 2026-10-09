@@ -8,7 +8,6 @@ import { landingVariant } from './src/lib/landingVariant';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { PlanProvider } from './src/contexts/PlanContext';
 import { ToastProvider } from './src/components/common/Toast';
-import ConsentBanner from './src/components/common/ConsentBanner';
 import App from './src/App';
 
 injectAnalytics();
@@ -32,7 +31,6 @@ root.render(
         <PlanProvider>
           <ToastProvider>
             <App />
-            <ConsentBanner />
           </ToastProvider>
         </PlanProvider>
       </AuthProvider>

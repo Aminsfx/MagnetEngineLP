@@ -108,8 +108,8 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Message on the thread — which is the extension reading Instagram's own
   inbox, so Sent still rests on the extension's word, by a second route.
   Never infer a send from anything else.
-- **Product analytics** — Mixpanel, behind an opt-in consent banner (EU/UK/CA
-  users). Feature code calls `track()` from `src/lib/analytics.ts`, the only
+- **Product analytics** — Mixpanel, tracking every visitor with no consent
+  prompt (owner decision, 2026-10-09). Feature code calls `track()` from `src/lib/analytics.ts`, the only
   importer of `mixpanel-browser`; the tracking plan lives in `AGENTS.md`.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.

@@ -7,10 +7,9 @@ Add product events to Mixpanel; do not add another analytics SDK.
 
 ## Before you add or change tracking
 
-- **Consent is required.** MagnetEngine has EU, UK and California users.
-  Mixpanel starts opted out and sends nothing until the visitor clicks Accept
-  on `ConsentBanner`. Never call `mixpanel-browser` directly and never bypass
-  the gate; `track()` already drops events without consent.
+- **No consent prompt.** Mixpanel tracks every visitor from the first page
+  load (owner decision, 2026-10-09, knowing there are EU, UK and California
+  users). Never call `mixpanel-browser` directly — go through `track()`.
 - **No CDP.** Events go straight to Mixpanel from the browser SDK.
 - Read the tracking plan below; reuse an event before inventing one.
 
@@ -22,8 +21,8 @@ Add product events to Mixpanel; do not add another analytics SDK.
 | SDK | `mixpanel-browser` (^2.84) |
 | Tracking method | client-side |
 | CDP | none |
-| Consent required | yes, opt-in banner (`src/components/common/ConsentBanner.tsx`) |
-| Token | `VITE_MIXPANEL_TOKEN` in `.env` locally and in Vercel env vars (public; unset = Mixpanel off, no banner) |
+| Consent required | no prompt (owner decision) |
+| Token | `VITE_MIXPANEL_TOKEN` in `.env` locally and in Vercel env vars (public; unset = Mixpanel off) |
 
 ## Initialization
 
@@ -41,8 +40,7 @@ Super properties on every event: `platform: 'web'` and `landing_variant`
 | `identifyUser({ id, email })` | sign-in, sign-up, every reload while signed in | `src/contexts/AuthContext.tsx` |
 | `resetUser()` | sign-out | `AuthContext.handleSignOut` |
 
-The id is the Supabase user id, never the email. If consent arrives after
-sign-in, `setConsent('granted')` identifies the signed-in user then.
+The id is the Supabase user id, never the email.
 
 ## Tracking plan
 
@@ -70,4 +68,4 @@ iframe. The payment funnel is `checkout_viewed` → `payment_failed` /
 1. Check the table above; extend an existing event with a property if it fits.
 2. Call `track('event_name', { ... })` from `src/lib/analytics` where the action succeeds.
 3. Add a row to this table.
-4. Confirm it in Mixpanel → Live View (accept the consent banner first).
+4. Confirm it in Mixpanel → Live View.
