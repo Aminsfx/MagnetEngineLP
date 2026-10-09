@@ -9,6 +9,7 @@ import type { BillingCycle } from '../lib/plans';
 import { SURFACE, POSITIVE } from '../lib/theme';
 import Logo from '../components/Logo';
 import { TrialTimeline } from '../components/auth/TrialTimeline';
+import { track } from '../lib/analytics';
 
 const FEATURES = [
     `${PLAN_LIMITS.maxLeadsPerMonth.toLocaleString('en-US')} leads/month`,
@@ -37,6 +38,9 @@ const PendingActivationPage: React.FC = () => {
     const [billing, setBilling] = useState<BillingCycle>('monthly');
     const [awaitingActivation, setAwaitingActivation] = useState(false);
     const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /** Billing cycles whose checkout has been shown, so a re-render or a
+     *  toggle back does not count the same view twice. */
+    const viewed = useRef(new Set<BillingCycle>());
 
     // If the subscription is (or becomes) active, this page shouldn't be shown
     useEffect(() => {
@@ -53,6 +57,7 @@ const PendingActivationPage: React.FC = () => {
     // After Whop reports the checkout complete, poll until the webhook has
     // flipped the subscription to active (usually a few seconds).
     const handleCheckoutComplete = useCallback(() => {
+        track('checkout_completed', { billing_cycle: billing, price: PRICES[billing].amount });
         setAwaitingActivation(true);
         setStillPending(false);
 
@@ -72,7 +77,7 @@ const PendingActivationPage: React.FC = () => {
             pollTimer.current = setTimeout(poll, 3000);
         };
         poll();
-    }, [refresh, navigate]);
+    }, [refresh, navigate, billing]);
 
     const handleCheck = async () => {
         setChecking(true);
@@ -209,6 +214,19 @@ const PendingActivationPage: React.FC = () => {
                                 prefill={user?.email ? { email: user.email } : undefined}
                                 disableEmail={!!user?.email}
                                 onComplete={handleCheckoutComplete}
+                                // The card form lives in Whop's frame, so typing a card is
+                                // invisible here: shown → submitted-and-refused → paid is
+                                // what Whop reports, and what the funnel can show.
+                                onStateChange={(state) => {
+                                    if (state !== 'ready' || viewed.current.has(billing)) return;
+                                    viewed.current.add(billing);
+                                    track('checkout_viewed', { billing_cycle: billing, price: PRICES[billing].amount });
+                                }}
+                                onPaymentError={(err) => track('payment_failed', {
+                                    billing_cycle: billing,
+                                    ...(err.code ? { error_code: err.code } : {}),
+                                    error_message: err.message,
+                                })}
                                 fallback={
                                     <div role="status" className="flex items-center justify-center gap-2 py-16 text-neutral-400 text-body-sm">
                                         <Loader2 className="w-4 h-4 animate-spin text-neutral-300" aria-hidden />

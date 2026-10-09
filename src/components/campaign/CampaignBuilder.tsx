@@ -4,6 +4,7 @@ import {
     runScrape, explainEmptyScrape, parseQueries, formatEta, ScrapeControl,
     MAX_PER_QUERY, FOLLOWERS_VISIBLE, SCRAPE_DEMO, type ScrapePhase, type ScrapeProgress, type SourceKind,
 } from '../../lib/scrape';
+import { track } from '../../lib/analytics';
 import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
@@ -236,6 +237,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 control,
             );
             setLookupsLeft(outcome.lookupsLeft);
+            track('leads_scraped', {
+                source: kind,
+                query_count: queries.length,
+                lead_count: outcome.leads.length,
+                is_finished_early: outcome.stopped,
+                is_halted: !!outcome.halted,
+            });
 
             const extra = [...outcome.notes];
             if (outcome.halted) extra.unshift(`Search stopped early: ${outcome.halted} Everything found before that is below.`);

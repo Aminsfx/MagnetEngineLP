@@ -12,6 +12,7 @@ import { stampFollowUp } from './followups';
 import { applyOutcome, type Outcome } from './outcome';
 import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
 import { sendCampaign } from './extensionProtocol';
+import { track } from './analytics';
 import { storage } from './storage';
 
 /**
@@ -406,6 +407,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
       return 0;
     }
 
+    track('campaign_sent', { message_type: 'follow_up', dm_count: due.length });
     const sentAt = new Date().toISOString();
     const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt, d.rescue));
     const byId = new Map(stamped.map((l) => [l.id, l]));

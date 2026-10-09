@@ -3,15 +3,21 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { inject as injectAnalytics } from '@vercel/analytics';
 import { injectSpeedInsights } from '@vercel/speed-insights';
-import { initPostHog } from './src/lib/posthog';
+import { initAnalytics, registerSuper } from './src/lib/analytics';
+import { landingVariant } from './src/lib/landingVariant';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { PlanProvider } from './src/contexts/PlanContext';
 import { ToastProvider } from './src/components/common/Toast';
+import ConsentBanner from './src/components/common/ConsentBanner';
 import App from './src/App';
 
 injectAnalytics();
 injectSpeedInsights();
-initPostHog();
+initAnalytics();
+// The A/B landing page this browser first saw rides on every Mixpanel event,
+// including after a sign-out reset, not only on visits that pass a landing page.
+const firstVariant = landingVariant();
+if (firstVariant) registerSuper({ landing_variant: firstVariant });
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -26,6 +32,7 @@ root.render(
         <PlanProvider>
           <ToastProvider>
             <App />
+            <ConsentBanner />
           </ToastProvider>
         </PlanProvider>
       </AuthProvider>

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
-import { identifyUser } from '../lib/posthog';
+import { identifyUser, resetUser, setProfile, track } from '../lib/analytics';
 
 interface AuthContextValue {
   user: User | null;
@@ -44,11 +44,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Analytics follows the account. `user` keeps its reference across token
-  // refreshes (above), so this runs on sign-in/out, not on every refocus.
+  // Analytics follows the account on sign-in and on every reload while signed
+  // in. `user` keeps its reference across token refreshes (above), so this
+  // does not re-run on every refocus.
   useEffect(() => {
-    if (!loading) identifyUser(user);
-  }, [user, loading]);
+    if (user) identifyUser({ id: user.id, email: user.email });
+  }, [user]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     const result = await authSignIn(email, password);
@@ -57,6 +58,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = useCallback(async (email: string, password: string, firstName?: string, lastName?: string): Promise<string | null> => {
     const result = await authSignUp(email, password, firstName, lastName);
+    // Supabase answers a sign-up for an email that already has an account with
+    // a stand-in user and no identities, to hide which emails exist — that is
+    // not a new account, so it is not a sign-up.
+    if (!result.error && result.user && (result.user.identities?.length ?? 0) > 0) {
+      const name = [firstName, lastName].filter(Boolean).join(' ');
+      identifyUser({ id: result.user.id, email: result.user.email });
+      setProfile({ $created: result.user.created_at, ...(name ? { $name: name } : {}) });
+      track('sign_up_completed', { sign_up_method: 'email' });
+    }
     if (!result.error && result.user) {
       // If email confirmation is disabled in Supabase settings, user is immediately active
       // If enabled, user will need to confirm — we return a special signal
@@ -69,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleSignOut = useCallback(async () => {
     await authSignOut();
+    resetUser();
     setUser(null);
     setSession(null);
   }, []);
