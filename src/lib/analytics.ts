@@ -22,6 +22,14 @@ const supers: Record<string, unknown> = { platform: 'web' };
 export function initAnalytics(): void {
     if (!TOKEN || ready) return;
     mixpanel.init(TOKEN, {
+        // The project lives in Mixpanel's EU data residency; the default US
+        // host would reject its events.
+        api_host: 'https://api-eu.mixpanel.com',
+        autocapture: true,
+        // Every session is replayed. Replay masks all text and inputs by
+        // default — keep it that way: the dashboard renders prospects' bios
+        // and DMs, which must never reach a recording.
+        record_sessions_percent: 100,
         track_pageview: 'url-with-path',
         persistence: 'localStorage',
         debug: import.meta.env.DEV,
