@@ -9,11 +9,11 @@ import { useToast } from '../common/Toast';
 import { filterUtils } from '../../lib/filters';
 import { storage, QUEUE_PAGE_SIZES, type QueuePageSize } from '../../lib/storage';
 import { sendCampaign } from '../../lib/extensionProtocol';
-import { track } from '../../lib/analytics';
 import { useStable } from '../../lib/useStable';
 import { useProgressiveCount } from '../../lib/useProgressiveCount';
 import { QueueRow } from './QueueRow';
 import { isReadyForReview } from '../../lib/today';
+import { posthogCapture } from '../../lib/posthog';
 
 interface ApprovalQueueProps {
     leads: Lead[];
@@ -412,7 +412,12 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
             return;
         }
         void onMarkHandedOff?.(sendable.map(l => l.id));
-        track('campaign_sent', { message_type: 'first_dm', dm_count: sendable.length });
+        posthogCapture('campaign_handed_to_extension', {
+            lead_count: sendable.length,
+            min_delay: minDelay,
+            max_delay: maxDelay,
+            daily_cap: dailyCap,
+        });
         // Handed off, not Sent: nothing has reached Instagram yet (CONTEXT.md).
         toast.success(
             `${plural(sendable.length, 'DM')} handed to the extension. One goes out every ${minDelay}–${maxDelay} min while an Instagram tab is open, and each shows Sent once the extension confirms it.`,
@@ -465,6 +470,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
             return;
         }
         await onApproveLeads?.(readyIds);
+        posthogCapture('dms_approved', { approved_count: readyIds.length });
         toast.success(`${plural(readyIds.length, 'DM')} approved.`, onUnapproveLeads && {
             action: { label: 'Undo', onClick: () => { void onUnapproveLeads(readyIds); } },
         });

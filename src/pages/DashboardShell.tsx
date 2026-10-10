@@ -38,6 +38,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { sendCapOf } from '../lib/plans';
 import { useToast } from '../components/common/Toast';
+import { posthogCapture } from '../lib/posthog';
 import { Loader2, Sparkles, Menu, Send } from 'lucide-react';
 
 /**
@@ -312,6 +313,7 @@ const DashboardShell: React.FC = () => {
       systemPrompt: cfg.replySystemPrompt ?? '',
       calendarLink: cfg.calendarLink,
     });
+    posthogCapture('reply_generated', { classified_intent: result.intent });
     // Reflect detected intent (drives filters + booking surfacing).
     const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
     handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
@@ -349,6 +351,7 @@ const DashboardShell: React.FC = () => {
       toast.error(handoff.reason!);
       return;
     }
+    posthogCapture('reply_handed_to_extension');
 
     // recordOutbound also arms echo suppression for exactly this one Message,
     // so Instagram sending it back under its own id doesn't duplicate it — and

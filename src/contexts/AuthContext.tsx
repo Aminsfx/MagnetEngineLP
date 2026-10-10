@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
-import { identifyUser, resetUser, setProfile, track } from '../lib/analytics';
+import { posthogCapture, posthogIdentify, posthogReset } from '../lib/posthog';
 
 interface AuthContextValue {
   user: User | null;
@@ -22,8 +22,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let identifiedUserId: string | null = null;
     // Listen for auth state changes (covers initial session restore + login/logout events)
     const subscription = onAuthStateChange((_event, newSession) => {
+      const nextUser = newSession?.user;
+      if (nextUser && nextUser.id !== identifiedUserId) {
+        posthogIdentify(nextUser.id, {
+          ...(nextUser.email ? { email: nextUser.email } : {}),
+          ...(nextUser.user_metadata.first_name ? { first_name: nextUser.user_metadata.first_name } : {}),
+          ...(nextUser.user_metadata.last_name ? { last_name: nextUser.user_metadata.last_name } : {}),
+        });
+        identifiedUserId = nextUser.id;
+      } else if (!nextUser && identifiedUserId) {
+        posthogReset();
+        identifiedUserId = null;
+      }
       setSession(newSession);
       // Supabase emits a NEW user object on every token refresh (e.g. when the
       // tab regains focus). Keep the previous reference when the identity is
@@ -44,19 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Analytics follows the account on sign-in and on every reload while signed
-  // in. `user` keeps its reference across token refreshes (above), so this
-  // does not re-run on every refocus.
-  useEffect(() => {
-    if (user) identifyUser({ id: user.id, email: user.email });
-  }, [user]);
-
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     const result = await authSignIn(email, password);
-    if (!result.error && result.user) {
-      identifyUser({ id: result.user.id, email: result.user.email });
-      track('sign_in_completed', { sign_in_method: 'email' });
-    }
     return result.error;
   }, []);
 
@@ -64,12 +66,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const result = await authSignUp(email, password, firstName, lastName);
     // Supabase answers a sign-up for an email that already has an account with
     // a stand-in user and no identities, to hide which emails exist — that is
-    // not a new account, so it is not a sign-up.
+    // not a new account, so it is not a sign-up. Identify here as well as on
+    // the auth event: with email confirmation on there is no session yet, and
+    // the funnel needs this event on the same person as the page views before it.
     if (!result.error && result.user && (result.user.identities?.length ?? 0) > 0) {
-      const name = [firstName, lastName].filter(Boolean).join(' ');
-      identifyUser({ id: result.user.id, email: result.user.email });
-      setProfile({ $created: result.user.created_at, ...(name ? { $name: name } : {}) });
-      track('sign_up_completed', { sign_up_method: 'email' });
+      posthogIdentify(result.user.id, {
+        ...(result.user.email ? { email: result.user.email } : {}),
+        ...(firstName ? { first_name: firstName } : {}),
+        ...(lastName ? { last_name: lastName } : {}),
+      });
+      posthogCapture('sign_up_completed', { sign_up_method: 'email' });
     }
     if (!result.error && result.user) {
       // If email confirmation is disabled in Supabase settings, user is immediately active
@@ -83,7 +89,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleSignOut = useCallback(async () => {
     await authSignOut();
-    resetUser();
     setUser(null);
     setSession(null);
   }, []);

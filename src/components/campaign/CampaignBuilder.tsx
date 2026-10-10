@@ -4,7 +4,6 @@ import {
     runScrape, explainEmptyScrape, parseQueries, formatEta, ScrapeControl,
     MAX_PER_QUERY, FOLLOWERS_VISIBLE, SCRAPE_DEMO, type ScrapePhase, type ScrapeProgress, type SourceKind,
 } from '../../lib/scrape';
-import { track } from '../../lib/analytics';
 import {
     Search, CheckSquare, Square, ChevronDown,
     Loader2, Users, AlertCircle, CheckCircle,
@@ -16,9 +15,10 @@ import {
 import { NICHE_PRESETS } from '../../lib/presets';
 import { CsvImport } from './CsvImport';
 import { CHANNEL, alpha } from '../../lib/theme';
+import { posthogCapture } from '../../lib/posthog';
 
 interface CampaignBuilderProps {
-    onLeadsScraped: (leads: Lead[]) => void;
+    onLeadsScraped: (leads: Lead[]) => void | Promise<void>;
 }
 
 interface SourceOption {
@@ -237,12 +237,13 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 control,
             );
             setLookupsLeft(outcome.lookupsLeft);
-            track('leads_scraped', {
-                source: kind,
+            posthogCapture('campaign_search_completed', {
+                source_kind: kind,
                 query_count: queries.length,
-                lead_count: outcome.leads.length,
-                is_finished_early: outcome.stopped,
-                is_halted: !!outcome.halted,
+                requested_limit: perQuery,
+                enrichment_enabled: enrich,
+                result_count: outcome.leads.length,
+                stopped_early: Boolean(outcome.stopped || outcome.halted),
             });
 
             const extra = [...outcome.notes];
@@ -304,7 +305,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                 : new Set(results.map(l => l.id))
         );
 
-    const handleAddToQueue = () => {
+    const handleAddToQueue = async () => {
         const picked = selected.size > 0
             ? results.filter(l => selected.has(l.id))
             : [...results]; // if nothing explicitly selected, add all
@@ -321,7 +322,11 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         const name = campaignName.trim() || `${first}${more} · ${date}`;
         const toAdd = picked.map(l => ({ ...l, campaignName: name }));
 
-        onLeadsScraped(toAdd);
+        await onLeadsScraped(toAdd);
+        posthogCapture('leads_added_to_queue', {
+            source_kind: kind,
+            lead_count: toAdd.length,
+        });
         showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to "${name}" ✓`);
         setResults([]);
         setSelected(new Set());
@@ -385,7 +390,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             {tab === 'import' && (
                 <CsvImport
                     maxLeads={null}
-                    onLeadsReady={(leads) => { onLeadsScraped(leads); }}
+                    onLeadsReady={onLeadsScraped}
                 />
             )}
 

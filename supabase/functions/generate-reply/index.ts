@@ -17,7 +17,14 @@
 // } → { reply, intent, provider }
 
 import { json, servePost } from "../_shared/http.ts";
-import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
+import {
+  complete,
+  createAiSessionId,
+  createAiTraceId,
+  isProvider,
+  resolveProvider,
+  NO_PROVIDER_ERROR,
+} from "../_shared/ai.ts";
 import { replyEnvelope } from "../_shared/completion.ts";
 
 const INTENTS = ["interested", "objection", "not_interested", "neutral", "booked"] as const;
@@ -114,7 +121,7 @@ interface Body {
   provider?: string;
 }
 
-servePost<Body>("generate-reply", async ({ body }) => {
+servePost<Body>("generate-reply", async ({ body, user }) => {
   const { messages, contact, systemPrompt, calendarLink, provider } = body ?? {};
   if (!Array.isArray(messages) || !contact?.handle || !systemPrompt || !isProvider(provider)) {
     return json(400, { error: "missing or invalid fields: messages, contact, systemPrompt, provider" });
@@ -123,6 +130,15 @@ servePost<Body>("generate-reply", async ({ body }) => {
   const resolved = resolveProvider(provider);
   if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
+  // The contact handle is hashed into the session ID rather than captured as
+  // analytics metadata; every reply turn in this inbox conversation reuses it.
+  const aiTrace = {
+    distinctId: user.id,
+    traceId: createAiTraceId(),
+    sessionId: await createAiSessionId("reply", user.id, String(contact.handle)),
+    spanName: "generate_reply" as const,
+  };
+
   const completion = await complete({
     provider: resolved.provider,
     key: resolved.key,
@@ -130,6 +146,7 @@ servePost<Body>("generate-reply", async ({ body }) => {
     user: buildTranscript(messages, contact),
     maxTokens: 400,
     temperature: 0.5,
+    aiTrace,
     jsonSchema: REPLY_SCHEMA,
   });
 

@@ -12,8 +12,8 @@ import { stampFollowUp } from './followups';
 import { applyOutcome, type Outcome } from './outcome';
 import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
 import { sendCampaign } from './extensionProtocol';
-import { track } from './analytics';
 import { storage } from './storage';
+import { posthogCapture, posthogLogs } from './posthog';
 
 /**
  * The outreach engine: everything that happens to a Lead between arriving and
@@ -194,6 +194,13 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     const added = toAdd;
     setLeads((prev) => [...prev, ...added]);
     await store.saveLeads(added);
+    posthogLogs.info('campaign_leads_added', {
+      event: 'campaign_leads_added',
+      added_count: added.length,
+      duplicate_count: duplicates,
+      quota_capped_count: quotaCapped,
+      workspace_persisted: metered,
+    });
 
     if (metered) {
       db.incrementMonthlyCount('leads', added.length).catch(console.error);
@@ -210,10 +217,10 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     }
   }, [metered, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store]);
 
-  const approve = useCallback(
-    (id: string) => patch(id, (l) => ({ ...l, approved: true, rejected: false })),
-    [patch],
-  );
+  const approve = useCallback(async (id: string) => {
+    await patch(id, (l) => ({ ...l, approved: true, rejected: false }));
+    posthogCapture('dm_approved');
+  }, [patch]);
 
   const reject = useCallback(
     (id: string) => patch(id, (l) => ({ ...l, rejected: true, approved: false })),
@@ -354,6 +361,22 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     }
     if (usedAfter !== null) setDmUsed(usedAfter);
     setIsGenerating(false);
+    const attempted = Math.min(pending.length, GENERATION_BATCH);
+    posthogLogs.info('dm_generation_batch_completed', {
+      event: 'dm_generation_batch_completed',
+      attempted_count: attempted,
+      generated_count: landed.length,
+      empty_completion_count: blank.length,
+      dropped_count: dropped,
+      completed: !failure,
+    });
+    if (landed.length > 0) {
+      posthogCapture('dms_generated', {
+        requested_count: attempted,
+        generated_count: landed.length,
+        remaining_count: pending.length - landed.length,
+      });
+    }
 
     const count = (n: number) => `${n} DM${n !== 1 ? 's' : ''}`;
 
@@ -407,16 +430,25 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
       return 0;
     }
 
-    track('campaign_sent', { message_type: 'follow_up', dm_count: due.length });
     const sentAt = new Date().toISOString();
     const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt, d.rescue));
     const byId = new Map(stamped.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
     await store.saveLeads(stamped);
+    posthogLogs.info('follow_up_handoff_completed', {
+      event: 'follow_up_handoff_completed',
+      follow_up_count: due.length,
+      workspace_persisted: metered,
+    });
+    posthogCapture('follow_ups_handed_to_extension', {
+      follow_up_count: due.length,
+      min_delay: delay.min,
+      max_delay: delay.max,
+    });
 
     toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
     return due.length;
-  }, [config.dailySendCap, toast, store]);
+  }, [config.dailySendCap, metered, toast, store]);
 
   const markSentByHandles = useCallback((handles: string[]) => {
     const wanted = new Set(

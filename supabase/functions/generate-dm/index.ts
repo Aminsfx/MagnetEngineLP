@@ -14,7 +14,14 @@
 //   client this is about one Lead rather than the whole workspace.
 
 import { json, servePost } from "../_shared/http.ts";
-import { complete, isProvider, resolveProvider, NO_PROVIDER_ERROR } from "../_shared/ai.ts";
+import {
+  complete,
+  createAiSessionId,
+  createAiTraceId,
+  isProvider,
+  resolveProvider,
+  NO_PROVIDER_ERROR,
+} from "../_shared/ai.ts";
 import { cleanCompletion } from "../_shared/completion.ts";
 
 /** Character ceiling on a DM. A good one is nowhere near it. */
@@ -119,6 +126,15 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
   const resolved = resolveProvider(provider);
   if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
+  // A retried DM is still one generation turn. The session hash groups repeated
+  // work for this operator/lead without exposing the lead's handle as metadata.
+  const aiTrace = {
+    distinctId: user.id,
+    traceId: createAiTraceId(),
+    sessionId: await createAiSessionId("dm", user.id, String(lead.handle)),
+    spanName: "generate_dm" as const,
+  };
+
   // Cleanup can legitimately leave nothing behind: a completion that is only a
   // label ("Message:"), only markdown, only a quote character, or only
   // whitespace all clean down to "". Returning that as a 200 made the client
@@ -140,6 +156,7 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
       // A 40-word DM is ~60 tokens. 200 gave the model room to keep talking, and
       // it took it; the cap is now just above what a good message needs.
       maxTokens: 140,
+      aiTrace,
       // Was 0.4. That is an extraction temperature — it makes the model pick its
       // single likeliest phrasing every time, so 250 leads got 250 messages with
       // the same rhythm. Homogeneity across the batch is the tell, not any one

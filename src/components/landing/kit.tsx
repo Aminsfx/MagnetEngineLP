@@ -8,7 +8,7 @@ import { PillButton, GhostPill } from '../ui/PillButton';
 import { Marquee } from '../ui/Marquee';
 import { ApprovalPreview, BrandPanel, EXAMPLE_QUEUE_SIZE } from '../ApprovalPreview';
 import { PRICES, SUPPORT_EMAIL } from '../../lib/plans';
-import { LANDING_PATH, rememberLandingVariant, trackEvent, type LandingVariant } from '../../lib/landingVariant';
+import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
 import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TRIAL_CTA } from './content';
 
 /**
@@ -85,18 +85,8 @@ export const LandingShell: React.FC<{ nav: NavItem[]; variant: LandingVariant; c
         return () => meta.remove();
     }, [variant]);
 
-    // One listener for every call to action on the page, so a new button is
-    // counted without anyone remembering to wire it.
-    const onClickCapture = (e: React.MouseEvent) => {
-        const el = (e.target as HTMLElement).closest('a, button');
-        if (!el) return;
-        if (el.getAttribute('href')?.includes('mode=signup')) trackEvent('start_trial_click');
-        else if (el.hasAttribute('data-cal-link')) trackEvent('book_call_click');
-    };
-
     return (
         <div
-            onClickCapture={onClickCapture}
             className="bg-surface min-h-screen antialiased selection:bg-white/20 selection:text-white"
         >
             <Header nav={nav} cta={TRIAL_CTA} home={home} />

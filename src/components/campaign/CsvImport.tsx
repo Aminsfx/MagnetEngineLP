@@ -3,11 +3,12 @@ import Papa from 'papaparse';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react';
 import type { Lead, ColumnMapping } from '../../lib/types';
 import { intake, autoMap } from '../../lib/intake';
+import { posthogCapture } from '../../lib/posthog';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface CsvImportProps {
-    onLeadsReady: (leads: Lead[]) => void;
+    onLeadsReady: (leads: Lead[]) => void | Promise<void>;
     maxLeads: number | null;
 }
 
@@ -55,16 +56,22 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
 
     const { leads: previewLeads, skipped } = rows.length > 0 ? buildLeads() : { leads: [], skipped: 0 };
 
-    const handleAdd = () => {
+    const handleAdd = async () => {
         let { leads } = buildLeads();
         if (leads.length === 0) return;
+
+        const sourceRowCount = rows.length;
 
         if (maxLeads !== null && leads.length > maxLeads) {
             leads = leads.slice(0, maxLeads);
             setNote(`Capped at ${maxLeads} leads for this import.`);
         }
 
-        onLeadsReady(leads);
+        await onLeadsReady(leads);
+        posthogCapture('csv_leads_imported', {
+            imported_count: leads.length,
+            skipped_count: sourceRowCount - leads.length,
+        });
         setImported(leads.length);
         setRows([]);
         setHeaders([]);

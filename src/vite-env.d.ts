@@ -13,6 +13,9 @@ interface ImportMetaEnv {
     // 'true' only under `npm run demo` (.env.demo): the Campaign Builder scrapes
     // generated sample profiles instead of calling the `scrape` function.
     readonly VITE_SCRAPE_DEMO?: string;
+    // PostHog's browser key and ingestion host are public client configuration.
+    readonly VITE_POSTHOG_KEY?: string;
+    readonly VITE_POSTHOG_HOST?: string;
     //
     // Secret keys (HikerAPI, Claude/OpenAI/Gemini, Whop webhook secret, admin list)
     // are NOT here — they live only in Supabase Edge Function secrets and are

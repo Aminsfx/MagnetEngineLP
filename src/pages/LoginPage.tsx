@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { AuthShell, AuthHeading, Field, PasswordField, FormError, SubmitButton, TextAction } from '../components/auth/AuthShell';
 import { TrialTimeline } from '../components/auth/TrialTimeline';
 import { ApprovalPreview } from '../components/ApprovalPreview';
-import { trackEvent } from '../lib/landingVariant';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -65,12 +64,10 @@ const LoginPage: React.FC = () => {
             } else {
                 const result = await signUp(email, password, firstName.trim(), lastName.trim());
                 if (result === '__CONFIRM_EMAIL__') {
-                    trackEvent('sign_up', { method: 'email' });
                     setSentTo('confirm');
                 } else if (result) {
                     setError(result);
                 } else {
-                    trackEvent('sign_up', { method: 'email' });
                     // New accounts land on the activation page until payment is
                     // confirmed — ProtectedRoute enforces this too.
                     navigate('/activate');

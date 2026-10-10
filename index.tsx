@@ -3,20 +3,14 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { inject as injectAnalytics } from '@vercel/analytics';
 import { injectSpeedInsights } from '@vercel/speed-insights';
-import { initAnalytics, registerSuper } from './src/lib/analytics';
-import { landingVariant } from './src/lib/landingVariant';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { PlanProvider } from './src/contexts/PlanContext';
 import { ToastProvider } from './src/components/common/Toast';
+import './src/lib/posthog';
 import App from './src/App';
 
 injectAnalytics();
 injectSpeedInsights();
-initAnalytics();
-// The A/B landing page this browser first saw rides on every Mixpanel event,
-// including after a sign-out reset, not only on visits that pass a landing page.
-const firstVariant = landingVariant();
-if (firstVariant) registerSuper({ landing_variant: firstVariant });
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

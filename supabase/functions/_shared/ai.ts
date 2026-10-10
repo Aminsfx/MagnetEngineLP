@@ -44,6 +44,48 @@ export function resolveProvider(requested: Provider): ResolvedProvider | null {
 export const NO_PROVIDER_ERROR =
   "No AI provider key configured on the server. Set CLAUDE_API_KEY (or OPENAI_API_KEY / GEMINI_API_KEY) via supabase secrets set.";
 
+// Direct capture keeps this Edge Function independent of a Node-only provider
+// wrapper. Both values are configured as Supabase function secrets in production.
+const POSTHOG_PROJECT_TOKEN = Deno.env.get("POSTHOG_PROJECT_TOKEN");
+const POSTHOG_HOST = Deno.env.get("POSTHOG_HOST");
+const AI_OBSERVABILITY_DEBUG =
+  Deno.env.get("DENO_ENV") === "development" || Deno.env.get("DEBUG") === "true";
+
+if ((!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST) && AI_OBSERVABILITY_DEBUG) {
+  const missing = POSTHOG_PROJECT_TOKEN ? "POSTHOG_HOST" : "POSTHOG_PROJECT_TOKEN";
+  throw new Error(
+    `${missing} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missing} is configured`,
+  );
+}
+
+export interface AiTraceContext {
+  /** Authenticated operator ID; the stable distinct ID for the generation. */
+  distinctId: string;
+  /** One ID for all provider calls made for a single generation request. */
+  traceId: string;
+  /** Hashed operator/conversation key, so raw contact identifiers are not captured as metadata. */
+  sessionId: string;
+  spanName: "generate_dm" | "generate_reply";
+}
+
+/** Create a stable, allowed session ID without exposing a contact handle. */
+export async function createAiSessionId(
+  scope: "dm" | "reply",
+  userId: string,
+  conversationId: string,
+): Promise<string> {
+  const source = new TextEncoder().encode(`${scope}:${userId}:${conversationId}`);
+  const digest = await crypto.subtle.digest("SHA-256", source);
+  const value = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `${scope}-${value.slice(0, 32)}`;
+}
+
+export function createAiTraceId(): string {
+  return crypto.randomUUID();
+}
+
 export interface CompletionRequest {
   provider: Provider;
   key: string;
@@ -51,6 +93,7 @@ export interface CompletionRequest {
   user: string;
   maxTokens: number;
   temperature: number;
+  aiTrace: AiTraceContext;
   /**
    * Ask the provider to answer with JSON in this shape (used by
    * generate-reply).
@@ -75,6 +118,72 @@ export interface Completion {
    * first.
    */
   truncated: boolean;
+  model: string;
+  stopReason?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+function modelFor(provider: Provider): string {
+  switch (provider) {
+    case "claude": return "claude-sonnet-4-6";
+    case "openai": return "gpt-4o-mini";
+    case "gemini": return "gemini-flash-latest";
+  }
+}
+
+async function captureGeneration(
+  req: CompletionRequest,
+  completion: Completion | undefined,
+  latencySeconds: number,
+): Promise<void> {
+  if (!POSTHOG_PROJECT_TOKEN || !POSTHOG_HOST) return;
+
+  const properties: Record<string, unknown> = {
+    distinct_id: req.aiTrace.distinctId,
+    $ai_trace_id: req.aiTrace.traceId,
+    $ai_session_id: req.aiTrace.sessionId,
+    $ai_span_name: req.aiTrace.spanName,
+    $ai_model: completion?.model ?? modelFor(req.provider),
+    $ai_provider: req.provider,
+    $ai_input: [
+      { role: "system", content: req.system },
+      { role: "user", content: req.user },
+    ],
+    $ai_latency: latencySeconds,
+    $ai_temperature: req.temperature,
+    $ai_max_tokens: req.maxTokens,
+    ...(completion
+      ? {
+        $ai_output_choices: [{ role: "assistant", content: completion.text }],
+        $ai_stop_reason: completion.stopReason,
+        ...(typeof completion.inputTokens === "number"
+          ? { $ai_input_tokens: completion.inputTokens }
+          : {}),
+        ...(typeof completion.outputTokens === "number"
+          ? { $ai_output_tokens: completion.outputTokens }
+          : {}),
+      }
+      : { $ai_is_error: true }),
+  };
+
+  try {
+    const response = await fetch(`${POSTHOG_HOST.replace(/\/$/, "")}/i/v0/e/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: POSTHOG_PROJECT_TOKEN,
+        event: "$ai_generation",
+        properties,
+      }),
+    });
+    if (!response.ok) {
+      console.error(`[ai-observability] capture rejected with ${response.status}`);
+    }
+  } catch {
+    // AI observability must not turn an otherwise successful customer response into an error.
+    console.error("[ai-observability] capture request failed");
+  }
 }
 
 /**
@@ -86,13 +195,25 @@ export interface Completion {
  * (`./completion.ts`); what differs per caller is the character limit.
  */
 export async function complete(req: CompletionRequest): Promise<Completion> {
-  switch (req.provider) {
-    case "claude":
-      return callClaude(req);
-    case "openai":
-      return callOpenAI(req);
-    case "gemini":
-      return callGemini(req);
+  const startedAt = performance.now();
+  try {
+    let completion: Completion;
+    switch (req.provider) {
+      case "claude":
+        completion = await callClaude(req);
+        break;
+      case "openai":
+        completion = await callOpenAI(req);
+        break;
+      case "gemini":
+        completion = await callGemini(req);
+        break;
+    }
+    await captureGeneration(req, completion, (performance.now() - startedAt) / 1000);
+    return completion;
+  } catch (error) {
+    await captureGeneration(req, undefined, (performance.now() - startedAt) / 1000);
+    throw error;
   }
 }
 
@@ -145,6 +266,10 @@ async function callClaude(
   return {
     text: (data?.content?.[0]?.text as string) ?? "",
     truncated: data?.stop_reason === "max_tokens",
+    model: data?.model ?? modelFor("claude"),
+    stopReason: data?.stop_reason,
+    inputTokens: data?.usage?.input_tokens,
+    outputTokens: data?.usage?.output_tokens,
   };
 }
 
@@ -173,6 +298,10 @@ async function callOpenAI(
   return {
     text: (choice?.message?.content as string) ?? "",
     truncated: choice?.finish_reason === "length",
+    model: data?.model ?? modelFor("openai"),
+    stopReason: choice?.finish_reason,
+    inputTokens: data?.usage?.prompt_tokens,
+    outputTokens: data?.usage?.completion_tokens,
   };
 }
 
@@ -211,5 +340,9 @@ async function callGemini(
   return {
     text: (candidate?.content?.parts?.[0]?.text as string) ?? "",
     truncated: candidate?.finishReason === "MAX_TOKENS",
+    model: modelFor("gemini"),
+    stopReason: candidate?.finishReason,
+    inputTokens: data?.usageMetadata?.promptTokenCount,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount,
   };
 }

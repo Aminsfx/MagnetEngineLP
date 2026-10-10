@@ -108,9 +108,15 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Message on the thread — which is the extension reading Instagram's own
   inbox, so Sent still rests on the extension's word, by a second route.
   Never infer a send from anything else.
-- **Product analytics** — Mixpanel, tracking every visitor with no consent
-  prompt (owner decision, 2026-10-09). Feature code calls `track()` from `src/lib/analytics.ts`, the only
-  importer of `mixpanel-browser`; the tracking plan lives in `AGENTS.md`.
+- **Product analytics** — PostHog. Browser code calls `posthogCapture` /
+  `posthogIdentify` / `posthogReset` from `src/lib/posthog.ts`, the only
+  importer of `posthog-js` (off without `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST`,
+  and always off under vitest). Identity is the Supabase user id, set on every
+  auth event and at sign-up. The funnel is `$pageview` → `sign_up_completed` →
+  `subscription_started`; the last is sent by `whop-webhook` through
+  `_shared/posthog.ts` on first activation only, because Whop's confirmation
+  is the only trustworthy payment signal. Google Analytics and Mixpanel are
+  gone — don't add another analytics SDK.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
   endpoints rather than re-copying the CORS/auth preamble.
 - **The Offer Ledger** — the prompts refuse to state a number they were not
@@ -147,9 +153,8 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Every page renders inside `LandingShell` with its `variant`; the shell does the
   test's bookkeeping, so a new page cannot forget it.
 - `src/lib/landingVariant.ts` owns it: the first variant a browser sees is kept
-  (first touch), set as the GA user property `landing_variant`, attached to the
-  GA events `start_trial_click`, `book_call_click` and `sign_up`, and written into
-  the new Supabase user's metadata (`raw_user_meta_data->>'landing_variant'`).
+  (first touch) and written into the new Supabase user's metadata
+  (`raw_user_meta_data->>'landing_variant'`).
 - B and C set `robots: noindex` — they are the same offer as `/`.
 - The FAQ is short. It answers "will this get my account banned?" with how the
   product works (no password, no stored login, sends from the Operator's own
@@ -250,6 +255,7 @@ VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # anon/publishable key — safe in browser (RLS protects data)
 VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($197/mo · $1,970/yr)
 VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin gate (admin-api enforces server-side)
+VITE_POSTHOG_KEY / VITE_POSTHOG_HOST         # PostHog project key (phc_, public) + ingestion host
 ```
 **Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
 ```
@@ -257,8 +263,8 @@ CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-repl
 MONTHLY_DM_LIMIT                                   # generate-dm quota (default 1500)
 HIKERAPI_KEY / MONTHLY_SCRAPE_LIMIT                # scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
-MIXPANEL_TOKEN                                     # whop-webhook billing events (optional; same token as VITE_MIXPANEL_TOKEN)
 ADMIN_EMAILS                                       # admin-api
+POSTHOG_PROJECT_TOKEN / POSTHOG_HOST               # whop-webhook payment event; also AI-generation tracking in _shared/ai.ts (optional)
 RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
 SEND_EMAIL_HOOK_SECRET                             # auth-email-hook
 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / OWNER_NOTIFY_EMAIL  # Owner signup/payment alerts (_shared/notify.ts; optional)

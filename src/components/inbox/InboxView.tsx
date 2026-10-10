@@ -6,6 +6,7 @@ import {
 import type { Conversation, Message, AppConfig, ConversationIntent } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
 import { useToast } from '../common/Toast';
+import { posthogCapture } from '../../lib/posthog';
 
 interface InboxViewProps {
   conversations: Conversation[];
@@ -143,11 +144,14 @@ export const InboxView: React.FC<InboxViewProps> = ({
   const setBooked = () => {
     if (!selected) return;
     onUpdateConversation({ ...selected, status: 'booked', intent: 'booked' });
+    posthogCapture('conversation_marked_booked');
     toast.success(`@${selected.handle} marked as booked 🎉`);
   };
 
-  const toggleAutopilot = () => {
-    onUpdateConfig({ ...config, autopilot: !config.autopilot });
+  const toggleAutopilot = async () => {
+    const enabled = !config.autopilot;
+    await onUpdateConfig({ ...config, autopilot: enabled });
+    posthogCapture('autopilot_toggled', { enabled });
   };
 
   const filterTabs: Array<{ key: Filter; label: string }> = [
