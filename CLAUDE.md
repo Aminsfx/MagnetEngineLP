@@ -257,6 +257,7 @@ CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-repl
 MONTHLY_DM_LIMIT                                   # generate-dm quota (default 1500)
 HIKERAPI_KEY / MONTHLY_SCRAPE_LIMIT                # scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
+MIXPANEL_TOKEN                                     # whop-webhook billing events (optional; same token as VITE_MIXPANEL_TOKEN)
 ADMIN_EMAILS                                       # admin-api
 RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
 SEND_EMAIL_HOOK_SECRET                             # auth-email-hook

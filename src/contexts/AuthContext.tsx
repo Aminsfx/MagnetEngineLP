@@ -53,6 +53,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     const result = await authSignIn(email, password);
+    if (!result.error && result.user) {
+      identifyUser({ id: result.user.id, email: result.user.email });
+      track('sign_in_completed', { sign_in_method: 'email' });
+    }
     return result.error;
   }, []);
 
