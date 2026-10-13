@@ -5,6 +5,7 @@ import { AppConfig } from '../../lib/types';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
 import { usePlan } from '../../contexts/PlanContext';
 import { useToast } from '../common/Toast';
+import { NumberField } from '../common/NumberField';
 import {
     buildSystemPrompt,
     buildReplySystemPrompt,
@@ -538,19 +539,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="settingspa-min-followers" className="block text-xs text-neutral-400 mb-1.5">Min Followers</label>
-                            <input id="settingspa-min-followers"
-                                type="number"
+                            <NumberField id="settingspa-min-followers"
+                                min={0}
                                 value={config.minFollowers}
-                                onChange={e => onUpdateConfig({ ...config, minFollowers: Number(e.target.value) })}
+                                onCommit={n => onUpdateConfig({ ...config, minFollowers: n })}
                                 className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
                             />
                         </div>
                         <div>
                             <label htmlFor="settingspa-max-followers" className="block text-xs text-neutral-400 mb-1.5">Max Followers</label>
-                            <input id="settingspa-max-followers"
-                                type="number"
+                            <NumberField id="settingspa-max-followers"
+                                min={0}
                                 value={config.maxFollowers}
-                                onChange={e => onUpdateConfig({ ...config, maxFollowers: Number(e.target.value) })}
+                                onCommit={n => onUpdateConfig({ ...config, maxFollowers: n })}
                                 className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
                             />
                         </div>
@@ -574,14 +575,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                             Daily Send Limit
                         </label>
                         <div className="flex items-center gap-3">
-                            <input id="settingspa-daily-send-limit"
-                                type="number"
+                            <NumberField id="settingspa-daily-send-limit"
                                 min={1}
                                 max={limits.maxDailyCap}
                                 value={dailyCap}
-                                onChange={e => {
-                                    onUpdateConfig({ ...config, dailySendCap: Math.min(limits.maxDailyCap, Math.max(1, Number(e.target.value))) });
-                                }}
+                                onCommit={n => onUpdateConfig({ ...config, dailySendCap: n })}
+                                title={`Up to ${limits.maxDailyCap} a day on your plan`}
                                 className="w-28 bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
                             />
                             <span className="text-xs text-neutral-400">DMs per day</span>

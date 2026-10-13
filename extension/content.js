@@ -72,13 +72,27 @@ if (!window.location.hostname.includes("instagram.com")) {
             return;
         }
 
+        // Page → background: who is signed in to the dashboard (or nobody).
+        if (event.data.type === APP_TO_EXT.SESSION) {
+            try {
+                if (!chrome?.runtime?.sendMessage) return;
+                chrome.runtime.sendMessage(
+                    { type: APP_TO_EXT.SESSION, payload: event.data.payload },
+                    () => void chrome.runtime.lastError,
+                );
+            } catch (e) {
+                console.warn("[MagnetEngine] session relay error:", e);
+            }
+            return;
+        }
+
         // Page → background: the app asks for the latest inbox snapshot.
         if (event.data.type === APP_TO_EXT.GET_INBOX) {
             try {
                 if (!chrome?.runtime?.sendMessage) return;
                 chrome.runtime.sendMessage({ action: RUNTIME.GET_INBOX }, (res) => {
                     if (chrome.runtime.lastError || !res) return;
-                    window.postMessage({ type: EXT_TO_APP.INBOX, threads: res.threads ?? [] }, '*');
+                    window.postMessage({ type: EXT_TO_APP.INBOX, threads: res.threads ?? [], viewer: res.viewer ?? null }, '*');
                 });
             } catch (e) {
                 console.warn("[MagnetEngine] getInbox relay error:", e);
@@ -165,8 +179,21 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
         };
     }
 
+    // Who is logged in to instagram.com here. The inbox response names its
+    // viewer; the thread ids and the ds_user_id cookie are fallbacks for the id.
+    function readViewer(data, rawThreads) {
+        const v = (data && data.viewer) || {};
+        const id = String(v.pk ?? v.pk_id ?? v.id ?? rawThreads[0]?.viewer_id ?? readCookie('ds_user_id') ?? '');
+        if (!id) return null;
+        return { id, username: String(v.username || ''), avatarUrl: String(v.profile_pic_url || '') };
+    }
+
     async function pollInbox() {
         try {
+            // Nobody signed in to MagnetEngine in this browser: read nothing.
+            const { account } = await chrome.storage.local.get('account');
+            if (!account) return;
+
             const csrf = readCookie('csrftoken');
             const res = await fetch(
                 'https://www.instagram.com/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20',
@@ -191,11 +218,14 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
             const threads = rawThreads
                 .map(normalizeThread)
                 .filter((t) => t && t.threadId);
-            if (threads.length === 0) return;
+            // Sent even with no threads: an account with an empty inbox still
+            // has to be seen before the Operator can connect it.
+            const viewer = readViewer(data, rawThreads);
+            if (!viewer) return;
 
             if (chrome?.runtime?.sendMessage) {
                 chrome.runtime.sendMessage(
-                    { action: RUNTIME.INBOX_SYNC, threads },
+                    { action: RUNTIME.INBOX_SYNC, threads, viewer },
                     () => void chrome.runtime.lastError,
                 );
             }
@@ -207,6 +237,12 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
     // Let the session settle, then poll on an interval for the tab's lifetime.
     setTimeout(pollInbox, 8000);
     setInterval(pollInbox, POLL_MS);
+
+    // Someone just signed in to the dashboard: read now rather than at the
+    // next tick, so connecting their Instagram doesn't wait a minute and a half.
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.account && changes.account.newValue) setTimeout(pollInbox, 2000);
+    });
 }
 
 // ── Instagram: the Sender Tab ───────────────────────────────────
@@ -232,8 +268,13 @@ if (window.location.hostname.includes("instagram.com")) {
         let ticker = null;
         let state = {};
 
+        // DevTools shortcuts pass: a page that swallows F12 leaves the Operator
+        // (and us) no way to read this tab's log when a send goes wrong.
+        const isDevToolsKey = (e) => e.key === 'F12' ||
+            ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(String(e.key).toUpperCase()));
+
         const block = (e) => {
-            if (!e.isTrusted || e.target === host) return;
+            if (!e.isTrusted || e.target === host || isDevToolsKey(e)) return;
             e.preventDefault();
             e.stopImmediatePropagation();
         };
@@ -288,6 +329,8 @@ if (window.location.hostname.includes("instagram.com")) {
             .now { font-size: 13.5px; font-weight: 600; color: #fff; }
             .num { font-family: 'ME Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
             .meta { margin-top: 4px; font-size: 12px; color: #a3a3a3; }
+            .why { margin-top: 12px; font-size: 12px; line-height: 1.45; color: #f87171; }
+            .why[hidden] { display: none; }
             .bar { margin-top: 12px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
             .fill { height: 100%; background: #fff; border-radius: 4px; transform-origin: left; transition: transform 0.6s ease; }
             .actions { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -342,6 +385,11 @@ if (window.location.hostname.includes("instagram.com")) {
                 `<span class="num">${sent}</span> of <span class="num">${total}</span> sent · <span class="num">${Math.max(0, total - sent)}</span> to go`;
             root.querySelector('.fill').style.transform = `scaleX(${total ? sent / total : 0})`;
             root.querySelector('button').disabled = isPaused;
+            const why = root.querySelector('.why');
+            why.textContent = state.lastFailure
+                ? `Last one not sent: @${state.lastFailure.handle} — ${state.lastFailure.reason}`
+                : '';
+            why.hidden = !state.lastFailure;
 
             if (!document.title.startsWith(TITLE_PREFIX)) document.title = TITLE_PREFIX + document.title;
         }
@@ -350,7 +398,7 @@ if (window.location.hostname.includes("instagram.com")) {
             return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        const KEYS = ['campaignQueue', 'originalTotal', 'isExecuting', 'currentTask', 'nextAlarmTime', 'isPaused'];
+        const KEYS = ['campaignQueue', 'originalTotal', 'isExecuting', 'currentTask', 'nextAlarmTime', 'isPaused', 'lastFailure'];
 
         function onStorage(changes, area) {
             if (area !== 'local') return;
@@ -384,6 +432,7 @@ if (window.location.hostname.includes("instagram.com")) {
                             <div class="now"></div>
                             <div class="meta"></div>
                             <div class="bar"><div class="fill"></div></div>
+                            <div class="why" hidden></div>
                         </div>
                         <div class="actions">
                             <span class="hint">Pausing gives you this tab back.</span>
@@ -460,32 +509,32 @@ if (window.location.hostname.includes("instagram.com")) {
         return null;
     }
 
-    // ── Utility: Find the SVG send button ───────────────────────
+    // ── Utility: Find the Send button ───────────────────────────
+    // Only the button Instagram itself labels "Send". There used to be a
+    // "any small icon button near the textbox" fallback; on today's profile
+    // chat popup that is the floating Messages bubble, which it clicked and
+    // then reported as a sent DM.
     function findSendButton() {
-        // Method 1: Look for SVG with aria-label (most reliable)
-        let btn = document.querySelector('div[role="button"] svg[aria-label="Send"]');
-        if (btn) return btn.closest('div[role="button"]');
-
-        // Method 2: Look for any clickable element near the textbox with send-like attributes
-        let allButtons = document.querySelectorAll('div[role="button"]');
-        for (const b of allButtons) {
-            const svg = b.querySelector('svg');
-            if (svg && b.offsetHeight > 0 && b.offsetHeight < 60) {
-                // Check if this button appeared after text was entered (send buttons are typically small)
-                const rect = b.getBoundingClientRect();
-                const textbox = document.querySelector('div[role="textbox"]');
-                if (textbox) {
-                    const tbRect = textbox.getBoundingClientRect();
-                    // Send button should be vertically near the textbox
-                    if (Math.abs(rect.top - tbRect.top) < 100) {
-                        return b;
-                    }
-                }
-            }
-        }
-
-        // Method 3: Fallback to text match
+        const labelled = document.querySelector('div[role="button"][aria-label="Send"]');
+        if (labelled && labelled.offsetHeight > 0) return labelled;
+        const svg = document.querySelector('div[role="button"] svg[aria-label="Send"]');
+        if (svg) return svg.closest('div[role="button"]');
         return findByExactText("Send");
+    }
+
+    const composerText = () => {
+        const box = document.querySelector('div[role="textbox"][contenteditable="true"]');
+        return box ? (box.textContent || box.innerText || '').trim() : '';
+    };
+
+    // Instagram empties the composer once it has taken the message. Until it
+    // has, nothing was sent — whatever we clicked.
+    async function waitForComposerEmpty(timeout) {
+        for (let waited = 0; waited < timeout; waited += 500) {
+            if (composerText().length === 0) return true;
+            await sleep(500);
+        }
+        return composerText().length === 0;
     }
 
     // ── Utility: Type text into contenteditable, a word at a time ──
@@ -524,12 +573,14 @@ if (window.location.hostname.includes("instagram.com")) {
     // ── Signal task completion to background ─────────────────────
     // The worker clears the task and decides what the tab does next; the page
     // never closes itself any more — it is the next DM's tab too.
-    function reportComplete(result, handle) {
-        console.log(`[MagnetEngine] Reporting ${result} for @${handle}`);
+    // `reason` is shown to the Operator (overlay + popup) when it wasn't sent.
+    function reportComplete(result, handle, reason) {
+        console.log(`[MagnetEngine] Reporting ${result} for @${handle}${reason ? ` — ${reason}` : ''}`);
         chrome.runtime.sendMessage({
             action: RUNTIME.TASK_COMPLETE,
             result: result, // 'success' | 'failed' | 'skipped' | 'logged_out'
-            handle: handle
+            handle: handle,
+            reason: reason || null,
         }, () => void chrome.runtime.lastError);
     }
 
@@ -552,10 +603,18 @@ if (window.location.hostname.includes("instagram.com")) {
             }
 
             // ── STEP 2: Find and click "Message" button ─────────
+            // A deleted or renamed account (or one that blocked the Operator)
+            // serves Instagram's "page isn't available" page instead.
+            if (findByExactText("Sorry, this page isn't available.")) {
+                console.error("[MagnetEngine] ABORT: profile doesn't exist.");
+                reportComplete('skipped', task.handle, "this profile doesn't exist any more (deleted, renamed, or it blocked you).");
+                return;
+            }
+
             const messageBtn = findByExactText("Message");
             if (!messageBtn) {
                 console.error("[MagnetEngine] ABORT: 'Message' button not found.");
-                reportComplete('skipped', task.handle);
+                reportComplete('skipped', task.handle, 'no Message button on their profile (private, restricted, or messages turned off).');
                 return;
             }
             messageBtn.click();
@@ -572,7 +631,7 @@ if (window.location.hostname.includes("instagram.com")) {
                         textbox = await waitForElement('div[contenteditable="true"]', 5000);
                     } catch {
                         console.error("[MagnetEngine] ABORT: Textbox never appeared.");
-                        reportComplete('failed', task.handle);
+                        reportComplete('failed', task.handle, 'the chat box never opened after clicking Message.');
                         return;
                     }
                 }
@@ -582,6 +641,11 @@ if (window.location.hostname.includes("instagram.com")) {
             // ── STEP 4: Type the message ────────────────────────
             await humanType(textbox, task.message);
             await sleep(2000);
+            if (composerText().length === 0) {
+                console.error("[MagnetEngine] ABORT: typing left the chat box empty.");
+                reportComplete('failed', task.handle, 'the message could not be typed into the chat box.');
+                return;
+            }
 
             // ── STEP 5: Click the Send button ───────────────────
             // Try up to 3 times with delays (button may take time to activate)
@@ -592,27 +656,29 @@ if (window.location.hostname.includes("instagram.com")) {
                 await sleep(2000);
             }
 
+            let how;
             if (sendBtn) {
                 sendBtn.click();
-                await sleep(2000);
-                console.log("[MagnetEngine] ═══ SUCCESS: DM sent to @" + task.handle + " ═══");
+                how = 'Send button';
+            } else {
+                // Enter as the last resort.
+                textbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                how = 'Enter';
+            }
+
+            // ── STEP 6: Only an emptied composer counts as sent ─
+            if (await waitForComposerEmpty(8000)) {
+                console.log(`[MagnetEngine] ═══ SUCCESS (via ${how}): DM sent to @${task.handle} ═══`);
                 reportComplete('success', task.handle);
             } else {
-                // Enter as the last resort, then check the textbox emptied.
-                textbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-                await sleep(3000);
-                const textboxContent = textbox.textContent || textbox.innerText || '';
-                if (textboxContent.trim().length === 0) {
-                    console.log("[MagnetEngine] ═══ SUCCESS (via Enter): DM sent to @" + task.handle + " ═══");
-                    reportComplete('success', task.handle);
-                } else {
-                    console.error("[MagnetEngine] FAILED: Message was typed but could not be sent.");
-                    reportComplete('failed', task.handle);
-                }
+                console.error(`[MagnetEngine] FAILED: pressed ${how}, but the message is still in the chat box.`);
+                reportComplete('failed', task.handle, sendBtn
+                    ? 'clicked Send, but Instagram kept the message in the chat box — it was not sent.'
+                    : 'Instagram showed no Send button, and Enter did not send it.');
             }
         } catch (error) {
             console.error("[MagnetEngine] Unexpected error:", error);
-            reportComplete('failed', task.handle);
+            reportComplete('failed', task.handle, `unexpected error: ${error && error.message ? error.message : error}`);
         }
     }
 

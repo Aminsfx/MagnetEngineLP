@@ -11,6 +11,7 @@ import { ApprovalQueue } from '../components/campaign/ApprovalQueue';
 import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
 import { InboxView } from '../components/inbox/InboxView';
+import { ConnectInstagram, igName } from '../components/inbox/ConnectInstagram';
 import ProfilePage from './ProfilePage';
 import { ExtensionNotice } from '../components/common/ExtensionNotice';
 import { storage } from '../lib/storage';
@@ -31,6 +32,7 @@ import {
   watchExtension,
   getExtensionStatus,
   type ExtensionStatus,
+  type InstagramViewer,
 } from '../lib/extensionProtocol';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompts } from '../lib/prompt';
 import { AppConfig, Conversation, Message } from '../lib/types';
@@ -123,6 +125,9 @@ const DashboardShell: React.FC = () => {
   // ─── Inbox (AI SDR) ─────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Whoever the extension last saw logged in to instagram.com in this browser.
+  // Not necessarily this Operator — see `instagramAccount` on AppConfig.
+  const [igViewer, setIgViewer] = useState<InstagramViewer | null>(null);
 
   // The inbox log owns the merged Conversations/Messages and the ordering rule
   // that used to live here as three refs (inboxReady, pendingThreads, and
@@ -247,7 +252,16 @@ const DashboardShell: React.FC = () => {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         if (d.handle) outreach.markSentByHandles([d.handle]);
       } else if (d.type === EXT_TO_APP.INBOX) {
-        const newInbound = ingestInbox((d.threads ?? []) as RawThread[]);
+        const viewer = d.viewer?.id ? d.viewer : null;
+        if (viewer) setIgViewer(viewer);
+        // Only the inbox of the Instagram account this Operator connected. The
+        // extension reads whoever is logged in to Instagram in this browser,
+        // which may be someone else entirely; a build too old to say whose
+        // inbox it read is not trusted with anyone's.
+        const connected = configRef.current.instagramAccount;
+        if (!connected || viewer?.id !== connected.id) return;
+        const threads = ((d.threads ?? []) as RawThread[]).map((t) => ({ ...t, account: connected.id }));
+        const newInbound = ingestInbox(threads);
         if (newInbound.length) autopilotRef.current(newInbound);
       }
     });
@@ -260,6 +274,25 @@ const DashboardShell: React.FC = () => {
       window.removeEventListener('focus', requestExtensionSync);
     };
   }, [outreach, ingestInbox]);
+
+  // A snapshot that arrived before the saved config loaded — or before the
+  // Operator connected their Instagram — was turned away above. Ask again.
+  const connectedIgId = config.instagramAccount?.id;
+  useEffect(() => {
+    if (!dataLoading) requestExtensionSync();
+  }, [dataLoading, connectedIgId]);
+
+  // What the Inbox shows: the connected account's Conversations only. Rows
+  // from before accounts were tracked carry none, and drop out until the
+  // next read of that account stamps them again.
+  const igConversations = useMemo(
+    () => (connectedIgId ? conversations.filter((c) => c.account === connectedIgId) : []),
+    [conversations, connectedIgId],
+  );
+  const igMessages = useMemo(() => {
+    const ids = new Set(igConversations.map((c) => c.id));
+    return messages.filter((m) => ids.has(m.conversationId));
+  }, [messages, igConversations]);
 
   // ─── Extension handshake ────────────────────────────────────────────────────
   // Separate from the bridge above, and with its own empty dep list: the bridge
@@ -290,6 +323,25 @@ const DashboardShell: React.FC = () => {
   }, [store]);
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
+
+  const handleConnectInstagram = useCallback((viewer: InstagramViewer) => {
+    handleUpdateConfig({
+      ...configRef.current,
+      instagramAccount: {
+        id: viewer.id,
+        username: viewer.username,
+        avatarUrl: viewer.avatarUrl || undefined,
+        connectedAt: new Date().toISOString(),
+      },
+    });
+    posthogCapture('instagram_connected');
+    toast.success(`Connected ${igName(viewer)}. Replies to your DMs will show up here.`);
+  }, [handleUpdateConfig, toast]);
+
+  const handleDisconnectInstagram = useCallback(() => {
+    handleUpdateConfig({ ...configRef.current, instagramAccount: undefined });
+    posthogCapture('instagram_disconnected');
+  }, [handleUpdateConfig]);
 
   /** Persist a single conversation to state + DB, and carry whatever it now
    *  reveals — a booking, an intent the AI just read — onto the Lead. */
@@ -402,7 +454,7 @@ const DashboardShell: React.FC = () => {
   // Only a name the Operator gave us. The email's local part is not a name:
   // "Good evening, mohamed.a.1987" reads as a bug, not a welcome.
   const firstName = (user?.user_metadata?.first_name as string | undefined)?.trim();
-  const today = todayCounts(outreach.leads, conversations);
+  const today = todayCounts(outreach.leads, igConversations);
 
   // Keyed by DashboardPath, so a page declared in the routes manifest without
   // an element here (or an element with no route) fails to compile instead of
@@ -423,7 +475,7 @@ const DashboardShell: React.FC = () => {
             {headline(today, outreach.leads.length > 0)}
           </h1>
         </header>
-        <OnboardingChecklist leads={outreach.leads} config={config} />
+        <OnboardingChecklist leads={outreach.leads} config={config} extension={extStatus} />
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-x-12 gap-y-10 pt-2">
           <div className="space-y-10 min-w-0">
             <TodayPanel counts={today} hasLeads={outreach.leads.length > 0} />
@@ -473,15 +525,21 @@ const DashboardShell: React.FC = () => {
 
     '/inbox': (
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full h-[calc(100dvh-3.5rem)]">
+        {config.instagramAccount ? (
         <InboxView
-          conversations={conversations}
-          messages={messages}
+          conversations={igConversations}
+          messages={igMessages}
           config={config}
+          detected={igViewer}
+          onDisconnectInstagram={handleDisconnectInstagram}
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}
           onUpdateConversation={handleUpdateConversation}
           onUpdateConfig={handleUpdateConfig}
         />
+        ) : (
+          <ConnectInstagram extension={extStatus} detected={igViewer} onConnect={handleConnectInstagram} />
+        )}
       </div>
     ),
 

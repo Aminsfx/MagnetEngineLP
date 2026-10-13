@@ -35,8 +35,12 @@ const MAGNET_PROTOCOL = {
    * 2 — HELLO / HELLO_BACK.
    * 3 — SETTINGS: the Send Cap follows Settings the moment it changes, instead
    *     of waiting for the next campaign (which is refused while one runs).
+   * 4 — SESSION: the dashboard tells the extension who is signed in, and the
+   *     extension does nothing on Instagram for nobody. INBOX now carries the
+   *     Instagram account it was read from (`viewer`), so a dashboard only
+   *     takes in the inbox of the account its Operator connected.
    */
-  VERSION: 3,
+  VERSION: 4,
 
   /** Every page↔extension message name starts with this. */
   PREFIX: 'MAGNET_ENGINE_',
@@ -48,6 +52,7 @@ const MAGNET_PROTOCOL = {
     GET_INBOX: 'MAGNET_ENGINE_GET_INBOX',
     HELLO: 'MAGNET_ENGINE_HELLO',
     SETTINGS: 'MAGNET_ENGINE_SETTINGS',
+    SESSION: 'MAGNET_ENGINE_SESSION',
   },
 
   /** Extension → page, relayed into the page by the content script. */
@@ -77,6 +82,9 @@ const MAGNET_PROTOCOL = {
 
   /** Hosts whose pages may talk to the extension. Keep in sync with manifest matches. */
   APP_HOSTS: ['magnetengine.xyz'],
+
+  /** Where the popup sends someone who isn't signed in. */
+  APP_URL: 'https://magnetengine.xyz',
 };
 
 /** True for any message the content script should relay into the page. */
@@ -129,7 +137,18 @@ function readSendSettings(payload, current) {
   return { dailyCap: dailyCap > 0 ? dailyCap : current.dailyCap };
 }
 
+/**
+ * Normalize a SESSION payload: who is signed in to the dashboard, or null.
+ * Anything without a user id reads as signed out.
+ */
+function readSession(payload) {
+  const userId = typeof payload?.userId === 'string' ? payload.userId : '';
+  if (!userId) return null;
+  return { userId, email: typeof payload?.email === 'string' ? payload.email : '' };
+}
+
 globalThis.MAGNET_PROTOCOL = MAGNET_PROTOCOL;
+globalThis.readSession = readSession;
 globalThis.isAppMessage = isAppMessage;
 globalThis.messageKind = messageKind;
 globalThis.readCampaign = readCampaign;

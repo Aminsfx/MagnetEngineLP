@@ -47,7 +47,15 @@ function render(d) {
         dailyCap       = 40,
         failedCount    = 0,
         originalTotal  = 0,
+        lastFailure    = null,
+        account        = null,
     } = d;
+
+    // Nobody signed in to MagnetEngine in this browser: show only the way in.
+    document.getElementById('gate').hidden = !!account;
+    document.getElementById('signedIn').hidden = !account;
+    if (!account) { setStatus('idle'); return; }
+    document.getElementById('whoEmail').textContent = account.email || 'Signed in';
 
     const today    = new Date().toDateString();
     const todayCnt = dailyResetDate === today ? dailySentCount : 0;
@@ -68,6 +76,12 @@ function render(d) {
     document.getElementById('statLeft').textContent   = left;
     document.getElementById('statFailed').textContent = failedCount;
     document.getElementById('modeLabel').textContent  = `Delay: ${minDelay}–${maxDelay} min · Cap ${dailyCap}/day`;
+
+    const why = document.getElementById('lastFailure');
+    why.hidden = !lastFailure;
+    if (lastFailure) {
+        document.getElementById('lastFailureText').textContent = `@${lastFailure.handle} — ${lastFailure.reason}`;
+    }
 
     const leadEl = document.getElementById('activeLead');
     if (isExecuting && currentTask) {
@@ -110,6 +124,11 @@ function refresh() { chrome.storage.local.get(null, render); }
 
 refresh();
 setInterval(refresh, 1000);
+
+const openApp = (path) => chrome.tabs.create({ url: MAGNET_PROTOCOL.APP_URL + path });
+document.getElementById('btnSignIn').addEventListener('click', () => openApp('/login?ref=extension'));
+document.getElementById('btnSignUp').addEventListener('click', () => openApp('/?ref=extension'));
+document.getElementById('openDashboard').addEventListener('click', () => openApp('/dashboard'));
 
 document.getElementById('btnStart').addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: MAGNET_PROTOCOL.RUNTIME.RESUME }, refresh);

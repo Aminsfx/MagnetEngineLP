@@ -9,6 +9,18 @@
         "value": "theme('fontfamily.sans')",
         "createdAt": "2026-09-24T08:50:53.424Z",
         "reason": "Claude: false positive — index.css sets body font via Tailwind's theme('fontFamily.sans'), which resolves to Schibsted Grotesk, the face DESIGN.md documents"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "me grotesk",
+        "createdAt": "2026-10-11T15:04:45.494Z",
+        "reason": "agent: alias for bundled Schibsted Grotesk in extension/content.js FontFace (shadow root can't use @font-face)"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "me mono",
+        "createdAt": "2026-10-11T15:04:45.743Z",
+        "reason": "agent: alias for bundled Sometype Mono in extension/content.js FontFace (shadow root can't use @font-face)"
       }
     ]
   }

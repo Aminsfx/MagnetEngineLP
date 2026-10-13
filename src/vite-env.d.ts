@@ -16,6 +16,8 @@ interface ImportMetaEnv {
     // PostHog's browser key and ingestion host are public client configuration.
     readonly VITE_POSTHOG_KEY?: string;
     readonly VITE_POSTHOG_HOST?: string;
+    // The extension's Chrome Web Store listing — onboarding and the Inbox link to it.
+    readonly VITE_EXTENSION_URL?: string;
     //
     // Secret keys (HikerAPI, Claude/OpenAI/Gemini, Whop webhook secret, admin list)
     // are NOT here — they live only in Supabase Edge Function secrets and are

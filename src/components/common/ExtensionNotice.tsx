@@ -1,7 +1,6 @@
 import React from 'react';
 import { AlertTriangle, PlugZap } from 'lucide-react';
-import type { ExtensionStatus } from '../../lib/extensionProtocol';
-import { SUPPORT_EMAIL } from '../../lib/plans';
+import { EXTENSION_INSTALL_URL, type ExtensionStatus } from '../../lib/extensionProtocol';
 
 /**
  * Says out loud what the app↔extension handshake found.
@@ -41,16 +40,17 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
           {absent ? (
             <>
               DMs, follow-ups and inbox replies all send through the browser
-              extension — without it, approving a DM won&apos;t send anything.
-              Enable it at <span className="font-mono text-neutral-300">chrome://extensions</span> and
-              reload this page — or, if you never installed it,{' '}
+              extension — without it, approving a DM won&apos;t send anything.{' '}
               <a
-                href={`mailto:${SUPPORT_EMAIL}?subject=MagnetEngine%20extension%20install%20link`}
+                href={EXTENSION_INSTALL_URL}
+                target="_blank"
+                rel="noreferrer"
                 className="font-medium text-white underline decoration-white/40 hover:decoration-white"
               >
-                email us for the install link
+                Add it to Chrome
               </a>
-              .
+              {' '}and reload this page. Already installed? Enable it at{' '}
+              <span className="font-mono text-neutral-300">chrome://extensions</span>.
             </>
           ) : (
             <>

@@ -31,7 +31,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── New campaign from web app ──────────────────────────────────
     if (kind === APP_TO_EXT.CAMPAIGN) {
-        chrome.storage.local.get(['isExecuting'], (result) => {
+        chrome.storage.local.get(['isExecuting', 'account'], (result) => {
             if (result.isExecuting) {
                 sendResponse({ status: 'rejected', reason: 'A campaign is already running. Pause or clear it first.' });
                 return;
@@ -44,6 +44,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 dailyCap: DEFAULT_DAILY_CAP,
             });
             chrome.storage.local.set({
+                // Whose campaign this is, so a different sign-in can't resume it.
+                campaignOwner: result.account ? result.account.userId : null,
                 campaignQueue: leads,
                 originalTotal: leads.length,
                 minDelay:      minDelay,
@@ -52,6 +54,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 isExecuting:   false,
                 isPaused:      false,
                 failedCount:   0,
+                lastFailure:   null,
             }, () => {
                 processNextLead();
                 sendResponse({ status: 'queued', count: leads.length });
@@ -87,7 +90,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Task completed by content script ──────────────────────────
     if (kind === RUNTIME.TASK_COMPLETE) {
-        completeTask(request.result, request.handle);
+        completeTask(request.result, request.handle, request.reason);
         sendResponse({ status: 'acknowledged' });
         return true;
     }
@@ -109,6 +112,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // ── Who is signed in to the dashboard ─────────────────────────────
+    // The popup shows Sign in / Create account until this arrives, and the
+    // Instagram inbox reader stays off. Signing out pauses a running campaign
+    // (nothing sends for someone who isn't signed in); a different person
+    // signing in clears the last one's queue and forgets the inbox that was
+    // read for them.
+    if (kind === APP_TO_EXT.SESSION) {
+        const next = readSession(request.payload);
+        chrome.storage.local.get(['account', 'campaignOwner', 'campaignQueue'], (stored) => {
+            const prevId = stored.account ? stored.account.userId : null;
+            const nextId = next ? next.userId : null;
+            const patch = { account: next };
+            if (nextId !== prevId && nextId !== null) {
+                patch.inboxThreads = [];
+                patch.inboxViewer = null;
+                patch.inboxSyncedAt = null;
+            }
+            const queued = (stored.campaignQueue || []).length > 0;
+            const foreign = nextId && stored.campaignOwner && stored.campaignOwner !== nextId;
+            chrome.storage.local.set(patch, () => {
+                if (!nextId && queued) pauseCampaign();
+                else if (foreign) clearCampaign();
+                sendResponse({ status: 'ok' });
+            });
+        });
+        return true;
+    }
+
     // ── Stats request from the web app (real sent count + sent log) ────────
     if (kind === RUNTIME.GET_STATS) {
         readStats(sendResponse);
@@ -120,8 +151,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // app can persist conversations/messages to Supabase and render the inbox.
     if (kind === RUNTIME.INBOX_SYNC) {
         const threads = Array.isArray(request.threads) ? request.threads : [];
-        chrome.storage.local.set({ inboxThreads: threads, inboxSyncedAt: Date.now() }, () => {
-            broadcastToApp({ type: EXT_TO_APP.INBOX, threads });
+        const viewer = request.viewer && request.viewer.id ? request.viewer : null;
+        chrome.storage.local.set({ inboxThreads: threads, inboxViewer: viewer, inboxSyncedAt: Date.now() }, () => {
+            broadcastToApp({ type: EXT_TO_APP.INBOX, threads, viewer });
         });
         sendResponse({ status: 'ok', count: threads.length });
         return true;
@@ -129,8 +161,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Inbox request from the web app (latest snapshot) ───────────────────
     if (kind === RUNTIME.GET_INBOX) {
-        chrome.storage.local.get(['inboxThreads'], (result) => {
-            sendResponse({ threads: result.inboxThreads || [] });
+        chrome.storage.local.get(['inboxThreads', 'inboxViewer'], (result) => {
+            sendResponse({ threads: result.inboxThreads || [], viewer: result.inboxViewer || null });
         });
         return true;
     }
@@ -139,12 +171,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // The tab is handed back at once when nothing is mid-send; a DM being
     // typed finishes first, and completeTask hands it back then.
     if (kind === RUNTIME.PAUSE) {
-        chrome.alarms.clear('dripEngine');
-        chrome.storage.local.set({ isPaused: true, nextAlarmTime: null }, () => {
-            chrome.storage.local.get(['isExecuting'], (result) => {
-                if (!result.isExecuting) releaseSenderTab();
-            });
-        });
+        pauseCampaign();
         sendResponse({ status: 'paused' });
         return true;
     }
@@ -160,28 +187,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Clear campaign ─────────────────────────────────────────────
     if (kind === RUNTIME.CLEAR) {
-        chrome.alarms.clear('dripEngine');
-        chrome.alarms.clear('sendWatchdog');
-        chrome.storage.local.set({
-            campaignQueue: [],
-            currentTask:   null,
-            isExecuting:   false,
-            isPaused:      false,
-            nextAlarmTime: null,
-            originalTotal: 0,
-            failedCount:   0,
-        }, closeSenderTab);
+        clearCampaign();
         sendResponse({ status: 'cleared' });
         return true;
     }
 });
 
+function pauseCampaign() {
+    chrome.alarms.clear('dripEngine');
+    chrome.storage.local.set({ isPaused: true, nextAlarmTime: null }, () => {
+        chrome.storage.local.get(['isExecuting'], (result) => {
+            if (!result.isExecuting) releaseSenderTab();
+        });
+    });
+}
+
+function clearCampaign() {
+    chrome.alarms.clear('dripEngine');
+    chrome.alarms.clear('sendWatchdog');
+    chrome.storage.local.set({
+        campaignQueue: [],
+        currentTask:   null,
+        isExecuting:   false,
+        isPaused:      false,
+        nextAlarmTime: null,
+        originalTotal: 0,
+        failedCount:   0,
+        lastFailure:   null,
+    }, closeSenderTab);
+}
+
 // ── A send finished (or gave up) ──────────────────────────────────
 // Ignores a report for anything but the task in flight, so a late report
 // after the send timeout already settled it can't count a send twice.
-function completeTask(outcome, handle) {
+// `reason` (why it wasn't sent) is kept as `lastFailure` for the popup and overlay.
+function completeTask(outcome, handle, reason) {
     chrome.storage.local.get(
-        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles'],
+        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles', 'lastFailure'],
         (result) => {
             const task = result.currentTask;
             if (!result.isExecuting || !task || (handle && task.handle !== handle)) return;
@@ -226,6 +268,9 @@ function completeTask(outcome, handle) {
                 if (sentHandles.length > 5000) sentHandles = sentHandles.slice(-5000);
             }
             if (outcome === 'failed') failed++;
+            const lastFailure = outcome === 'failed' || outcome === 'skipped'
+                ? { handle: task.handle, reason: reason || 'no reason given.', at: Date.now() }
+                : result.lastFailure || null;
 
             const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
 
@@ -233,6 +278,7 @@ function completeTask(outcome, handle) {
                 dailySentCount: count,
                 dailyResetDate: today,
                 failedCount:    failed,
+                lastFailure:    lastFailure,
                 sentLog:        sentLog,
                 sentHandles:    sentHandles,
                 isExecuting:    false,
@@ -277,7 +323,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         chrome.storage.local.set({ nextAlarmTime: null }, processNextLead);
     } else if (alarm.name === 'sendWatchdog') {
         chrome.storage.local.get(['currentTask'], (result) => {
-            if (result.currentTask) completeTask('failed', result.currentTask.handle);
+            if (result.currentTask) {
+                completeTask('failed', result.currentTask.handle,
+                    `the Instagram tab gave no answer for ${SEND_TIMEOUT_MINUTES} minutes (it reloaded or got stuck).`);
+            }
         });
     } else if (alarm.name === 'inboxKeepAlive') {
         ensureInboxTab();
@@ -354,11 +403,15 @@ chrome.runtime.onStartup?.addListener(() => {
 
 // ── Notify open MagnetEngine dashboard tabs ───────────────────────
 // The content script on those tabs relays the message into the page.
+// No "tabs" permission: Chrome shows a tab's url only on hosts we hold, so a
+// tab with no url (localhost in dev, or a site we can't see) is still tried —
+// where our content script isn't loaded, sendMessage fails into lastError.
 function broadcastToApp(message) {
     chrome.tabs.query({}, (tabs) => {
         for (const tab of tabs) {
-            if (!tab.id || !tab.url) continue;
-            const isAppTab = APP_HOSTS.some((h) => tab.url.includes(h)) ||
+            if (!tab.id) continue;
+            const isAppTab = !tab.url ||
+                            APP_HOSTS.some((h) => tab.url.includes(h)) ||
                             tab.url.startsWith('http://localhost');
             if (isAppTab) {
                 chrome.tabs.sendMessage(tab.id, message, () => void chrome.runtime.lastError);

@@ -30,6 +30,7 @@ export const APP_TO_EXT = {
   GET_INBOX: 'MAGNET_ENGINE_GET_INBOX',
   HELLO: 'MAGNET_ENGINE_HELLO',
   SETTINGS: 'MAGNET_ENGINE_SETTINGS',
+  SESSION: 'MAGNET_ENGINE_SESSION',
 } as const;
 
 /** Extension → page. */
@@ -46,7 +47,7 @@ export const PROTOCOL_PREFIX = 'MAGNET_ENGINE_';
  * Wire-protocol revision this build of the dashboard speaks. Must match
  * MAGNET_PROTOCOL.VERSION in extension/protocol.js — asserted by the test.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * What an extension built before the handshake (≤ 1.4.0) accepts.
@@ -60,6 +61,13 @@ const LEGACY_ACCEPTS: readonly string[] = [
   'MAGNET_ENGINE_GET_STATS',
   'MAGNET_ENGINE_GET_INBOX',
 ];
+
+/**
+ * Where an Operator installs the extension: its Chrome Web Store listing.
+ * VITE_EXTENSION_URL overrides it (e.g. for an unlisted test build).
+ */
+export const EXTENSION_INSTALL_URL: string =
+  import.meta.env.VITE_EXTENSION_URL || 'https://chromewebstore.google.com/detail/hbdjhfbmbaoggfonilkecjjffbleopfe';
 
 /** How long an extension gets to answer before we call it absent. */
 const HANDSHAKE_TIMEOUT_MS = 2500;
@@ -249,8 +257,26 @@ export function watchExtension(
 }
 
 // deno-lint-ignore-file
+/**
+ * The Instagram account an inbox snapshot was read from — whoever is logged in
+ * to instagram.com in the browser the extension runs in. That is not
+ * necessarily the Operator's account: before protocol 4 the dashboard took in
+ * any snapshot it was handed, so a second MagnetEngine account opened in the
+ * same browser showed the first one's DMs.
+ */
+export interface InstagramViewer {
+  /** Instagram's numeric user id — survives a username change. */
+  id: string;
+  username: string;
+  avatarUrl?: string;
+}
+
 /** A raw Instagram thread snapshot, normalised by the content script. */
-export type InboxSnapshot = { threads: unknown[] };
+export type InboxSnapshot = {
+  threads: unknown[];
+  /** Absent from builds before protocol 4, which can't say whose inbox it is. */
+  viewer?: InstagramViewer | null;
+};
 
 export type ExtensionMessage =
   | ({ type: typeof EXT_TO_APP.STATS } & Partial<ExtensionStats>)
@@ -262,6 +288,31 @@ export type ExtensionMessage =
 export function requestExtensionSync(): void {
   window.postMessage({ type: APP_TO_EXT.GET_STATS }, '*');
   window.postMessage({ type: APP_TO_EXT.GET_INBOX }, '*');
+}
+
+/** Who is signed in to the dashboard, as the extension is told it. */
+export interface ExtensionSession {
+  userId: string;
+  email: string;
+}
+
+/**
+ * Keep the extension told who is signed in (or that nobody is).
+ *
+ * The popup shows its Sign in / Create account screen until it hears a
+ * session, and the Instagram inbox reader stays off until then. Posted now and
+ * again whenever an extension announces itself, because the content script can
+ * load after this runs. A build older than protocol 4 ignores the message, as
+ * it ignores any name it doesn't know. Returns a stop function.
+ */
+export function shareSession(session: ExtensionSession | null): () => void {
+  const post = () => window.postMessage({ type: APP_TO_EXT.SESSION, payload: session }, '*');
+  const listener = (event: MessageEvent) => {
+    if (event.source === window && event.data?.type === EXT_TO_APP.HELLO_BACK) post();
+  };
+  post();
+  window.addEventListener('message', listener);
+  return () => window.removeEventListener('message', listener);
 }
 
 /** The fate of one handoff attempt — whether it reached the extension at all. */

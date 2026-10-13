@@ -7,6 +7,8 @@ import type { Conversation, Message, AppConfig, ConversationIntent } from '../..
 import type { ReplyResult } from '../../lib/api';
 import { useToast } from '../common/Toast';
 import { posthogCapture } from '../../lib/posthog';
+import type { InstagramViewer } from '../../lib/extensionProtocol';
+import { igName } from './ConnectInstagram';
 
 interface InboxViewProps {
   conversations: Conversation[];
@@ -16,6 +18,9 @@ interface InboxViewProps {
   onSendReply: (conv: Conversation, text: string) => Promise<void> | void;
   onUpdateConversation: (conv: Conversation) => void;
   onUpdateConfig: (config: AppConfig) => Promise<void> | void;
+  /** The account logged in to Instagram in this browser right now, if known. */
+  detected: InstagramViewer | null;
+  onDisconnectInstagram: () => void;
 }
 
 type Filter = 'all' | 'needs_reply' | 'interested' | 'booked';
@@ -57,7 +62,12 @@ function timeAgo(iso?: string): string {
 
 export const InboxView: React.FC<InboxViewProps> = ({
   conversations, messages, config, onGenerateReply, onSendReply, onUpdateConversation, onUpdateConfig,
+  detected, onDisconnectInstagram,
 }) => {
+  const account = config.instagramAccount!;
+  // The browser is logged in to a different Instagram than the one connected:
+  // nothing from it is taken in, and the Operator should know why it's quiet.
+  const otherAccount = detected && detected.id !== account.id ? detected : null;
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -168,6 +178,17 @@ export const InboxView: React.FC<InboxViewProps> = ({
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">Inbox</h1>
           <p className="text-neutral-400 text-sm mt-1.5">Every reply in one place, with an AI draft ready for you to check and send.</p>
+          <p className="text-meta text-neutral-400 mt-2">
+            Connected: <span className="text-white font-medium">{igName(account)}</span>
+            {' · '}
+            <button
+              type="button"
+              onClick={onDisconnectInstagram}
+              className="text-neutral-300 underline decoration-white/30 underline-offset-2 hover:text-white hover:decoration-white"
+            >
+              Switch account
+            </button>
+          </p>
         </div>
         {/* Autopilot toggle */}
         <button
@@ -186,6 +207,14 @@ export const InboxView: React.FC<InboxViewProps> = ({
           Autopilot: {config.autopilot ? 'on' : 'off'}
         </button>
       </div>
+
+      {otherAccount && (
+        <div role="status" className="mb-3 px-3.5 py-2.5 rounded-xl border border-white/25 bg-white/[0.07] text-xs text-neutral-300 leading-relaxed flex-shrink-0">
+          <span className="text-white font-medium">This browser is logged in to Instagram as {igName(otherAccount)}, not {igName(account)}.</span>{' '}
+          Its DMs stay out of this Inbox. Log in to Instagram as {igName(account)} to see new replies here, or
+          switch the connected account.
+        </div>
+      )}
 
       {config.autopilot && (
         <div className="mb-3 px-3.5 py-2 rounded-xl border border-white/25 bg-white/[0.08] text-white/90 text-xs flex items-center gap-2 flex-shrink-0">

@@ -30,6 +30,10 @@ export const TRIAL_CTA = 'Start the 3-day trial';
  */
 export const FAQ_ITEMS = [
     {
+        question: 'What is an AI appointment setter?',
+        answer: "Software that does a setter's job: finds prospects, starts the conversation and moves the interested ones toward a booked call. MagnetEngine does it on Instagram, and you approve every first message.",
+    },
+    {
         question: 'How does it send the messages?',
         answer: 'Through the MagnetEngine Chrome extension, from your own Instagram account, at a human pace.',
     },

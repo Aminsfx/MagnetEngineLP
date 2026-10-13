@@ -32,7 +32,7 @@ const PrivacyPolicy: React.FC = () => {
                     </div>
                     <h1 className="text-4xl font-bold text-white mb-3">Privacy Policy</h1>
                     <p className="text-neutral-500 text-sm">
-                        Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: February 27, 2026
+                        Effective Date: February 27, 2026 &nbsp;·&nbsp; Last Updated: October 13, 2026
                     </p>
                 </div>
 
@@ -85,7 +85,7 @@ const PrivacyPolicy: React.FC = () => {
                         We use cookies and similar technologies to maintain session state, remember your preferences, and perform analytics. You can control cookie usage through your browser settings, though disabling cookies may affect the functionality of the Service.
                     </p>
                     <p>
-                        We may use third-party analytics services (such as Vercel Analytics or similar) that collect anonymized usage data. These services have their own privacy policies governing the use of such data.
+                        We use PostHog for product analytics. It records the pages you visit, what you click and which features you use, and links that activity to your account once you sign in, so we can see where the Service works and where it doesn't. PostHog processes this data on our behalf under its own privacy terms; we do not use it for advertising.
                     </p>
                 </Section>
 
@@ -108,6 +108,24 @@ const PrivacyPolicy: React.FC = () => {
                         <li><strong className="text-white">Business Transfers:</strong> In the event of a merger, acquisition, or sale of assets, your data may be transferred as part of that transaction.</li>
                         <li><strong className="text-white">Protection of Rights:</strong> To enforce our Terms of Service or protect the rights, property, or safety of MagnetEngine, our users, or others.</li>
                     </ul>
+                </Section>
+
+                <Section title="6a. The MagnetEngine Chrome Extension">
+                    <p>
+                        The MagnetEngine browser extension carries out the Instagram outreach you set up in the Service. It works only inside your own browser and your own logged-in Instagram session, and does nothing until you sign in to your MagnetEngine account.
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1">
+                        <li><strong className="text-white">What it sends:</strong> only the messages you approved in the Service, or replies sent by Autopilot if you turn it on, to the recipients in campaigns you created.</li>
+                        <li><strong className="text-white">What it reads:</strong> while you are signed in and an Instagram tab is open, your Instagram direct-message inbox — each conversation partner's handle, display name and profile-picture URL, and the text of recent messages — and the username, user ID and profile picture of the Instagram account logged in to that browser.</li>
+                        <li><strong className="text-white">Why it reads your own Instagram account:</strong> so your dashboard shows only the inbox of the Instagram account you connected. We save the account you connect (its username, user ID and profile picture) to your MagnetEngine account; messages from any other Instagram account logged in to the same browser are ignored, not stored.</li>
+                        <li><strong className="text-white">Where that goes:</strong> to your MagnetEngine dashboard tab, which stores it in your account so you can read and answer conversations and see which leads replied. When you ask for an AI-drafted reply, or Autopilot is on, the conversation is sent to our AI processing providers to write that reply (see Section 5).</li>
+                        <li><strong className="text-white">What stays in your browser:</strong> the send queue, pacing settings, today's send count, and the email address and account ID of the MagnetEngine account you are signed in with, kept in the extension's local storage. Signing out tells the extension to forget the account and pause any campaign.</li>
+                        <li><strong className="text-white">What it never touches:</strong> your Instagram password, your browsing on other sites, and any data the Service doesn't need to run your outreach.</li>
+                    </ul>
+                    <p>
+                        The use of information received from the extension adheres to the{' '}
+                        <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white transition-colors" target="_blank" rel="noopener noreferrer">Chrome Web Store User Data Policy</a>, including the Limited Use requirements. We use it only to provide the extension's single purpose, never sell it, never use it for advertising, and never let people read it except with your consent, for security, or where the law requires.
+                    </p>
                 </Section>
 
                 <Section title="7. Data Security">

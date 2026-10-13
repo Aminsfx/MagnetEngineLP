@@ -12,6 +12,7 @@ import {
   pushSendSettings,
   requestExtensionSync,
   sendCampaign,
+  shareSession,
   watchExtension,
   type ExtensionStatus,
 } from './extensionProtocol';
@@ -340,5 +341,42 @@ describe('version handshake', () => {
   it('forgets what it learned once nobody is watching', () => {
     watching(() => announce({ type: EXT_TO_APP.STATS }));
     expect(getExtensionStatus().state).toBe('checking');
+  });
+});
+
+describe('session', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const readSession = loadExtensionScope().readSession as (p: unknown) => unknown;
+
+  it('the extension reads a user id as signed in, and anything else as signed out', () => {
+    expect(readSession({ userId: 'u1', email: 'a@b.co' })).toEqual({ userId: 'u1', email: 'a@b.co' });
+    expect(readSession({ userId: 'u1' })).toEqual({ userId: 'u1', email: '' });
+    expect(readSession(null)).toBeNull();
+    expect(readSession({ email: 'a@b.co' })).toBeNull();
+    expect(readSession({ userId: 42 })).toBeNull();
+  });
+
+  it('is posted at once, and again whenever an extension announces itself', () => {
+    const posted = vi.spyOn(window, 'postMessage');
+    const session = { userId: 'u1', email: 'a@b.co' };
+    const stop = shareSession(session);
+    const sessions = () => posted.mock.calls.filter(([m]) => (m as { type: string }).type === APP_TO_EXT.SESSION);
+
+    expect(sessions()).toHaveLength(1);
+    expect(sessions()[0][0]).toEqual({ type: APP_TO_EXT.SESSION, payload: session });
+
+    window.dispatchEvent(new MessageEvent('message', { source: window, data: { type: EXT_TO_APP.HELLO_BACK } }));
+    expect(sessions()).toHaveLength(2);
+
+    stop();
+    window.dispatchEvent(new MessageEvent('message', { source: window, data: { type: EXT_TO_APP.HELLO_BACK } }));
+    expect(sessions()).toHaveLength(2);
+  });
+
+  it('says so when nobody is signed in', () => {
+    const posted = vi.spyOn(window, 'postMessage');
+    shareSession(null)();
+    expect(posted).toHaveBeenCalledWith({ type: APP_TO_EXT.SESSION, payload: null }, '*');
   });
 });

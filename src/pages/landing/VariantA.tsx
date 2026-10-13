@@ -57,7 +57,7 @@ const STEPS: Step[] = [
     {
         icon: Send,
         title: 'It sends and follows up',
-        body: "From your own browser, at a human pace, with follow-ups for anyone who doesn't answer. Replies land in one inbox with a draft ready.",
+        body: "From your own browser, at a human pace, with follow-ups for anyone who doesn't answer. Replies land in one inbox, with the AI's answer drafted to book the call.",
         stat: 'Sent from your own account',
     },
 ];
@@ -79,8 +79,9 @@ const VariantA: React.FC = () => (
             }
             sub={
                 <>
-                    MagnetEngine finds the people you want as clients, writes each one a DM from their own
-                    profile, and sends it from your account at a human pace. Your part takes ten minutes a day.
+                    MagnetEngine is an AI appointment setter for Instagram. It finds the people you want as
+                    clients, writes each one a DM from their own profile, and sends it from your account at a
+                    human pace. Your part takes ten minutes a day.
                 </>
             }
         >

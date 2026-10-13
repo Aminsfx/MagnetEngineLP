@@ -108,6 +108,11 @@ export interface AppConfig {
     // Autopilot: auto-send AI replies to new inbound DMs while a dashboard tab
     // is open (paced by the DM delay + dailySendCap). Off = human approval.
     autopilot?: boolean;
+    // The Instagram account this Operator connected. The Inbox takes in a
+    // snapshot from the extension only when it was read from this account, so
+    // whoever else is logged in to instagram.com in the same browser never
+    // lands in this Operator's Inbox. Unset → the Inbox asks them to connect.
+    instagramAccount?: { id: string; username: string; avatarUrl?: string; connectedAt: string };
     // Outbound webhook integration (Zapier/Make catch hooks)
     webhookUrl?: string;
     webhookEvents?: { replied: boolean; positiveReply: boolean; booked: boolean };

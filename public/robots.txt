@@ -1,0 +1,16 @@
+# The marketing page is / — the A/B variants (/lp/b, /lp/c) carry their own
+# noindex, and everything below is the signed-in app, which has nothing to index.
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /campaign
+Disallow: /queue
+Disallow: /inbox
+Disallow: /follow-ups
+Disallow: /settings
+Disallow: /profile
+Disallow: /activate
+Disallow: /admin
+Disallow: /reset-password
+
+Sitemap: https://magnetengine.xyz/sitemap.xml

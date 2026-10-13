@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, X, ChevronRight, Rocket } from 'lucide-react';
 import { Lead, AppConfig } from '../../lib/types';
 import { alpha, CARD_BEZEL, CHANNEL } from '../../lib/theme';
+import { EXTENSION_INSTALL_URL, type ExtensionStatus } from '../../lib/extensionProtocol';
 
 interface OnboardingChecklistProps {
   leads: Lead[];
   config: AppConfig;
+  extension: ExtensionStatus;
 }
 
 interface Step {
@@ -14,18 +16,41 @@ interface Step {
   label: string;
   description: string;
   path: string;
+  /** Leaves the app (the Chrome Web Store) instead of routing within it. */
+  external?: boolean;
   linkText: string;
   complete: boolean;
 }
 
 const DISMISSED_KEY = 'magnetengine_onboarding_dismissed';
 
-export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads, config }) => {
+export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads, config, extension }) => {
   const [dismissed, setDismissed] = useState(() => {
     return localStorage.getItem(DISMISSED_KEY) === 'true';
   });
 
+  // Nothing sends and no reply is read without the extension, so it comes
+  // first. 'checking' counts as not yet — it settles within a few seconds.
+  const extensionInstalled = extension.state === 'ready' || extension.state === 'legacy';
+
   const steps: Step[] = [
+    {
+      id: 'extension',
+      label: 'Install the Chrome extension',
+      description: 'It sends your approved DMs and reads replies back. Reload this page after adding it',
+      path: EXTENSION_INSTALL_URL,
+      external: true,
+      linkText: 'Add to Chrome →',
+      complete: extensionInstalled,
+    },
+    {
+      id: 'instagram',
+      label: 'Connect your Instagram',
+      description: 'Open Instagram in this browser and confirm the account you DM from',
+      path: '/inbox',
+      linkText: 'Connect Instagram →',
+      complete: Boolean(config.instagramAccount),
+    },
     {
       id: 'wizard',
       label: 'Set up your AI prompt',
@@ -123,7 +148,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
         </div>
 
         {/* Steps grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 relative z-10">
           {steps.map((step, i) => (
             <div
               key={step.id}
@@ -146,7 +171,18 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
                 </span>
               </div>
               <p className="text-label text-neutral-400 leading-relaxed mb-2 pl-5">{step.description}</p>
-              {!step.complete && (
+              {!step.complete && (step.external ? (
+                <a
+                  href={step.path}
+                  target="_blank"
+                  rel="noreferrer"
+                  id={`onboarding-step-${step.id}`}
+                  className="inline-flex items-center gap-1 text-label font-semibold text-white hover:text-white transition-colors pl-5"
+                >
+                  {step.linkText}
+                  <ChevronRight className="w-2.5 h-2.5" />
+                </a>
+              ) : (
                 <Link
                   to={step.path}
                   id={`onboarding-step-${step.id}`}
@@ -155,7 +191,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
                   {step.linkText}
                   <ChevronRight className="w-2.5 h-2.5" />
                 </Link>
-              )}
+              ))}
             </div>
           ))}
         </div>

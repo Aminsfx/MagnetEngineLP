@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import type { User, Session } from '@supabase/supabase-js';
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
 import { posthogCapture, posthogIdentify, posthogReset } from '../lib/posthog';
+import { shareSession } from '../lib/extensionProtocol';
 
 interface AuthContextValue {
   user: User | null;
@@ -56,6 +57,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   }, []);
+
+  // The extension stays signed out — popup on its Sign in screen, Instagram
+  // inbox unread — until a page here tells it who is signed in. Only once the
+  // stored session has been restored: telling it "nobody" during that first
+  // tick would pause a running campaign on every page load.
+  const userId = user?.id;
+  const userEmail = user?.email ?? '';
+  useEffect(() => {
+    if (loading) return;
+    return shareSession(userId ? { userId, email: userEmail } : null);
+  }, [loading, userId, userEmail]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     const result = await authSignIn(email, password);

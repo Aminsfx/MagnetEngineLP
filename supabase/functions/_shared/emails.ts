@@ -228,6 +228,8 @@ export function onboardingEmail(firstName: string | null): EmailContent {
   // publishing step required. SOP_DOC_URL can still override it (e.g. to point
   // at a living Google Doc instead) without a redeploy.
   const sopUrl = Deno.env.get("SOP_DOC_URL") || `${appUrl()}/downloads/MagnetEngine-DM-Playbook.pdf`;
+  // The Chrome Web Store listing; EXTENSION_URL overrides it.
+  const extensionUrl = Deno.env.get("EXTENSION_URL") || "https://chromewebstore.google.com/detail/hbdjhfbmbaoggfonilkecjjffbleopfe";
 
   const subject = "Your MagnetEngine setup guide";
 
@@ -238,6 +240,11 @@ export function onboardingEmail(firstName: string | null): EmailContent {
     `<p style="${S.li}">${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together:<br><a href="${callUrl}">${callUrl}</a></p>`,
   );
   textSteps.push(`${step}. Book your onboarding call (30 minutes) — we'll set up your first campaign together: ${callUrl}`);
+  step++;
+  htmlSteps.push(
+    `<p style="${S.li}">${step}. Install the MagnetEngine Chrome extension — it sends the DMs you approve and reads replies back into your inbox. Then open Instagram in the same browser and connect it from your dashboard's Inbox:<br><a href="${extensionUrl}">${extensionUrl}</a></p>`,
+  );
+  textSteps.push(`${step}. Install the MagnetEngine Chrome extension, then open Instagram in the same browser and connect it from your dashboard's Inbox: ${extensionUrl}`);
   step++;
   htmlSteps.push(
     `<p style="${S.li}">${step}. Read the DM Psychology Playbook (PDF) — how to turn cold DMs into booked calls:<br><a href="${sopUrl}">${sopUrl}</a></p>`,

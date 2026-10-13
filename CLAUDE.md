@@ -95,6 +95,17 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   `void`: check `delivered` and show `reason` — never report success for a
   handoff an old or missing extension will ignore, and never stamp a Lead
   (`followedUp`, an outbound Message) off a refused one.
+- **Who the extension works for** — `AuthProvider` calls `shareSession` (protocol 4,
+  `MAGNET_ENGINE_SESSION`) once auth has resolved. Until the extension hears a
+  session its popup shows only Sign in / Create account and the Instagram inbox
+  reader reads nothing. Sign-out pauses a running campaign; a different user
+  signing in clears the last one's queue and inbox snapshot.
+- **Whose Instagram** — the extension reads whoever is logged in to instagram.com
+  in that browser, which is not necessarily the Operator. Every INBOX snapshot
+  carries its `viewer`; `DashboardShell` ingests it only when `viewer.id` equals
+  `AppConfig.instagramAccount.id`, which the Operator sets by confirming the
+  account on the Inbox's Connect screen. Never ingest a snapshot without that
+  match — that is how a second account showed the Owner's DMs.
 - **Lead construction** — sources hand raw rows to `intake()`. A Handle is lowercase,
   `@`-less and unique *by construction*; don't re-normalise at call sites.
 - **Inbox → Lead** — a Conversation reaches the Lead behind it only as an
@@ -256,6 +267,7 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # anon/publishable key — safe in
 VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($197/mo · $1,970/yr)
 VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin gate (admin-api enforces server-side)
 VITE_POSTHOG_KEY / VITE_POSTHOG_HOST         # PostHog project key (phc_, public) + ingestion host
+VITE_EXTENSION_URL                           # Chrome Web Store listing (onboarding, Inbox, extension notice)
 ```
 **Backend (Supabase Edge Function secrets — SECRET, never sent to the browser):**
 ```
@@ -269,6 +281,7 @@ RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails
 SEND_EMAIL_HOOK_SECRET                             # auth-email-hook
 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / OWNER_NOTIFY_EMAIL  # Owner signup/payment alerts (_shared/notify.ts; optional)
 RESEND_SEGMENT_ALL / RESEND_SEGMENT_CUSTOMERS      # Resend Broadcast segments (_shared/contacts.ts; optional) — docs/NOTIFICATIONS_SETUP.md
+EXTENSION_URL                                      # Chrome Web Store listing in the onboarding email (optional; defaults to the live listing)
 SOP_DOC_URL / ONBOARDING_CALL_URL                  # onboarding email links (optional; SOP defaults to bundled PDF, call URL defaults to cal.com/magnetengine/30min)
 ```
 Set via `supabase secrets set KEY=value`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.

@@ -6,9 +6,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#08080a">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <title>MagnetEngine | AI Lead Automation</title>
+    <!-- Search: the live page (/) targets "AI appointment setter". Every route
+         is this one file, so the canonical is written per path below; B and C
+         add their own noindex (LandingShell). -->
+    <title>AI Appointment Setter for Instagram | MagnetEngine</title>
     <meta name="description"
-        content="MagnetEngine finds your ideal Instagram leads, writes personalized DMs with AI, and sends them automatically — so your calendar fills itself.">
+        content="MagnetEngine is an AI appointment setter for Instagram. It finds your ideal clients, writes each one a personal DM, sends the ones you approve and drafts the replies that book the call.">
+    <script>
+        (function () {
+            var link = document.createElement('link');
+            link.rel = 'canonical';
+            link.href = 'https://magnetengine.xyz' + (location.pathname === '/' ? '/' : location.pathname.replace(/\/$/, ''));
+            document.head.appendChild(link);
+        })();
+    </script>
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="MagnetEngine">
+    <meta property="og:url" content="https://magnetengine.xyz/">
+    <meta property="og:title" content="MagnetEngine — the AI appointment setter for Instagram">
+    <meta property="og:description"
+        content="Finds your ideal clients on Instagram, writes each one a personal DM, sends the ones you approve and drafts the replies that book the call.">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="MagnetEngine — the AI appointment setter for Instagram">
+    <meta name="twitter:description"
+        content="Finds your ideal clients on Instagram, writes each one a personal DM, sends the ones you approve and drafts the replies that book the call.">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "MagnetEngine",
+        "alternateName": "MagnetEngine AI Appointment Setter",
+        "url": "https://magnetengine.xyz/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web, Chrome",
+        "description": "An AI appointment setter for Instagram: finds ideal clients, writes a personal DM for each, sends the approved ones from your own account and drafts the replies that book sales calls.",
+        "offers": {
+            "@type": "Offer",
+            "price": "197",
+            "priceCurrency": "USD",
+            "category": "subscription"
+        }
+    }
+    </script>
     <!-- Self-hosted type (see the @font-face rules in index.css). The Latin
          cut of the text face is the one file every page needs before it can
          paint its headline, so it is fetched alongside the HTML rather than

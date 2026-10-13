@@ -6,6 +6,7 @@ import {
     CheckCircle, Search, Filter, Timer, AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '../common/Toast';
+import { NumberField } from '../common/NumberField';
 import { filterUtils } from '../../lib/filters';
 import { storage, QUEUE_PAGE_SIZES, type QueuePageSize } from '../../lib/storage';
 import { sendCampaign } from '../../lib/extensionProtocol';
@@ -598,20 +599,18 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                     <legend className="sr-only">Minutes between DMs</legend>
                     <Timer className="w-3.5 h-3.5 text-white" aria-hidden />
                     <span className="text-label text-neutral-400 uppercase tracking-wider font-medium" aria-hidden>Gap</span>
-                    <input
-                        type="number"
+                    <NumberField
                         min={MIN_DELAY_MIN}
                         value={minDelay}
-                        onChange={e => commitDelay(Number(e.target.value), maxDelay)}
+                        onCommit={n => commitDelay(n, maxDelay)}
                         aria-label="Shortest gap between DMs, in minutes"
                         className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center tabular-nums focus:outline-none focus:ring-1 focus:ring-white/50"
                     />
                     <span className="text-xs text-neutral-400" aria-hidden>–</span>
-                    <input
-                        type="number"
+                    <NumberField
                         min={minDelay}
                         value={maxDelay}
-                        onChange={e => commitDelay(minDelay, Number(e.target.value))}
+                        onCommit={n => commitDelay(minDelay, n)}
                         aria-label="Longest gap between DMs, in minutes"
                         className="w-12 bg-surface border border-white/8 rounded-lg px-2 py-1 text-xs text-white text-center tabular-nums focus:outline-none focus:ring-1 focus:ring-white/50"
                     />
