@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, PlugZap } from 'lucide-react';
 import { EXTENSION_INSTALL_URL, type ExtensionStatus } from '../../lib/extensionProtocol';
+import { INBOX_PAUSED } from '../../lib/routes';
 
 /**
  * Says out loud what the app↔extension handshake found.
@@ -39,7 +40,7 @@ export const ExtensionNotice: React.FC<{ status: ExtensionStatus }> = ({ status 
         <p className="text-neutral-400 mt-0.5">
           {absent ? (
             <>
-              DMs, follow-ups and inbox replies all send through the browser
+              {INBOX_PAUSED ? 'DMs and follow-ups' : 'DMs, follow-ups and inbox replies'} all send through the browser
               extension — without it, approving a DM won&apos;t send anything.{' '}
               <a
                 href={EXTENSION_INSTALL_URL}

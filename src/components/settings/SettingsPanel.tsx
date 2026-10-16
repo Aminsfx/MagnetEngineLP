@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { sendCapOf } from '../../lib/plans';
 import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook, Bot } from 'lucide-react';
 import { AppConfig } from '../../lib/types';
+import { INBOX_PAUSED } from '../../lib/routes';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
 import { usePlan } from '../../contexts/PlanContext';
 import { useToast } from '../common/Toast';
@@ -630,7 +631,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                 </div>
             </div>
 
-            {/* ── AI Reply Assistant (Inbox) — `info`, it configures the AI ── */}
+            {/* ── AI Reply Assistant (Inbox) — `info`, it configures the AI ──
+                Hidden with the Inbox while INBOX_PAUSED is on. */}
+            {!INBOX_PAUSED && (
             <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
@@ -671,6 +674,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                     </label>
                 </div>
             </div>
+            )}
 
             {/* ── Integrations — Zapier / Make — `brand`, plumbing not AI ──── */}
             <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">

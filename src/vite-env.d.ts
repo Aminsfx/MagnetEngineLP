@@ -13,6 +13,9 @@ interface ImportMetaEnv {
     // 'true' only under `npm run demo` (.env.demo): the Campaign Builder scrapes
     // generated sample profiles instead of calling the `scrape` function.
     readonly VITE_SCRAPE_DEMO?: string;
+    // 'true' only under `npm run demo`: the Inbox shows sample conversations
+    // (src/lib/inboxDemo.ts) even while the real inbox reader is paused.
+    readonly VITE_INBOX_DEMO?: string;
     // PostHog's browser key and ingestion host are public client configuration.
     readonly VITE_POSTHOG_KEY?: string;
     readonly VITE_POSTHOG_HOST?: string;

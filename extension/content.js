@@ -128,120 +128,153 @@ if (!window.location.hostname.includes("instagram.com")) {
     }, false);
 }
 
-// ── Instagram: Inbox poller (read replies into the app) ─────────────
-// Runs from the instagram.com page context so the request is SAME-ORIGIN and
-// the user's session cookie attaches automatically (a background-worker fetch
-// would be cross-origin and IG's SameSite sessionid would NOT be sent). We read
-// IG's own private web JSON API — the same endpoints the website itself calls.
+// ── Instagram: Inbox reader (read replies into the app) ─────────────
+// Instagram's web app now loads DMs over GraphQL; igpage.js (in the page's own
+// world) passes each inbox response here, and igparse.js turns it into
+// threads. This half decides whether anything is forwarded — only for someone
+// signed in to MagnetEngine — and reports who is logged in to Instagram, which
+// the Inbox's Connect screen needs even before any thread has been read.
 if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxPoller) {
     window.__magnetInboxPoller = true;
 
     const IG_APP_ID = "936619743392459"; // public web app id used by instagram.com
     const POLL_MS = 100000;              // ~1.6 min — conservative for account health
+    const FROM_PAGE = 'magnet-engine-ig';
+    const TO_PAGE = 'magnet-engine-ig-ctl';
 
     const readCookie = (name) => {
         const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
         return m ? decodeURIComponent(m[1]) : '';
     };
 
-    // Normalize one IG thread → { threadId, handle, name, avatarUrl, messages[] }
-    function normalizeThread(thread) {
-        const viewerId = String(thread.viewer_id ?? '');
-        const other = (thread.users && thread.users[0]) || {};
-        const handle = other.username || '';
-        if (!handle) return null;
+    const igGet = (url) => fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+            'X-IG-App-ID': IG_APP_ID,
+            'X-ASBD-ID': '129477',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': readCookie('csrftoken'),
+        },
+    });
 
-        const messages = [];
-        for (const item of (thread.items || [])) {
-            // Only capture text-bearing items; skip reactions/media for MVP.
-            const text = typeof item.text === 'string' ? item.text
-                       : (item.link && item.link.text) ? item.link.text
-                       : '';
-            if (!text) continue;
-            const tsMicros = Number(item.timestamp) || 0;
-            messages.push({
-                id: String(item.item_id || `${thread.thread_id}_${tsMicros}`),
-                direction: String(item.user_id ?? '') === viewerId ? 'out' : 'in',
-                text,
-                createdAt: new Date(tsMicros ? tsMicros / 1000 : Date.now()).toISOString(),
-            });
+    // Who is logged in to instagram.com here — found WITHOUT the inbox, so the
+    // Connect screen works on any Instagram page. The id is the ds_user_id
+    // cookie; the username is the account's own edit-profile data, fetched once
+    // per id per tab. The inbox response adds the photo (it carries no
+    // username), so the two are combined rather than one replacing the other.
+    let viewerCache = null;
+    async function readViewer(fromInbox) {
+        const id = readCookie('ds_user_id');
+        if (!id) return null;                         // logged out of Instagram
+        if (!viewerCache || viewerCache.id !== id || !viewerCache.username) {
+            let username = '';
+            try {
+                const res = await igGet('https://www.instagram.com/api/v1/accounts/edit/web_form_data/');
+                if (res.ok) username = String((await res.json())?.form_data?.username || '');
+            } catch (e) {
+                console.debug('[MagnetEngine] viewer lookup error:', e && e.message);
+            }
+            const avatarUrl = viewerCache && viewerCache.id === id ? viewerCache.avatarUrl : '';
+            viewerCache = { id, username, avatarUrl };
         }
-        // IG returns items newest-first; store oldest-first.
-        messages.reverse();
-        if (messages.length === 0) return null;
-
-        return {
-            threadId: String(thread.thread_id || thread.thread_v2_id || ''),
-            handle,
-            name: other.full_name || '',
-            avatarUrl: other.profile_pic_url || '',
-            messages,
-        };
+        if (fromInbox && fromInbox.id === id) {
+            viewerCache = {
+                id,
+                username: viewerCache.username || fromInbox.username || '',
+                avatarUrl: fromInbox.avatarUrl || viewerCache.avatarUrl,
+            };
+        }
+        // A nameless viewer still lets the Operator connect ("this Instagram
+        // account"); the lookup is retried until it returns a name.
+        return viewerCache;
     }
 
-    // Who is logged in to instagram.com here. The inbox response names its
-    // viewer; the thread ids and the ds_user_id cookie are fallbacks for the id.
-    function readViewer(data, rawThreads) {
-        const v = (data && data.viewer) || {};
-        const id = String(v.pk ?? v.pk_id ?? v.id ?? rawThreads[0]?.viewer_id ?? readCookie('ds_user_id') ?? '');
-        if (!id) return null;
-        return { id, username: String(v.username || ''), avatarUrl: String(v.profile_pic_url || '') };
+    const signedIn = async () => {
+        try { return !!(await chrome.storage.local.get('account')).account; } catch { return false; }
+    };
+
+    const sync = (message) => {
+        if (!chrome?.runtime?.sendMessage) return;
+        chrome.runtime.sendMessage({ action: RUNTIME.INBOX_SYNC, ...message }, () => void chrome.runtime.lastError);
+    };
+
+    // Tell the page hook whether to poll. Nobody signed in to MagnetEngine in
+    // this browser: it reads and replays nothing.
+    async function tellPage() {
+        window.postMessage({ source: TO_PAGE, enabled: await signedIn() }, window.location.origin);
     }
 
-    async function pollInbox() {
+    // The viewer on its own, without threads: the worker updates who is logged
+    // in and keeps the threads it has.
+    async function reportViewer() {
         try {
-            // Nobody signed in to MagnetEngine in this browser: read nothing.
-            const { account } = await chrome.storage.local.get('account');
-            if (!account) return;
-
-            const csrf = readCookie('csrftoken');
-            const res = await fetch(
-                'https://www.instagram.com/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20',
-                {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'X-IG-App-ID': IG_APP_ID,
-                        'X-ASBD-ID': '129477',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRFToken': csrf,
-                    },
-                },
-            );
-            if (!res.ok) {
-                // 401/403 = logged out or challenge; just skip this cycle.
-                console.debug('[MagnetEngine] inbox poll skipped, status', res.status);
-                return;
-            }
-            const data = await res.json();
-            const rawThreads = (data && data.inbox && data.inbox.threads) || [];
-            const threads = rawThreads
-                .map(normalizeThread)
-                .filter((t) => t && t.threadId);
-            // Sent even with no threads: an account with an empty inbox still
-            // has to be seen before the Operator can connect it.
-            const viewer = readViewer(data, rawThreads);
-            if (!viewer) return;
-
-            if (chrome?.runtime?.sendMessage) {
-                chrome.runtime.sendMessage(
-                    { action: RUNTIME.INBOX_SYNC, threads, viewer },
-                    () => void chrome.runtime.lastError,
-                );
-            }
+            if (!(await signedIn())) return;
+            const viewer = await readViewer();
+            if (viewer) sync({ viewer });
         } catch (e) {
-            console.debug('[MagnetEngine] inbox poll error:', e && e.message);
+            console.debug('[MagnetEngine] viewer report error:', e && e.message);
         }
     }
 
-    // Let the session settle, then poll on an interval for the tab's lifetime.
-    setTimeout(pollInbox, 8000);
-    setInterval(pollInbox, POLL_MS);
+    // Inbox responses from the page hook, parsed here in the extension's world
+    // so a page script can only ever hand us data — never run our code.
+    // Opening the inbox makes Instagram send one response per visible thread
+    // (17 in a row on a real account), so they are gathered for a moment and
+    // sent to the worker as one sync.
+    const pending = new Map();
+    let pendingViewer = null;
+    let flushTimer = null;
 
-    // Someone just signed in to the dashboard: read now rather than at the
-    // next tick, so connecting their Instagram doesn't wait a minute and a half.
+    async function flush() {
+        flushTimer = null;
+        const threads = [...pending.values()];
+        pending.clear();
+        const fromInbox = pendingViewer;
+        pendingViewer = null;
+        try {
+            if (!(await signedIn())) return;
+            const who = await readViewer(fromInbox);
+            if (who && threads.length) sync({ threads, viewer: who, partial: true });
+        } catch (e) {
+            console.debug('[MagnetEngine] inbox sync error:', e && e.message);
+        }
+    }
+
+    window.addEventListener('message', (event) => {
+        if (event.source !== window || !event.data || event.data.source !== FROM_PAGE) return;
+        try {
+            const { threads, viewer } = parseSlideInbox(event.data.data);
+            for (const t of threads) {
+                const prev = pending.get(t.threadId);
+                if (!prev) { pending.set(t.threadId, t); continue; }
+                const byId = new Map(prev.messages.map((m) => [m.id, m]));
+                for (const m of t.messages) byId.set(m.id, m);
+                pending.set(t.threadId, {
+                    ...prev,
+                    handle: t.handle || prev.handle,
+                    name: t.name || prev.name,
+                    avatarUrl: t.avatarUrl || prev.avatarUrl,
+                    messages: [...byId.values()],
+                });
+            }
+            if (viewer && !pendingViewer) pendingViewer = viewer;
+            if (pending.size && !flushTimer) flushTimer = setTimeout(flush, 1500);
+        } catch (e) {
+            console.debug('[MagnetEngine] inbox parse error:', e && e.message);
+        }
+    });
+
+    tellPage();
+    setTimeout(reportViewer, 8000);
+    setInterval(reportViewer, POLL_MS);
+
+    // Someone just signed in (or out) of the dashboard: follow at once rather
+    // than at the next tick, so connecting doesn't wait a minute and a half.
     chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes.account && changes.account.newValue) setTimeout(pollInbox, 2000);
+        if (area !== 'local' || !changes.account) return;
+        tellPage();
+        if (changes.account.newValue) setTimeout(reportViewer, 2000);
     });
 }
 

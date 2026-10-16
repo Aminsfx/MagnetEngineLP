@@ -4,6 +4,7 @@ import { CheckCircle2, Circle, X, ChevronRight, Rocket } from 'lucide-react';
 import { Lead, AppConfig } from '../../lib/types';
 import { alpha, CARD_BEZEL, CHANNEL } from '../../lib/theme';
 import { EXTENSION_INSTALL_URL, type ExtensionStatus } from '../../lib/extensionProtocol';
+import { INBOX_PAUSED } from '../../lib/routes';
 
 interface OnboardingChecklistProps {
   leads: Lead[];
@@ -33,7 +34,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
   // first. 'checking' counts as not yet — it settles within a few seconds.
   const extensionInstalled = extension.state === 'ready' || extension.state === 'legacy';
 
-  const steps: Step[] = [
+  const allSteps: Step[] = [
     {
       id: 'extension',
       label: 'Install the Chrome extension',
@@ -92,6 +93,8 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
       complete: leads.some((l) => l.dmSent),
     },
   ];
+  // Connecting Instagram leads to the Inbox, which is hidden while paused.
+  const steps = INBOX_PAUSED ? allSteps.filter((s) => s.id !== 'instagram') : allSteps;
 
   const completedCount = steps.filter((s) => s.complete).length;
   const allComplete = completedCount === steps.length;

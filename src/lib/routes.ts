@@ -34,6 +34,27 @@ export const DASHBOARD_ROUTES = [
 export type DashboardPath = (typeof DASHBOARD_ROUTES)[number]['path'];
 
 /**
+ * The switch that hides the Inbox. It was on from 2026-10-14 while Instagram's
+ * move to a GraphQL inbox left the extension unable to read replies; the
+ * extension's reader was rebuilt for it (extension/igpage.js + igparse.js).
+ * Set it to `true` again to hide the Inbox without deleting anything: the
+ * route then redirects to /dashboard, and the nav item, onboarding step,
+ * "to answer" counts, the AI Reply Assistant settings and autopilot all stand
+ * down.
+ */
+export const INBOX_PAUSED = false;
+
+/**
+ * `npm run demo` shows the Inbox over sample conversations (src/lib/inboxDemo.ts)
+ * even while it is paused, so its triage and copilot can be seen. Nothing in
+ * the demo is sent or saved.
+ */
+export const INBOX_DEMO = import.meta.env.VITE_INBOX_DEMO === 'true';
+
+/** Whether the Inbox is out of the nav and its route redirects. */
+export const INBOX_HIDDEN = INBOX_PAUSED && !INBOX_DEMO;
+
+/**
  * True when `pathname` is owned by the dashboard shell. Sub-paths count, so
  * `/queue/lead-1` stays inside the shell instead of falling through to the
  * public 404.

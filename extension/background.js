@@ -149,13 +149,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // ── Inbox snapshot from the IG content-script poller ───────────────────
     // Store the latest snapshot and push it to any open dashboard tab so the
     // app can persist conversations/messages to Supabase and render the inbox.
+    // Instagram hands the inbox over in pieces — the thread list, one thread,
+    // older messages — so `threads` is merged into the snapshot rather than
+    // replacing it. A sync with no `threads` only says who is logged in. A
+    // snapshot read from another Instagram account is never kept or re-sent
+    // under this one.
     if (kind === RUNTIME.INBOX_SYNC) {
-        const threads = Array.isArray(request.threads) ? request.threads : [];
         const viewer = request.viewer && request.viewer.id ? request.viewer : null;
-        chrome.storage.local.set({ inboxThreads: threads, inboxViewer: viewer, inboxSyncedAt: Date.now() }, () => {
-            broadcastToApp({ type: EXT_TO_APP.INBOX, threads, viewer });
+        const incoming = Array.isArray(request.threads) ? request.threads : null;
+        chrome.storage.local.get(['inboxThreads', 'inboxViewer'], (stored) => {
+            const sameViewer = !!viewer && stored.inboxViewer?.id === viewer.id;
+            const base = sameViewer ? (stored.inboxThreads || []) : [];
+            const threads = incoming ? mergeInboxThreads(base, incoming) : base;
+            const patch = incoming || !sameViewer
+                ? { inboxThreads: threads, inboxViewer: viewer, inboxSyncedAt: Date.now() }
+                : { inboxViewer: viewer };
+            chrome.storage.local.set(patch, () => {
+                broadcastToApp({ type: EXT_TO_APP.INBOX, threads, viewer });
+                sendResponse({ status: 'ok', count: threads.length });
+            });
         });
-        sendResponse({ status: 'ok', count: threads.length });
         return true;
     }
 
@@ -400,6 +413,40 @@ chrome.runtime.onStartup?.addListener(() => {
         }
     });
 });
+
+// ── Inbox snapshot merging ────────────────────────────────────────
+const INBOX_MAX_THREADS = 60;
+const INBOX_MAX_MESSAGES = 40;
+
+/**
+ * Fold freshly read threads into the stored snapshot. A thread keeps the
+ * handle, name and photo it already had when the new read lacks them (a
+ * history-only response carries none), messages are unioned by id, and a
+ * thread still without a handle is dropped — it cannot be matched to anyone.
+ */
+function mergeInboxThreads(stored, incoming) {
+    const byId = new Map(stored.map((t) => [t.threadId, t]));
+    for (const t of incoming) {
+        if (!t || !t.threadId) continue;
+        const prev = byId.get(t.threadId);
+        const messages = new Map((prev ? prev.messages : []).map((m) => [m.id, m]));
+        for (const m of t.messages || []) messages.set(m.id, m);
+        byId.set(t.threadId, {
+            threadId: t.threadId,
+            handle: t.handle || (prev && prev.handle) || '',
+            name: t.name || (prev && prev.name) || '',
+            avatarUrl: t.avatarUrl || (prev && prev.avatarUrl) || '',
+            messages: [...messages.values()]
+                .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+                .slice(-INBOX_MAX_MESSAGES),
+        });
+    }
+    const last = (t) => (t.messages.length ? t.messages[t.messages.length - 1].createdAt : '');
+    return [...byId.values()]
+        .filter((t) => t.handle)
+        .sort((a, b) => String(last(b)).localeCompare(String(last(a))))
+        .slice(0, INBOX_MAX_THREADS);
+}
 
 // ── Notify open MagnetEngine dashboard tabs ───────────────────────
 // The content script on those tabs relays the message into the page.

@@ -59,6 +59,25 @@ function differs(a: Conversation, b: Conversation): boolean {
 }
 
 /**
+ * Instagram's retired REST inbox numbered messages (`item_id`, all digits);
+ * the GraphQL inbox that replaced it in August 2026 uses a different id for
+ * the same message. A thread read under both would show its last few messages
+ * twice, so a new-format message is dropped when a numeric one already holds
+ * the same words, from the same side, within two minutes.
+ */
+const LEGACY_ID = /^\d+$/;
+const SAME_MESSAGE_WINDOW_MS = 120_000;
+
+function isLegacyCopy(m: RawThread['messages'][number], legacy: Message[] | undefined): boolean {
+    if (!legacy || LEGACY_ID.test(m.id)) return false;
+    const t = new Date(m.createdAt).getTime();
+    return legacy.some((old) =>
+        old.direction === m.direction
+        && old.text === m.text
+        && Math.abs(new Date(old.createdAt).getTime() - t) <= SAME_MESSAGE_WINDOW_MS);
+}
+
+/**
  * Merge a fresh snapshot into existing state. Pure — see `createInboxLog` for
  * the stateful wrapper that owns hydration ordering.
  *
@@ -80,10 +99,18 @@ export function ingestThreads(
 ): IngestResult {
     const msgById = new Map(prevMessages.map((m) => [m.id, m]));
     const newMessages: Message[] = [];
+    const legacyByConv = new Map<string, Message[]>();
+    for (const m of prevMessages) {
+        if (!LEGACY_ID.test(m.id)) continue;
+        const arr = legacyByConv.get(m.conversationId);
+        if (arr) arr.push(m);
+        else legacyByConv.set(m.conversationId, [m]);
+    }
 
     for (const t of threads) {
         for (const m of t.messages) {
             if (msgById.has(m.id) || suppressedIds.has(m.id)) continue;
+            if (isLegacyCopy(m, legacyByConv.get(t.threadId))) continue;
 
             if (m.direction === 'out') {
                 const sig = echoSignature(t.threadId, m.text);

@@ -5,9 +5,9 @@ import type { CSSProperties } from 'react';
  *
  * Two places in this app take a colour as a value rather than a class name, and
  * neither can reach a Tailwind utility: Recharts wants `stroke`/`fill` as props
- * (`ConversionChart`), and the card bezel is an inline `style` because a 1px
- * gradient border is not expressible as a utility (`TodayPanel`, `Funnel`,
- * `AIAnalyst`, `FollowUpSequencer`, `AdminPage`, `ProfilePage`, …). Those
+ * (charts), and the card bezel is an inline `style` because a 1px
+ * gradient border is not expressible as a utility (`RevenueFunnel`,
+ * `WeeklyReport`, `FollowUpSequencer`, `AdminPage`, `ProfilePage`, …). Those
  * needs are why the literals were copy-pasted — the bezel pair alone appeared
  * verbatim at 16 sites — so they live here once instead of being re-derived.
  *

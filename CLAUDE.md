@@ -9,7 +9,7 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 - **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. Every surface — dashboard, auth, legal, the extension popup — is black and white, with `positive` (emerald) and `danger` (red) as its only two hues; orange (`brand`) survives only in the unrouted, retired `src/pages/LandingPage.tsx`. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
 - **React Router v7** — public: `/` (landing A), `/lp/b` and `/lp/c` (A/B-test variants, `noindex`; `/preview/a|b|c` redirect to them), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
-- **Recharts** — last-7-days outreach chart (real data from lead `dmDate`/`replyDate`)
+- **Dashboard reports** — `src/lib/reports.ts`: revenue, the outcome funnel and the weekly report, computed from Lead milestone dates (no chart library)
 - **Lucide React** — icons
 - **HikerAPI** — Instagram REST API for lead scraping (nine sources; see below)
 
@@ -33,10 +33,8 @@ src/
       ApprovalQueue.tsx          # Review / edit / approve / reject DMs
       FollowUpSequencer.tsx      # Multi-touch sequences (Pro+)
     dashboard/
-      TodayPanel.tsx             # What's waiting on the Operator, each row linking to where to deal with it
-      Pipeline.tsx               # Found → Written → Approved → Sent → Replied → Booked, linear bars + step rates
-      AIAnalyst.tsx              # "Suggestions": rule-based notes from DashboardStats (no invented benchmarks)
-      ConversionChart.tsx        # Last-7-days sends/replies chart (real data)
+      RevenueFunnel.tsx          # Revenue / cash collected / to collect + New → Contact → Qualified → Booked → Won funnel, per period
+      WeeklyReport.tsx           # Monday–Sunday report: new, qualified, booked, won, openers, follow-ups, replies
       OnboardingChecklist.tsx    # First-run checklist
     settings/
       SettingsPanel.tsx          # AI Prompt Wizard + Lead Filtering Rules
@@ -390,7 +388,7 @@ is metered by the `generate-dm` function against `dm_usage` using the service
 role; users can read their own count but never write it.
 
 ## AI SDR Inbox (extension inbox poller → generate-reply Edge Function)
-- The extension content script (on instagram.com) polls IG's private web JSON API (`/api/v1/direct_v2/inbox`) SAME-ORIGIN (so the session cookie attaches), normalizes threads, and pushes them to `background.js` (`INBOX_SYNC`). Background stores a snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab.
+- Instagram retired the web REST inbox (`/api/v1/direct_v2/`, 404 since Aug 2026) and moved DMs to GraphQL. `extension/igpage.js` runs in instagram.com's MAIN world at `document_start`, hooks the page's own XHR/fetch, and passes the inbox responses it sees (`PolarisDirectInboxQuery`, `IGDThreadListOffMsysPaginationQuery`, `IGDThreadDetailQuery`, `IGDMessageListOffMsysQuery`) to `content.js` by `postMessage`; it polls by replaying the page's last `PolarisDirectInboxQuery` every ~100 s, so a rotated `doc_id` heals on the next page load. `extension/igparse.js` (pure, tested by `src/lib/igparse.test.ts`) turns a response into threads by finding every `as_ig_direct_thread`. `content.js` forwards only for a signed-in Operator (`INBOX_SYNC`, `partial`); `background.js` merges into the stored snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab. Threads appear once the Instagram tab has loaded the inbox page at least once.
 - `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).
 - AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
 - Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
@@ -427,7 +425,7 @@ npm run preview  # Preview production build
 ## Design System
 **`docs/DESIGN-TOKENS.md` is the contract — read it before you type a colour.**
 Tokens live in `tailwind.config.js` (class names) and `src/lib/theme.ts` (raw
-hex/rgba, for Recharts props and inline styles, which no utility can reach).
+hex/rgba, for SVG props and inline styles, which no utility can reach).
 - Surfaces by depth, not by eyedropper: `surface` `#08080a` (app background),
   `surface-raised` `#101014` (cards), `surface-sunken` `#0c0c0f` (dashboard
   cards), `surface-overlay` `#16161b` (menus, popovers). No new arbitrary

@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MagnetEngine – AI Appointment Setter & Instagram DM Automation",
-  "version": "1.8.0",
+  "version": "1.9.0",
+  "minimum_chrome_version": "111",
   "description": "AI appointment setter for Instagram: sends the AI-written DMs and follow-ups you approve, then syncs the replies so you book calls.",
   "permissions": [
     "storage",
@@ -25,8 +26,19 @@
       ],
       "js": [
         "protocol.js",
+        "igparse.js",
         "content.js"
       ]
+    },
+    {
+      "matches": [
+        "https://*.instagram.com/*"
+      ],
+      "js": [
+        "igpage.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

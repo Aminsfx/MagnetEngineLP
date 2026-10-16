@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Inbox as InboxIcon, Send, Sparkles, Loader2, Search, Tag, X,
-  Bot, Calendar, MessageSquare, ChevronLeft,
+  Inbox as InboxIcon, Send, Search, Tag, X,
+  Bot, Calendar, MessageSquare, ChevronLeft, ArrowRight,
 } from 'lucide-react';
 import type { Conversation, Message, AppConfig, ConversationIntent } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
@@ -9,12 +9,16 @@ import { useToast } from '../common/Toast';
 import { posthogCapture } from '../../lib/posthog';
 import type { InstagramViewer } from '../../lib/extensionProtocol';
 import { igName } from './ConnectInstagram';
+import { Copilot } from './Copilot';
+import type { Suggestion } from '../../lib/copilot';
+import { triage, byPriority, PRIORITY_LABEL, QUALIFICATION_LABEL, type Priority, type Triage } from '../../lib/triage';
 
 interface InboxViewProps {
   conversations: Conversation[];
   messages: Message[];
   config: AppConfig;
-  onGenerateReply: (conv: Conversation) => Promise<ReplyResult>;
+  /** `instruction` steers one copilot suggestion; without it, the reply prompt as written. */
+  onGenerateReply: (conv: Conversation, instruction?: string) => Promise<ReplyResult>;
   onSendReply: (conv: Conversation, text: string) => Promise<void> | void;
   onUpdateConversation: (conv: Conversation) => void;
   onUpdateConfig: (config: AppConfig) => Promise<void> | void;
@@ -23,7 +27,23 @@ interface InboxViewProps {
   onDisconnectInstagram: () => void;
 }
 
-type Filter = 'all' | 'needs_reply' | 'interested' | 'booked';
+type Filter = 'all' | 'qualified' | 'objection' | 'booked';
+
+/** How loud each priority is in the list: one solid dot, one faint, one barely there. */
+const PRIORITY_DOT: Record<Priority, string> = {
+  high: 'bg-white',
+  medium: 'bg-white/45',
+  low: 'bg-white/15',
+};
+
+/** Booked is the funnel's good outcome; a qualified lead or an objection is worth your eye; the rest is chrome. */
+const QUALIFICATION_CLS: Record<Triage['qualification'], string> = {
+  booked: 'text-positive-300 border-positive-500/30 bg-positive-500/10',
+  qualified: 'text-white border-white/30 bg-white/10',
+  objection: 'text-white border-white/30 bg-white/10',
+  unqualified: 'text-neutral-400 border-white/10 bg-white/5',
+  unknown: 'text-neutral-400 border-white/10 bg-white/5',
+};
 
 /**
  * One role per intent. Every intent is the AI reading a Conversation, so
@@ -73,28 +93,41 @@ export const InboxView: React.FC<InboxViewProps> = ({
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
-  const [generating, setGenerating] = useState(false);
   const [labelInput, setLabelInput] = useState('');
+  // Copilot suggestions per thread state, kept while the Inbox is open.
+  const [copilotCache] = useState(() => new Map<string, Suggestion[]>());
 
-  const counts = useMemo(() => ({
-    all: conversations.length,
-    needs_reply: conversations.filter((c) => c.needsReply).length,
-    interested: conversations.filter((c) => c.intent === 'interested').length,
-    booked: conversations.filter((c) => c.status === 'booked' || c.intent === 'booked').length,
-  }), [conversations]);
+  const triaged = useMemo(
+    () => conversations.map((c) => ({ c, t: triage(c, { hasBookingLink: !!config.calendarLink }) })),
+    [conversations, config.calendarLink],
+  );
+  const triageOf = useMemo(() => new Map<string, Triage>(triaged.map(({ c, t }) => [c.id, t])), [triaged]);
 
-  const filtered = useMemo(() => {
+  const matchesFilter = (q: Triage['qualification'], f: Filter) =>
+    f === 'all' || (f === 'qualified' ? q === 'qualified' : f === 'objection' ? q === 'objection' : q === 'booked');
+
+  const counts = useMemo(() => {
+    const n = (f: Filter) => triaged.filter(({ t }) => matchesFilter(t.qualification, f)).length;
+    return { all: triaged.length, qualified: n('qualified'), objection: n('objection'), booked: n('booked') };
+  }, [triaged]);
+
+  const attention = useMemo(() => triaged.filter(({ t }) => t.priority === 'high').length, [triaged]);
+
+  /** The list, sorted by priority and cut into its groups. */
+  const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return conversations
-      .filter((c) => {
-        if (filter === 'needs_reply' && !c.needsReply) return false;
-        if (filter === 'interested' && c.intent !== 'interested') return false;
-        if (filter === 'booked' && c.status !== 'booked' && c.intent !== 'booked') return false;
+    const items = triaged
+      .filter(({ c, t }) => {
+        if (!matchesFilter(t.qualification, filter)) return false;
         if (q && !c.handle.toLowerCase().includes(q) && !(c.name ?? '').toLowerCase().includes(q)) return false;
         return true;
       })
-      .sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''));
-  }, [conversations, filter, search]);
+      .sort(byPriority);
+    return (['high', 'medium', 'low'] as Priority[])
+      .map((priority) => ({ priority, items: items.filter(({ t }) => t.priority === priority) }))
+      .filter((g) => g.items.length > 0);
+  }, [triaged, filter, search]);
+  const listed = groups.reduce((n, g) => n + g.items.length, 0);
 
   const selected = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,
@@ -115,20 +148,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
     if (c.unread) onUpdateConversation({ ...c, unread: false });
   };
 
-  const handleGenerate = async () => {
-    if (!selected) return;
-    setGenerating(true);
-    try {
-      const result = await onGenerateReply(selected);
-      setDraft(result.reply);
-      const meta = INTENT_META[result.intent];
-      if (meta) toast.info(`Draft ready · ${meta.label}`);
-    } catch (e: any) {
-      toast.error(`Couldn't generate a reply: ${e?.message ?? 'unknown error'}`);
-    } finally {
-      setGenerating(false);
-    }
-  };
+  const generateFor = useCallback(
+    (instruction?: string) => (selected ? onGenerateReply(selected, instruction) : Promise.reject(new Error('No conversation'))),
+    [onGenerateReply, selected],
+  );
+  const selectedTriage = selected ? triageOf.get(selected.id) : undefined;
 
   const handleSend = async () => {
     if (!selected || !draft.trim()) return;
@@ -166,8 +190,8 @@ export const InboxView: React.FC<InboxViewProps> = ({
 
   const filterTabs: Array<{ key: Filter; label: string }> = [
     { key: 'all', label: 'All' },
-    { key: 'needs_reply', label: 'Needs reply' },
-    { key: 'interested', label: 'Interested' },
+    { key: 'qualified', label: 'Qualified' },
+    { key: 'objection', label: 'Objections' },
     { key: 'booked', label: 'Booked' },
   ];
 
@@ -177,7 +201,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
       <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight leading-none">Inbox</h1>
-          <p className="text-neutral-400 text-sm mt-1.5">Every reply in one place, with an AI draft ready for you to check and send.</p>
+          <p className="text-neutral-400 text-sm mt-1.5">
+            {attention > 0
+              ? <><span className="text-white font-medium">{attention} {attention === 1 ? 'conversation needs' : 'conversations need'} you now.</span> Sorted by priority, with the next step for each.</>
+              : 'Every reply in one place, sorted by priority, with the next step for each.'}
+          </p>
           <p className="text-meta text-neutral-400 mt-2">
             Connected: <span className="text-white font-medium">{igName(account)}</span>
             {' · '}
@@ -229,7 +257,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
       {/* Two-pane */}
       <div className="flex flex-1 min-h-0 gap-4">
         {/* ── Left: thread list ── */}
-        <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-[340px] flex-shrink-0 rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden`}>
+        <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-[264px] xl:w-[288px] flex-shrink-0 rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden`}>
           {/* Search + filters */}
           <div className="p-3 border-b border-white/5 space-y-2.5">
             <div className="relative">
@@ -258,52 +286,58 @@ export const InboxView: React.FC<InboxViewProps> = ({
             </div>
           </div>
 
-          {/* List */}
+          {/* List, in priority groups */}
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {listed === 0 ? (
               <div className="p-8 text-center text-neutral-400 text-sm flex flex-col items-center gap-3">
                 <InboxIcon className="w-8 h-8 text-neutral-400" />
                 {conversations.length === 0
-                  ? 'No conversations yet. Keep Instagram open in another tab with the MagnetEngine extension running — replies to your DMs will show up here.'
+                  ? 'No conversations yet. Open your Instagram inbox (instagram.com/direct/inbox) in this browser with the MagnetEngine extension installed, and keep the tab open — replies to your DMs show up here within a couple of minutes.'
                   : 'No conversations match this filter.'}
               </div>
             ) : (
-              filtered.map((c) => {
-                const active = c.id === selectedId;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => openConversation(c)}
-                    className={`w-full text-left px-3 py-3 border-b border-white/[0.04] flex gap-3 transition-colors ${
-                      active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.03]'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {c.avatarUrl
-                        ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        : <span className="text-label font-bold text-neutral-400 uppercase">{c.handle[0] ?? '?'}</span>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-white font-medium truncate">@{c.handle}</span>
-                        <span className="text-label text-neutral-400 flex-shrink-0">{timeAgo(c.lastMessageAt)}</span>
-                      </div>
-                      <p className="text-xs text-neutral-400 truncate mt-0.5">{c.lastMessageText ?? ''}</p>
-                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        {c.needsReply && (
-                          <span className="text-label px-1.5 py-0.5 rounded-full text-white border border-white/30 bg-white/10 font-medium">Needs reply</span>
-                        )}
-                        {c.intent && (
-                          <span className={`text-label px-1.5 py-0.5 rounded-full border font-medium ${INTENT_META[c.intent].cls}`}>{INTENT_META[c.intent].label}</span>
-                        )}
-                        {c.account && (
-                          <span className="text-label px-1.5 py-0.5 rounded-full text-neutral-400 border border-white/[0.08]">{c.account}</span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+              groups.map(({ priority, items }) => (
+                <section key={priority} aria-label={PRIORITY_LABEL[priority]}>
+                  <h2 className="sticky top-0 z-10 px-3 py-1.5 bg-surface-raised/95 backdrop-blur border-b border-white/[0.04] flex items-center gap-2 text-label font-semibold text-neutral-300">
+                    <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOT[priority]}`} aria-hidden />
+                    {PRIORITY_LABEL[priority]}
+                    <span className="text-neutral-500 font-normal tabular-nums">{items.length}</span>
+                  </h2>
+                  {items.map(({ c, t }) => {
+                    const active = c.id === selectedId;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => openConversation(c)}
+                        className={`w-full text-left px-3 py-3 border-b border-white/[0.04] flex gap-3 transition-colors ${
+                          active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.03]'
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-800 border border-white/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                          {c.avatarUrl
+                            ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            : <span className="text-label font-bold text-neutral-400 uppercase">{c.handle[0] ?? '?'}</span>}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-sm text-white truncate ${c.unread ? 'font-semibold' : 'font-medium'}`}>@{c.handle}</span>
+                            <span className="text-label text-neutral-400 flex-shrink-0">{timeAgo(c.lastMessageAt)}</span>
+                          </div>
+                          <p className="text-xs text-neutral-400 truncate mt-0.5">{c.lastMessageText ?? ''}</p>
+                          <div className="flex items-center gap-1.5 mt-1.5 min-w-0">
+                            <span className={`flex-none text-label px-1.5 py-0.5 rounded-full border font-medium ${QUALIFICATION_CLS[t.qualification]}`}>
+                              {QUALIFICATION_LABEL[t.qualification]}
+                            </span>
+                            <span className={`text-label truncate ${t.priority === 'high' ? 'text-white' : 'text-neutral-400'}`}>
+                              {t.nextAction}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </section>
+              ))
             )}
           </div>
         </div>
@@ -329,7 +363,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                   <a href={`https://instagram.com/${selected.handle}`} target="_blank" rel="noreferrer" className="text-sm text-white font-medium hover:text-white truncate block">@{selected.handle}</a>
-                  {selected.name && <p className="text-label text-neutral-400 truncate">{selected.name}</p>}
+                  {selectedTriage ? (
+                    <p className="text-label text-neutral-400 truncate flex items-center gap-1">
+                      <ArrowRight className="w-3 h-3 flex-none" aria-hidden />
+                      <span className={selectedTriage.priority === 'high' ? 'text-white' : ''}>{selectedTriage.nextAction}</span>
+                    </p>
+                  ) : selected.name && <p className="text-label text-neutral-400 truncate">{selected.name}</p>}
                 </div>
                 {selected.intent && (
                   <span className={`text-label px-2 py-1 rounded-full border font-medium ${INTENT_META[selected.intent].cls}`}>{INTENT_META[selected.intent].label}</span>
@@ -384,24 +423,25 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 )}
               </div>
 
-              {/* Composer + AI draft */}
-              <div className="border-t border-white/5 p-3 flex-shrink-0 space-y-2">
+              {/* Copilot + composer */}
+              <div className="flex-shrink-0">
+              <Copilot
+                key={`${selected.id}:${selected.lastMessageAt ?? ''}`}
+                threadKey={`${selected.id}:${selected.lastMessageAt ?? ''}`}
+                cache={copilotCache}
+                auto={selected.needsReply && selectedTriage?.qualification !== 'unqualified'}
+                generate={generateFor}
+                onPick={setDraft}
+              />
+              <div className="p-3 space-y-2">
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  rows={2}
-                  placeholder="Write a reply, or let the AI draft one…"
+                  rows={3}
+                  placeholder="Write a reply, or pick one of the copilot's…"
                   className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/[0.08] text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/40 resize-none"
                 />
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-neutral-300 text-xs font-medium hover:text-white hover:border-white/30 transition-colors disabled:opacity-50"
-                  >
-                    {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}
-                    {generating ? 'Drafting…' : 'AI draft'}
-                  </button>
                   <button
                     onClick={handleSend}
                     disabled={!draft.trim()}
@@ -411,6 +451,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   </button>
                 </div>
                 <p className="text-label text-neutral-400">The extension sends this reply from your logged-in Instagram, paced by your DM delay.</p>
+              </div>
               </div>
             </>
           )}

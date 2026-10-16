@@ -16,7 +16,8 @@ export const MONTHLY_DMS = '1,500';
 export const TRIAL_CTA = 'Start the 3-day trial';
 
 /**
- * Short on purpose: one or two sentences each, owner's call (2026-09-24).
+ * Only the questions a buyer actually hesitates on — the objections — owner's
+ * call (2026-10-14). Short on purpose: one or two sentences each (2026-09-24).
  *
  * The account question is answered with what is true of how MagnetEngine
  * works — no password asked for, no login stored, sends from the Operator's
@@ -30,31 +31,58 @@ export const TRIAL_CTA = 'Start the 3-day trial';
  */
 export const FAQ_ITEMS = [
     {
-        question: 'What is an AI appointment setter?',
-        answer: "Software that does a setter's job: finds prospects, starts the conversation and moves the interested ones toward a booked call. MagnetEngine does it on Instagram, and you approve every first message.",
-    },
-    {
-        question: 'How does it send the messages?',
-        answer: 'Through the MagnetEngine Chrome extension, from your own Instagram account, at a human pace.',
-    },
-    {
         question: 'Will this get my Instagram account banned?',
         answer: "We never ask for your Instagram password and never store your login. The messages go out from the Instagram you're already signed into, in your own browser — one at a time, like a person, and only the ones you approved.",
     },
     {
-        question: 'Is every message really different?',
-        answer: 'Yes. Each DM is written for the person receiving it, and you approve every one before it goes out.',
+        question: 'Do you store my Instagram login or data?',
+        answer: "No. MagnetEngine works from the Instagram account you're already signed into, in your own browser, so nothing that opens your account sits on our servers. The leads and drafts you work on stay in your private workspace, visible only to you.",
     },
     {
-        question: 'How much of my time does it take?',
-        answer: 'About ten minutes a day to review and approve. Answering the replies is where your time goes.',
+        question: "Won't the DMs sound like a bot?",
+        answer: 'Each DM is written for the person receiving it, from their own profile — no templates, no merge tags. And you read and approve every first message before it goes out.',
     },
     {
-        question: 'Do I need API keys or an AI account?',
-        answer: 'No. The AI is built in and included in your subscription.',
+        question: 'Can MagnetEngine replace my setters with AI?',
+        answer: 'It takes over the repetitive part of the job: finding prospects, writing every opener, following up, and suggesting the next reply in each conversation. You stay in charge of what gets sent.',
     },
     {
-        question: 'Can I cancel?',
-        answer: 'Yes. Cancel before your 3-day trial ends and you pay nothing.',
+        question: "I don't have time for another tool.",
+        answer: 'Setup takes about ten minutes: add the Chrome extension and tell the AI about your offer. After that it is ten minutes a day to approve drafts. No developers, no API keys.',
     },
+    {
+        question: 'What if it doesn’t work for my niche?',
+        answer: "The 3-day trial gives you the whole product, so you can search your niche and send your first DMs before you're charged. If the conversations don't start, cancel before day 4 and you pay nothing.",
+    },
+];
+
+/**
+ * Client messages for the testimonials wall, exactly as the client sent them.
+ * Names and avatars are always drawn blurred, so the quote is the proof and
+ * the person stays private.
+ *
+ * Only real messages belong here. An entry marked `example` is a layout
+ * placeholder: it renders on localhost with an "Example" tag and never in a
+ * production build, and the whole section disappears from production while
+ * no real entry exists — a made-up testimonial is a fake review.
+ */
+export interface Testimonial {
+    quote: string;
+    /** Drawn blurred. Kept for the record of who said it. */
+    name: string;
+    /** As shown on the original message, e.g. "8:17 PM". */
+    time?: string;
+    reactions?: Array<[emoji: string, count: number]>;
+    example?: boolean;
+}
+
+// What customers told the owner about MagnetEngine, as the owner reported it
+// on 2026-10-16 — first person, nothing added: no timestamps or reactions,
+// because the owner gave none and invented ones would dress these up as
+// screenshots. Swap in each customer's exact words when you have them.
+export const TESTIMONIALS: Testimonial[] = [
+    { name: 'Jack', quote: 'I love this software. I got a lot of clients from it.' },
+    { name: 'Daniel', quote: "Without this tool I wouldn't have gotten my first ever client." },
+    { name: 'Customer', quote: "The scraping is what got me so many replies — I could go after my competitors' leads." },
+    { name: 'Customer', quote: "I use MagnetEngine every day. Without it I wouldn't have started my agency." },
 ];

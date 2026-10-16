@@ -2,10 +2,11 @@ import React from 'react';
 import { Search, PenLine, CheckCheck, Send } from 'lucide-react';
 import {
     LandingShell, Hero, ProductPreview, MarqueeBand, Section, Heading, Em, Panel, Pipeline,
-    Pricing, FAQ, Close, type Step,
+    Pricing, FAQ, Close, Testimonials, type Step,
 } from '../../components/landing/kit';
 import { MONTHLY_DMS } from '../../components/landing/content';
 import { DMStream } from '../../components/landing/motion/DMStream';
+import { HormoziClip } from '../../components/landing/HormoziClip';
 import type { NavItem } from '../../components/landing/Header';
 
 /**
@@ -128,6 +129,8 @@ const VariantA: React.FC = () => (
             </div>
         </Section>
 
+        <HormoziClip />
+
         <Section id="how">
             <div className="max-w-6xl mx-auto">
                 <Heading className="mb-16 max-w-2xl">
@@ -168,6 +171,8 @@ const VariantA: React.FC = () => (
                 </Panel>
             </div>
         </Section>
+
+        <Testimonials />
 
         <Pricing
             heading={

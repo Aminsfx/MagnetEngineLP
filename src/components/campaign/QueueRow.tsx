@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Sparkles, Trash2, Check, X, Edit3, Users, MessageSquare, MapPin,
-    CheckCircle, XCircle, Clock, MessageCircle, ThumbsUp, MessagesSquare, CalendarCheck, Send, Hourglass,
+    CheckCircle, XCircle, Clock, MessageCircle, ThumbsUp, MessagesSquare, CalendarCheck, Send, Hourglass, DollarSign,
 } from 'lucide-react';
 import { Lead } from '../../lib/types';
 import { ReplyBattlecards } from './ReplyBattlecards';
+import { DealEditor } from './DealEditor';
 import type { TemplateContext } from '../../lib/followups';
 
 function formatFollowers(n: number): string {
@@ -124,6 +125,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
         ? 'bg-danger-500/[0.03]'
         : '';
     const who = `@${lead.handle}`;
+    const [dealOpen, setDealOpen] = useState(false);
 
     return (
         <>
@@ -251,7 +253,11 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                     ) : (
                         <Pill tone="muted" icon={<Clock className="w-3 h-3" />}>Pending</Pill>
                     )}
-                    {lead.booked ? (
+                    {lead.closedAt && lead.dealValue ? (
+                        <span className="block mt-1.5 text-label font-medium text-positive-400 tabular-nums">
+                            Won · ${lead.dealValue.toLocaleString('en-US')}
+                        </span>
+                    ) : lead.booked ? (
                         <span className="block mt-1.5 text-label font-medium text-positive-400">Booked</span>
                     ) : lead.replied ? (
                         <span className="block mt-1.5 text-label font-medium text-neutral-300">
@@ -307,16 +313,29 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                         {/* Mark positive reply — its own icon; it used to share
                             "Mark replied"'s speech bubble. */}
                         {lead.replied && !lead.positiveReply && (
-                            <button type="button" onClick={() => onUpdateLead({ ...lead, positiveReply: true })}
+                            <button type="button" onClick={() => onUpdateLead({ ...lead, positiveReply: true, qualifiedAt: lead.qualifiedAt ?? new Date().toISOString() })}
                                 title="Mark as interested" aria-label={`Mark ${who}'s reply as interested`} className={ICON_BTN.positive}>
                                 <ThumbsUp className="w-4 h-4" aria-hidden />
                             </button>
                         )}
                         {/* Mark booked */}
                         {lead.positiveReply && !lead.booked && (
-                            <button type="button" onClick={() => onUpdateLead({ ...lead, booked: true })}
+                            <button type="button" onClick={() => onUpdateLead({ ...lead, booked: true, bookedAt: lead.bookedAt ?? new Date().toISOString() })}
                                 title="Mark as booked" aria-label={`Mark ${who} as booked`} className={ICON_BTN.positive}>
                                 <CalendarCheck className="w-4 h-4" aria-hidden />
+                            </button>
+                        )}
+                        {/* Record the won deal — feeds the dashboard's revenue */}
+                        {lead.booked && (
+                            <button
+                                type="button"
+                                onClick={() => setDealOpen(o => !o)}
+                                title={lead.closedAt ? 'Edit deal' : 'Mark as won'}
+                                aria-label={lead.closedAt ? `Edit the deal with ${who}` : `Record a won deal with ${who}`}
+                                aria-expanded={dealOpen}
+                                className={dealOpen ? 'p-1.5 rounded-lg transition-colors text-white bg-white/10' : ICON_BTN.positive}
+                            >
+                                <DollarSign className="w-4 h-4" aria-hidden />
                             </button>
                         )}
                         {/* Reply battlecards */}
@@ -359,6 +378,13 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                     </div>
                 </td>
             </tr>
+            {dealOpen && lead.booked && (
+                <tr>
+                    <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
+                        <DealEditor lead={lead} onSave={onUpdateLead} onClose={() => setDealOpen(false)} />
+                    </td>
+                </tr>
+            )}
             {showBattlecards && lead.replied && (
                 <tr>
                     <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">

@@ -56,7 +56,23 @@ export interface Lead {
     rescue1Date?: string;
     rescue2Date?: string;
     rescue3Date?: string;
+    /**
+     * The milestone dates the dashboard's period views count by. Each is
+     * stamped once, the first time its flag goes true, and never moved:
+     * `createdAt` by intake (or the leads row's created_at for older Leads),
+     * `qualifiedAt` with `positiveReply`, `bookedAt` with `booked`, `closedAt`
+     * when the Operator records a won deal. A Lead from before a stamp existed
+     * simply has none, and is counted only in "All time" for that stage —
+     * never back-dated from a neighbouring field.
+     */
+    createdAt?: string;
+    qualifiedAt?: string;
+    bookedAt?: string;
+    closedAt?: string;
+    /** The won deal's value, entered by the Operator. Set together with `closedAt`. */
     dealValue?: number;
+    /** How much of `dealValue` has been paid so far. The rest is still to collect. */
+    cashCollected?: number;
     campaignId?: string;
     campaignName?: string;
 }

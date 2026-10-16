@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { LogOut, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEmail } from '../lib/plans';
-import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
+import { DASHBOARD_ROUTES, INBOX_HIDDEN, type DashboardPath } from '../lib/routes';
 import Logo from './Logo';
 
 /**
@@ -37,7 +37,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, isOpen = false, onNa
     const { user } = useAuth();
 
     const navItems = [
-        ...DASHBOARD_ROUTES,
+        // The Inbox stays a route (it redirects) but leaves the nav while paused.
+        ...DASHBOARD_ROUTES.filter((r) => !(INBOX_HIDDEN && r.path === '/inbox')),
         // Owner-only console — hidden for regular members. Not a dashboard
         // route: /admin lives outside the shell and has its own guard.
         ...(isAdminEmail(user?.email) ? [{ icon: Shield, label: 'Admin', path: '/admin' }] : []),

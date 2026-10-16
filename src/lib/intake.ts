@@ -188,6 +188,8 @@ export function intake(req: IntakeRequest): IntakeResult {
   const seen = new Set<string>();
   const leads: Lead[] = [];
   let skipped = 0;
+  // One stamp per batch: the dashboard's "New leads" counts by it.
+  const createdAt = new Date().toISOString();
 
   for (const row of req.rows) {
     const lead = req.source === 'csv'
@@ -199,7 +201,7 @@ export function intake(req: IntakeRequest): IntakeResult {
       continue;
     }
     seen.add(lead.handle);
-    leads.push(lead);
+    leads.push({ ...lead, createdAt });
   }
 
   return { leads, skipped };

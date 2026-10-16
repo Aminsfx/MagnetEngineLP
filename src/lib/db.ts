@@ -111,7 +111,7 @@ export const db = {
 
     const { data, error } = await supabase
       .from('leads')
-      .select('data')
+      .select('data, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -120,7 +120,12 @@ export const db = {
       return [];
     }
 
-    return (data ?? []).map((row) => row.data as Lead);
+    // Leads from before intake stamped `createdAt` still have the row's own
+    // insert time, which is the same moment.
+    return (data ?? []).map((row) => {
+      const lead = row.data as Lead;
+      return lead.createdAt || !row.created_at ? lead : { ...lead, createdAt: row.created_at as string };
+    });
   },
 
 

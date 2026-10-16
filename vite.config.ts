@@ -25,7 +25,6 @@ export default defineConfig({
         // Split heavy vendors into separate cacheable chunks
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-recharts': ['recharts'],
           'vendor-supabase': ['@supabase/supabase-js'],
         },
       },

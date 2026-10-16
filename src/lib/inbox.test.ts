@@ -69,6 +69,21 @@ describe('ingestThreads', () => {
   });
 });
 
+describe('the move to Instagram\'s GraphQL inbox', () => {
+  it('does not add a message twice when its id changed format', () => {
+    const before = ingestThreads([thread('t1', [inbound('1739', 'hey there', '2026-07-30T10:00:00Z')])], [], []);
+    const after = ingestThreads(
+      [thread('t1', [
+        inbound('mid.$abc', 'hey there', '2026-07-30T10:00:01Z'),
+        inbound('mid.$def', 'still keen?', '2026-08-20T10:00:00Z'),
+      ])],
+      before.conversations,
+      before.messages,
+    );
+    expect(after.newMessages.map((m) => m.text)).toEqual(['still keen?']);
+  });
+});
+
 describe('echo suppression', () => {
   it('drops one echo per optimistic send', () => {
     const log = createInboxLog();

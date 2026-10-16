@@ -1,27 +1,26 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
-import { TodayPanel } from '../components/dashboard/TodayPanel';
-import { Pipeline } from '../components/dashboard/Pipeline';
-import { ConversionChart } from '../components/dashboard/ConversionChart';
-import { AIAnalyst } from '../components/dashboard/AIAnalyst';
 import { OnboardingChecklist } from '../components/dashboard/OnboardingChecklist';
+import { RevenueFunnel } from '../components/dashboard/RevenueFunnel';
+import { WeeklyReport } from '../components/dashboard/WeeklyReport';
 import { CampaignBuilder } from '../components/campaign/CampaignBuilder';
 import { ApprovalQueue } from '../components/campaign/ApprovalQueue';
 import { FollowUpSequencer } from '../components/campaign/FollowUpSequencer';
 import { SettingsPanel } from '../components/settings/SettingsPanel';
 import { InboxView } from '../components/inbox/InboxView';
 import { ConnectInstagram, igName } from '../components/inbox/ConnectInstagram';
+import { InboxDemo } from '../components/inbox/InboxDemo';
 import ProfilePage from './ProfilePage';
 import { ExtensionNotice } from '../components/common/ExtensionNotice';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
 import { useOutreach } from '../lib/useOutreach';
 import { createStore } from '../lib/store';
-import { aiAPI, type ReplyResult } from '../lib/api';
+import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { readOutcome } from '../lib/outcome';
-import { DASHBOARD_ROUTES, type DashboardPath } from '../lib/routes';
+import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
 import { todayCounts, headline } from '../lib/today';
 import {
   EXT_TO_APP,
@@ -232,28 +231,39 @@ const DashboardShell: React.FC = () => {
   // Ref so the bridge effect can call the latest autopilot handler without
   // re-subscribing (defined further down).
   const autopilotRef = useRef<(convos: Conversation[]) => void>(() => {});
+  const ingestRef = useRef(ingestInbox);
+  useEffect(() => { ingestRef.current = ingestInbox; }, [ingestInbox]);
 
   // ─── Extension bridge ───────────────────────────────────────────────────────
   // The extension reports what it ACTUALLY sent (real daily count + sent log)
   // and pushes inbox snapshots, so the header, per-lead "sent", and the Inbox
   // all reflect reality, not handoffs.
+  //
+  // Subscribed ONCE, reading the latest handlers through refs. It used to
+  // re-subscribe whenever `outreach` changed — a new object every render — and
+  // every re-subscribe asks the extension for a sync, whose answer re-renders:
+  // a loop that delivered ~1,400 identical inbox snapshots in two seconds once
+  // the extension could read the inbox again (2026-10-15).
   useEffect(() => {
     const stopListening = onExtensionMessage((d) => {
       if (d.type === EXT_TO_APP.STATS) {
-        setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
+        const next = { count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 };
+        setExtStats((prev) => (prev && prev.count === next.count && prev.cap === next.cap ? prev : next));
         // Reconcile against both: `sentLog` resets at midnight, `sentHandles`
         // never does, so a dashboard opened the next morning still learns what
         // went out yesterday instead of offering to send it again.
-        outreach.markSentByHandles([
+        outreachRef.current.markSentByHandles([
           ...(d.sentLog ?? []).map((x) => x.handle ?? ''),
           ...(d.sentHandles ?? []),
         ]);
       } else if (d.type === EXT_TO_APP.SENT) {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
-        if (d.handle) outreach.markSentByHandles([d.handle]);
+        if (d.handle) outreachRef.current.markSentByHandles([d.handle]);
       } else if (d.type === EXT_TO_APP.INBOX) {
         const viewer = d.viewer?.id ? d.viewer : null;
-        if (viewer) setIgViewer(viewer);
+        if (viewer) {
+          setIgViewer((prev) => (prev && prev.id === viewer.id && prev.username === viewer.username && prev.avatarUrl === viewer.avatarUrl ? prev : viewer));
+        }
         // Only the inbox of the Instagram account this Operator connected. The
         // extension reads whoever is logged in to Instagram in this browser,
         // which may be someone else entirely; a build too old to say whose
@@ -261,7 +271,7 @@ const DashboardShell: React.FC = () => {
         const connected = configRef.current.instagramAccount;
         if (!connected || viewer?.id !== connected.id) return;
         const threads = ((d.threads ?? []) as RawThread[]).map((t) => ({ ...t, account: connected.id }));
-        const newInbound = ingestInbox(threads);
+        const newInbound = ingestRef.current(threads);
         if (newInbound.length) autopilotRef.current(newInbound);
       }
     });
@@ -273,7 +283,7 @@ const DashboardShell: React.FC = () => {
       stopListening();
       window.removeEventListener('focus', requestExtensionSync);
     };
-  }, [outreach, ingestInbox]);
+  }, []);
 
   // A snapshot that arrived before the saved config loaded — or before the
   // Operator connected their Instagram — was turned away above. Ask again.
@@ -353,7 +363,7 @@ const DashboardShell: React.FC = () => {
   }, [outreach, store, inbox]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
-  const handleGenerateReply = useCallback(async (conv: Conversation): Promise<ReplyResult> => {
+  const handleGenerateReply = useCallback(async (conv: Conversation, instruction?: string): Promise<ReplyResult> => {
     const history = inbox.snapshot().messages
       .filter((m) => m.conversationId === conv.id)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -362,13 +372,17 @@ const DashboardShell: React.FC = () => {
     const result = await aiAPI.generateReply(cfg.selectedAIProvider, {
       messages: history,
       contact: { handle: conv.handle, name: conv.name },
-      systemPrompt: cfg.replySystemPrompt ?? '',
+      systemPrompt: withInstruction(cfg.replySystemPrompt || DEFAULT_REPLY_SYSTEM_PROMPT, instruction),
       calendarLink: cfg.calendarLink,
     });
-    posthogCapture('reply_generated', { classified_intent: result.intent });
-    // Reflect detected intent (drives filters + booking surfacing).
-    const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
-    handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
+    posthogCapture('reply_generated', { classified_intent: result.intent, steered: !!instruction });
+    // Reflect detected intent (drives filters + booking surfacing). Only the
+    // unsteered draft reads the conversation as written; the copilot asks for
+    // three at once, and one update is the honest number.
+    if (!instruction) {
+      const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
+      handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
+    }
     return result;
   }, [handleUpdateConversation, inbox]);
 
@@ -419,7 +433,7 @@ const DashboardShell: React.FC = () => {
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
   const handleAutopilot = useCallback(async (newInbound: Conversation[]) => {
-    if (!configRef.current.autopilot) return;
+    if (INBOX_PAUSED || !configRef.current.autopilot) return;
     for (const conv of newInbound) {
       const latest = inbox.snapshot().conversations.find((c) => c.id === conv.id) ?? conv;
       if (!latest.needsReply || latest.status === 'closed') continue;
@@ -454,7 +468,9 @@ const DashboardShell: React.FC = () => {
   // Only a name the Operator gave us. The email's local part is not a name:
   // "Good evening, mohamed.a.1987" reads as a bug, not a welcome.
   const firstName = (user?.user_metadata?.first_name as string | undefined)?.trim();
-  const today = todayCounts(outreach.leads, igConversations);
+  // While the Inbox is paused nothing points the Operator at it: no badge,
+  // no "to answer" row, no headline about people waiting on a reply.
+  const today = todayCounts(outreach.leads, INBOX_PAUSED ? [] : igConversations);
 
   // Keyed by DashboardPath, so a page declared in the routes manifest without
   // an element here (or an element with no route) fails to compile instead of
@@ -476,15 +492,9 @@ const DashboardShell: React.FC = () => {
           </h1>
         </header>
         <OnboardingChecklist leads={outreach.leads} config={config} extension={extStatus} />
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-x-12 gap-y-10 pt-2">
-          <div className="space-y-10 min-w-0">
-            <TodayPanel counts={today} hasLeads={outreach.leads.length > 0} />
-            <Pipeline leads={outreach.leads} />
-          </div>
-          <div className="space-y-10 min-w-0">
-            <ConversionChart leads={outreach.leads} />
-            <AIAnalyst stats={outreach.stats} />
-          </div>
+        <RevenueFunnel leads={outreach.leads} />
+        <div className="pt-4">
+          <WeeklyReport leads={outreach.leads} />
         </div>
       </div>
     ),
@@ -524,8 +534,12 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/inbox': (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full h-[calc(100dvh-3.5rem)]">
-        {config.instagramAccount ? (
+      <div className="p-4 sm:p-5 lg:p-6 max-w-[1600px] mx-auto w-full h-[calc(100dvh-3.5rem)]">
+        {INBOX_DEMO ? (
+          <InboxDemo config={config} />
+        ) : INBOX_HIDDEN ? (
+          <Navigate to="/dashboard" replace />
+        ) : config.instagramAccount ? (
         <InboxView
           conversations={igConversations}
           messages={igMessages}
@@ -567,7 +581,15 @@ const DashboardShell: React.FC = () => {
       </div>
     ),
 
-    '/profile': <ProfilePage user={user!} onLogout={handleLogout} />,
+    '/profile': (
+      <ProfilePage
+        user={user!}
+        onLogout={handleLogout}
+        extension={extStatus}
+        dmUsed={outreach.dmUsed}
+        dmLimit={limits.maxDMGenerations}
+      />
+    ),
   };
 
   return (

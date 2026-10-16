@@ -142,6 +142,10 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
     next.positiveReply = true;
     next.replied = true;
     next.status = 'won';
+    // Dated when the booking was read, the closest moment this code knows.
+    const now = new Date().toISOString();
+    next.bookedAt = lead.bookedAt ?? now;
+    next.qualifiedAt = lead.qualifiedAt ?? now;
     changed = true;
   }
 

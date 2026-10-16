@@ -43,7 +43,7 @@ This extension's single purpose is to carry out the Instagram direct-message out
 ## Permission justifications
 - **storage** — keeps the user's send queue, pacing settings, today's send count and which MagnetEngine account is signed in, in chrome.storage.local.
 - **alarms** — schedules each send after a randomized delay and keeps the inbox sync running during an active campaign.
-- **Host: `https://*.instagram.com/*`** — opens the recipient's Instagram profile to deliver an approved message, and reads the user's own DM inbox (same-origin, with their existing session) to sync replies.
+- **Host: `https://*.instagram.com/*`** — opens the recipient's Instagram profile to deliver an approved message, and syncs replies from the user's own DM inbox. A small script in the instagram.com page (`igpage.js`) reads the inbox data Instagram's own page loads in the user's tab, and repeats that same inbox request about every 100 seconds while the user is signed in to MagnetEngine; nothing is read for anyone who is not.
 - **Host: `https://magnetengine.xyz/*`, `https://*.magnetengine.xyz/*`** — receives approved campaigns from the user's own dashboard tab and hands synced replies back to it.
 - **Remote code** — No. All logic ships in the package; the extension fetches no scripts.
 

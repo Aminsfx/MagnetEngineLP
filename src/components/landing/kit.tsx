@@ -9,7 +9,7 @@ import { Marquee } from '../ui/Marquee';
 import { ApprovalPreview, BrandPanel, EXAMPLE_QUEUE_SIZE } from '../ApprovalPreview';
 import { PRICES, SUPPORT_EMAIL } from '../../lib/plans';
 import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
-import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TRIAL_CTA } from './content';
+import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
 
 /**
  * The public landing kit: the pieces the three /preview variants share, in the
@@ -19,9 +19,10 @@ import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TRIAL
  *
  * Every number printed here is one the code or the owner stands behind:
  * `PRICES`, the seat count the owner edits, send pacing and the default cap
- * from `extension/background.js`. There is no customer proof to show, so none
- * is shown — the reference's avatars, stars and logo strip became the seat
- * count, the trial terms and things the product can actually search.
+ * from `extension/background.js`. Customer proof is only what customers
+ * actually said (`TESTIMONIALS` in content.ts) — the reference's avatars,
+ * stars and logo strip became the seat count, the trial terms and things the
+ * product can actually search.
  */
 
 const SIGNUP = '/login?mode=signup';
@@ -345,6 +346,136 @@ export const Pricing: React.FC<{ heading: React.ReactNode; id?: string }> = ({ h
         </div>
     </Section>
 );
+
+// ─── Testimonials ─────────────────────────────────────────────────────────────
+
+/**
+ * Where each card sits on the wide-screen wall, around the centred heading:
+ * four down each side, each turned a few degrees like a screenshot dropped on
+ * a desk. Below `xl` the wall becomes a plain two-column grid.
+ */
+type Spot = { side: 'left' | 'right'; inset: string; top: number; rotate: number; width: number };
+
+/** Up to four messages: two down each side of a shorter wall. */
+const WALL_FEW: Spot[] = [
+    { side: 'left', inset: '7%', top: 70, rotate: -3, width: 340 },
+    { side: 'right', inset: '6%', top: 100, rotate: 3, width: 330 },
+    { side: 'left', inset: '10%', top: 340, rotate: 2, width: 330 },
+    { side: 'right', inset: '9%', top: 370, rotate: -2, width: 340 },
+];
+
+const WALL: Spot[] = [
+    { side: 'left', inset: '7%', top: 24, rotate: -3, width: 330 },
+    { side: 'right', inset: '6%', top: 44, rotate: 3, width: 320 },
+    { side: 'left', inset: '3%', top: 236, rotate: 2, width: 360 },
+    { side: 'right', inset: '8%', top: 262, rotate: -2, width: 350 },
+    { side: 'left', inset: '10%', top: 470, rotate: -2, width: 300 },
+    { side: 'right', inset: '4%', top: 500, rotate: 2, width: 330 },
+    { side: 'left', inset: '5%', top: 650, rotate: 3, width: 340 },
+    { side: 'right', inset: '10%', top: 690, rotate: -3, width: 300 },
+];
+
+/**
+ * One client message, drawn like the chat screenshot it came from. The name
+ * and avatar are blurred on purpose — the owner's call, so a client is never
+ * named on the page — and a screen reader hears "A client" instead.
+ */
+const MessageCard: React.FC<{ t: Testimonial; className?: string; style?: React.CSSProperties }> = ({ t, className = '', style }) => (
+    <figure
+        className={`rounded-2xl border border-white/10 bg-surface-raised px-4 py-3.5 shadow-2xl shadow-black/60 ${className}`}
+        style={style}
+    >
+        <figcaption className="flex items-center gap-2.5">
+            <span aria-hidden className="w-8 h-8 rounded-lg flex-none bg-gradient-to-br from-neutral-500 to-neutral-800 blur-[3px]" />
+            <span aria-hidden className="text-body-sm font-semibold text-white blur-[5px] select-none truncate">{t.name}</span>
+            <span className="sr-only">A client</span>
+            {t.time && <span className="text-label text-neutral-500 flex-none">{t.time}</span>}
+            {t.example && (
+                <span className="ml-auto flex-none px-2 py-0.5 rounded-full border border-white/15 text-label text-neutral-400">Example</span>
+            )}
+        </figcaption>
+        <blockquote className="mt-2 text-body-sm text-neutral-200 leading-relaxed">{t.quote}</blockquote>
+        {t.reactions && t.reactions.length > 0 && (
+            <div className="mt-2.5 flex gap-1.5" aria-label="Reactions">
+                {t.reactions.map(([emoji, count]) => (
+                    <span key={emoji} className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/10 bg-white/[0.04] text-label text-neutral-300 tabular-nums">
+                        <span aria-hidden>{emoji}</span>
+                        {count}
+                    </span>
+                ))}
+            </div>
+        )}
+    </figure>
+);
+
+/**
+ * "What our clients are saying": real client messages scattered around the
+ * call to action. Example entries render on localhost only, and the section
+ * renders nothing in production until a real message exists (content.ts).
+ */
+export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
+    heading = (
+        <>
+            What our clients <Em>are saying.</Em>
+        </>
+    ),
+}) => {
+    const items = TESTIMONIALS.filter(t => !t.example || import.meta.env.DEV).slice(0, WALL.length);
+    if (items.length === 0) return null;
+    const few = items.length <= WALL_FEW.length;
+    const spots = few ? WALL_FEW : WALL;
+    const examples = items.some(t => t.example);
+
+    const center = (
+        <div className="text-center px-6">
+            <Heading className="mx-auto max-w-[14ch]">{heading}</Heading>
+            <div className="mt-9 flex justify-center">
+                <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
+            </div>
+            {examples && (
+                <p className="mt-6 mx-auto max-w-[44ch] text-meta text-neutral-400">
+                    These are example messages and show on localhost only. Add your clients' real messages in{' '}
+                    <code className="text-neutral-300">src/components/landing/content.ts</code>.
+                </p>
+            )}
+        </div>
+    );
+
+    return (
+        <section id="reviews" className="relative scroll-mt-24 py-24 md:py-32 overflow-hidden">
+            {/* Wide screens: the scattered wall, heading in the middle. */}
+            <div className="hidden xl:block relative max-w-[1400px] mx-auto" style={{ height: few ? 600 : 880 }}>
+                {items.map((t, i) => {
+                    const spot = spots[i];
+                    return (
+                        <MessageCard
+                            key={i}
+                            t={t}
+                            className="absolute z-10 [transform:rotate(var(--tilt))] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:[transform:translateY(-4px)] hover:z-20 motion-reduce:transition-none"
+                            style={{
+                                [spot.side]: spot.inset,
+                                top: spot.top,
+                                width: spot.width,
+                                '--tilt': `${spot.rotate}deg`,
+                            } as React.CSSProperties}
+                        />
+                    );
+                })}
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none [&_a]:pointer-events-auto">
+                    {center}
+                </div>
+            </div>
+
+            {/* Narrower screens: heading first, then the messages in columns. */}
+            <div className="xl:hidden">
+                {center}
+                <div className="mt-14 px-6 max-w-3xl mx-auto columns-1 sm:columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+                    {items.map((t, i) => <MessageCard key={i} t={t} />)}
+                </div>
+            </div>
+        </section>
+    );
+};
 
 // ─── FAQ ──────────────────────────────────────────────────────────────────────
 

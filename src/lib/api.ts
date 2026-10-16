@@ -39,6 +39,15 @@ export interface DmResult {
 }
 
 /**
+ * A reply prompt with one extra instruction for a single draft — how the
+ * Inbox copilot gets three different replies from one prompt. Appended, never
+ * substituted, so the Operator's voice rules and the Offer Ledger still bind.
+ */
+export function withInstruction(prompt: string, instruction?: string): string {
+    return instruction ? `${prompt}\n\n## FOR THIS DRAFT ONLY\n${instruction}` : prompt;
+}
+
+/**
  * AI DM generation.
  *
  * All provider API keys (Claude / OpenAI / Gemini) live ONLY in Supabase
