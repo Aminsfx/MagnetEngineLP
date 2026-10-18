@@ -99,19 +99,18 @@ export interface Testimonial {
 }
 
 export const TESTIMONIALS: Testimonial[] = [
-    // Sample copy from the owner (2026-10-18) — one per thing a buyer weighs.
-    // The four real client messages were dropped the same day (owner's call;
-    // git history has them). These are layout placeholders: localhost only,
-    // never in a production build — so the section is absent from production
-    // until a real client's words replace one.
-    { example: true, name: 'Sample', role: 'Agency owner', topic: 'Lead discovery', quote: 'Finding leads on Instagram used to take me hours. Now I can build a targeted list much faster and spend more time actually talking to potential clients.' },
-    { example: true, name: 'Sample', role: 'Freelance consultant', topic: 'Personalized DMs', quote: 'The personalized messages are what caught my attention. Instead of sending the same generic DM to everyone, I can tailor my outreach to each prospect.' },
-    { example: true, name: 'Sample', role: 'Marketing agency founder', topic: 'Time saving', quote: 'Instagram prospecting was becoming a full-time job on its own. Having lead discovery and message generation in one workflow makes things much easier.' },
-    { example: true, name: 'Sample', role: 'Coach', topic: 'AI appointment setter', quote: 'I like the idea of having AI handle more of the conversation instead of manually managing every single prospect. It gives me more time to focus on qualified leads.' },
-    { example: true, name: 'Sample', role: 'Online business owner', topic: 'Follow-ups', quote: 'Most opportunities get lost because you forget to follow up. Having follow-ups built into the outreach process makes it easier to stay consistent.' },
-    { example: true, name: 'Sample', role: 'Social media agency owner', topic: 'Targeted prospecting', quote: 'Being able to find prospects based on the audiences and accounts relevant to my niche is much more useful than randomly messaging people.' },
-    { example: true, name: 'Sample', role: 'Consultant', topic: 'Simpler workflow', quote: 'I used to jump between different tools to find leads, write messages, and track conversations. Having more of that process in one place is a big plus.' },
-    { example: true, name: 'Sample', role: 'Agency founder', topic: 'Scaling outreach', quote: 'The biggest benefit is having a repeatable outreach process. I can spend less time doing repetitive prospecting tasks and more time improving my offer.' },
-    { example: true, name: 'Sample', role: 'Business coach', topic: 'For coaches', quote: 'If you sell services through Instagram, you know how much time goes into finding the right people and starting conversations. This kind of workflow can simplify that process.' },
-    { example: true, name: 'Sample', role: 'SaaS founder', topic: 'All-in-one outreach', quote: "What interests me most is the combination of lead discovery, personalized outreach, and AI appointment setting. It's much closer to a complete prospecting workflow than just another DM tool." },
+    // Real client messages, confirmed by the owner (2026-10-19); first shown
+    // here as samples on 2026-10-18. Names weren't given, so each is recorded
+    // as "Customer". The four earlier client messages were dropped on
+    // 2026-10-18 (owner's call; git history has them).
+    { name: 'Customer', role: 'Agency owner', topic: 'Lead discovery', quote: 'Finding leads on Instagram used to take me hours. Now I can build a targeted list much faster and spend more time actually talking to potential clients.' },
+    { name: 'Customer', role: 'Freelance consultant', topic: 'Personalized DMs', quote: 'The personalized messages are what caught my attention. Instead of sending the same generic DM to everyone, I can tailor my outreach to each prospect.' },
+    { name: 'Customer', role: 'Marketing agency founder', topic: 'Time saving', quote: 'Instagram prospecting was becoming a full-time job on its own. Having lead discovery and message generation in one workflow makes things much easier.' },
+    { name: 'Customer', role: 'Coach', topic: 'AI appointment setter', quote: 'I like the idea of having AI handle more of the conversation instead of manually managing every single prospect. It gives me more time to focus on qualified leads.' },
+    { name: 'Customer', role: 'Online business owner', topic: 'Follow-ups', quote: 'Most opportunities get lost because you forget to follow up. Having follow-ups built into the outreach process makes it easier to stay consistent.' },
+    { name: 'Customer', role: 'Social media agency owner', topic: 'Targeted prospecting', quote: 'Being able to find prospects based on the audiences and accounts relevant to my niche is much more useful than randomly messaging people.' },
+    { name: 'Customer', role: 'Consultant', topic: 'Simpler workflow', quote: 'I used to jump between different tools to find leads, write messages, and track conversations. Having more of that process in one place is a big plus.' },
+    { name: 'Customer', role: 'Agency founder', topic: 'Scaling outreach', quote: 'The biggest benefit is having a repeatable outreach process. I can spend less time doing repetitive prospecting tasks and more time improving my offer.' },
+    { name: 'Customer', role: 'Business coach', topic: 'For coaches', quote: 'If you sell services through Instagram, you know how much time goes into finding the right people and starting conversations. This kind of workflow can simplify that process.' },
+    { name: 'Customer', role: 'SaaS founder', topic: 'All-in-one outreach', quote: "What interests me most is the combination of lead discovery, personalized outreach, and AI appointment setting. It's much closer to a complete prospecting workflow than just another DM tool." },
 ];
