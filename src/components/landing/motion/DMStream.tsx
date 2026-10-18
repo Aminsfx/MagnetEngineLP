@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 import { usePauseOffscreen } from '../../ui/usePauseOffscreen';
+import { rng } from './rng';
 
 /**
  * Variant B's hero field: a wall of message bubbles rising behind the
@@ -16,17 +17,6 @@ import { usePauseOffscreen } from '../../ui/usePauseOffscreen';
  * compositor layers, and the loop costs the main thread nothing. It pauses off
  * screen and stands still under reduced motion (landing.css).
  */
-
-/** Deterministic, so the wall is the same on every visit and every render. */
-function rng(seed: number) {
-    return () => {
-        seed |= 0;
-        seed = (seed + 0x6d2b79f5) | 0;
-        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
 
 type Kind = 'sent' | 'approved' | 'reply';
 

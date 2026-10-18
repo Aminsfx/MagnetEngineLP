@@ -126,6 +126,73 @@
   animation-play-state: paused;
 }
 
+/* ── Done for you: the calendar that fills itself ───────────────────────── */
+.cal-wall {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 16%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 16%, black 100%);
+}
+
+.cal-plane {
+  position: absolute;
+  left: 50%;
+  top: -4%;
+  width: max-content;
+  transform: translateX(-50%) perspective(1600px) rotateX(32deg) rotateZ(-6deg) scale(1.12);
+  transform-origin: 50% 0%;
+  opacity: 0.85;
+}
+
+.cal-track {
+  display: grid;
+  grid-template-columns: repeat(7, 172px);
+  gap: 12px;
+  animation: cal-roll 90s linear infinite;
+  will-change: transform;
+}
+
+/* Three copies of the week stacked; sliding by one copy loops. */
+@keyframes cal-roll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(-100% / 3 - 12px / 3)); }
+}
+
+.cal-slot {
+  position: relative;
+  height: 76px;
+  border-radius: 0.9rem;
+  border: 1px solid theme('colors.white / 5%');
+}
+
+.cal-card {
+  position: absolute;
+  inset: 5px;
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.75rem;
+}
+
+.cal-card-busy {
+  background: theme('colors.white / 4%');
+}
+
+/* A slot books itself: the card lands, holds, and lets go before the cycle
+   comes round again. Each slot keeps its own delay, so a few land at once. */
+.cal-card-booked {
+  background: theme('colors.positive.500 / 10%');
+  border: 1px solid theme('colors.positive.400 / 40%');
+  animation: cal-book 16s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--book-delay, 0s);
+}
+
+@keyframes cal-book {
+  0%, 58%, 100% { opacity: 0; transform: scale(0.9); }
+  63%, 92%      { opacity: 1; transform: none; }
+}
+
+.cal-wall[data-paused] .cal-track,
+.cal-wall[data-paused] .cal-card-booked {
+  animation-play-state: paused;
+}
+
 /* ── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .landing-in,
@@ -136,8 +203,15 @@
 
   .dm-track,
   .dm-flash,
-  .dm-flash .dm-check {
+  .dm-flash .dm-check,
+  .cal-track {
     animation: none;
+  }
+
+  /* Still, but filled: the bookings stay on the calendar. */
+  .cal-card-booked {
+    animation: none;
+    opacity: 1;
   }
 }
 

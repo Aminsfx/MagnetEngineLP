@@ -24,6 +24,16 @@ export const TRIAL_CTA = 'Start the 3-day trial';
 export const CALL_CTA = 'Get a Demo for Your Business';
 
 /**
+ * What makes any element open the 15-minute call: the Cal embed in index.html
+ * listens for clicks on `[data-cal-link]`. Spread it onto a button.
+ */
+export const CALL_BOOKING = {
+    'data-cal-link': 'magnetengine/15min',
+    'data-cal-namespace': '15min',
+    'data-cal-config': '{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}',
+} as const;
+
+/**
  * Only the questions a buyer actually hesitates on — the objections — owner's
  * call (2026-10-14). Short on purpose: one or two sentences each (2026-09-24).
  *
@@ -66,8 +76,8 @@ export const FAQ_ITEMS = [
 
 /**
  * Client messages for the testimonials wall, exactly as the client sent them.
- * Names and avatars are always drawn blurred, so the quote is the proof and
- * the person stays private.
+ * Names and avatars are always drawn as blurred stand-ins, so the quote is the
+ * proof and the person stays private.
  *
  * Only real messages belong here. An entry marked `example` is a layout
  * placeholder: it renders on localhost with an "Example" tag and never in a
@@ -76,7 +86,7 @@ export const FAQ_ITEMS = [
  */
 export interface Testimonial {
     quote: string;
-    /** Drawn blurred. Kept for the record of who said it. */
+    /** Never rendered — the card draws a blurred stand-in. Kept for the record of who said it. */
     name: string;
     /** What they do, shown in the clear — e.g. "Agency owner". */
     role?: string;

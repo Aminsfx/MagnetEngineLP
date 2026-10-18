@@ -9,7 +9,7 @@ import { Marquee } from '../ui/Marquee';
 import { ApprovalPreview, BrandPanel, EXAMPLE_QUEUE_SIZE } from '../ApprovalPreview';
 import { PRICES, SUPPORT_EMAIL } from '../../lib/plans';
 import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
-import { AUDIENCE, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
+import { AUDIENCE, CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
 
 /**
  * The public landing kit: the pieces the three /preview variants share, in the
@@ -69,11 +69,14 @@ export const Panel: React.FC<{ children: React.ReactNode; className?: string; ac
  * C out of search results (they are the same offer as `/`, and a duplicate
  * page in the index competes with the real one).
  */
-export const LandingShell: React.FC<{ nav: NavItem[]; variant: LandingVariant; children: React.ReactNode }> = ({
-    nav,
-    variant,
-    children,
-}) => {
+export const LandingShell: React.FC<{
+    nav: NavItem[];
+    variant: LandingVariant;
+    children: React.ReactNode;
+    /** The header's action. Defaults to the trial; `ctaBooksCall` makes it open the call. */
+    cta?: string;
+    ctaBooksCall?: boolean;
+}> = ({ nav, variant, children, cta = TRIAL_CTA, ctaBooksCall }) => {
     const home = LANDING_PATH[variant];
 
     useEffect(() => {
@@ -90,7 +93,7 @@ export const LandingShell: React.FC<{ nav: NavItem[]; variant: LandingVariant; c
         <div
             className="bg-surface min-h-screen antialiased selection:bg-white/20 selection:text-white"
         >
-            <Header nav={nav} cta={TRIAL_CTA} home={home} />
+            <Header nav={nav} cta={cta} ctaBooksCall={ctaBooksCall} home={home} />
             <main>{children}</main>
             <LandingFooter home={home} />
         </div>
@@ -113,18 +116,30 @@ export const TrialTerms: React.FC<{ className?: string; style?: React.CSSPropert
     </p>
 );
 
+/** The trial with the call beside it: every page's actions unless it says otherwise. */
+const TrialActions: React.FC = () => (
+    <>
+        <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
+        <CallPill>{CALL_CTA}</CallPill>
+    </>
+);
+
 /**
  * The first viewport, after the reference: the claim centred at display size,
  * who it is for, its subhead, the trial with the call beside it, and the
  * terms — over a motion field that belongs to the variant. The approval card (children) rises into
- * the bottom of the field, which fades out beneath it.
+ * the bottom of the field, which fades out beneath it. A page that sells
+ * something other than the trial passes its own `actions` and `terms`.
  */
 export const Hero: React.FC<{
     field: React.ReactNode;
     title: React.ReactNode;
     sub: React.ReactNode;
     children: React.ReactNode;
-}> = ({ field, title, sub, children }) => (
+    actions?: React.ReactNode;
+    terms?: React.ReactNode;
+    audience?: string;
+}> = ({ field, title, sub, children, actions = <TrialActions />, terms, audience = AUDIENCE }) => (
     <section className="relative isolate overflow-hidden">
         <div aria-hidden className="hero-field absolute inset-0 -z-10">
             {field}
@@ -143,7 +158,7 @@ export const Hero: React.FC<{
                 className="landing-in mt-7 mx-auto max-w-[50ch] text-lead text-neutral-300"
                 style={{ '--d': '100ms' } as React.CSSProperties}
             >
-                <span className="block mb-2 text-white font-medium">{AUDIENCE}</span>
+                <span className="block mb-2 text-white font-medium">{audience}</span>
                 {sub}
             </p>
 
@@ -151,11 +166,16 @@ export const Hero: React.FC<{
                 className="landing-in mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
                 style={{ '--d': '200ms' } as React.CSSProperties}
             >
-                <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
-                <CallPill>{CALL_CTA}</CallPill>
+                {actions}
             </div>
 
-            <TrialTerms className="landing-in mt-7" style={{ '--d': '260ms' } as React.CSSProperties} />
+            {terms ? (
+                <p className="landing-in mt-7 text-meta text-neutral-400" style={{ '--d': '260ms' } as React.CSSProperties}>
+                    {terms}
+                </p>
+            ) : (
+                <TrialTerms className="landing-in mt-7" style={{ '--d': '260ms' } as React.CSSProperties} />
+            )}
         </div>
 
         <div className="relative px-4 sm:px-6 mt-16 md:mt-20 pb-6">{children}</div>
@@ -163,9 +183,12 @@ export const Hero: React.FC<{
 );
 
 /** The approval card — the product, readable — with the line that explains it. */
-export const ProductPreview: React.FC<{ caption?: React.ReactNode }> = ({ caption }) => (
+export const ProductPreview: React.FC<{ caption?: React.ReactNode; sendNote?: React.ReactNode }> = ({
+    caption,
+    sendNote,
+}) => (
     <div className="max-w-4xl mx-auto">
-        <ApprovalPreview stacked tone="mono" />
+        <ApprovalPreview stacked tone="mono" sendNote={sendNote} />
         <p className="mt-3 text-center text-meta text-neutral-400 text-balance">
             {caption ?? (
                 <>
@@ -246,8 +269,8 @@ export const Pipeline: React.FC<{ steps: Step[] }> = ({ steps }) => (
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
 
-const COST_OF_A_HUMAN = '$2,400';
-const COST_OF_AN_AGENCY = '$3,000';
+export const COST_OF_A_HUMAN = '$2,400';
+export const COST_OF_AN_AGENCY = '$3,000';
 
 const ANCHORS: [string, string][] = [
     ['Hiring someone to do it', `${COST_OF_A_HUMAN}/mo`],
@@ -349,6 +372,28 @@ const WALL: Spot[] = [
 ];
 
 /**
+ * The shape of a card's blurred name: a short first name, sometimes with a
+ * surname initial. Taken from the quote so each card keeps its shape between
+ * renders and neighbours differ — the stored name never reaches the page.
+ */
+const blurredName = (quote: string): { width: number; initial: boolean } => {
+    let h = 0;
+    for (let i = 0; i < quote.length; i++) h = (h * 31 + quote.charCodeAt(i)) | 0;
+    h = Math.abs(h);
+    return { width: 26 + (h % 5) * 4, initial: (h >> 4) % 3 === 0 };
+};
+
+const BlurredName: React.FC<{ quote: string }> = ({ quote }) => {
+    const { width, initial } = blurredName(quote);
+    return (
+        <span aria-hidden className="flex flex-none items-center gap-[3px] blur-[2.5px]">
+            <span className="h-2 rounded-full bg-neutral-300" style={{ width }} />
+            {initial && <span className="h-2 w-2 rounded-full bg-neutral-300" />}
+        </span>
+    );
+};
+
+/**
  * One client message, drawn like the chat screenshot it came from. The name
  * and avatar are blurred on purpose — the owner's call, so a client is never
  * named on the page — and a screen reader hears "A client" instead.
@@ -360,7 +405,7 @@ const MessageCard: React.FC<{ t: Testimonial; className?: string; style?: React.
     >
         <figcaption className="flex items-center gap-2.5">
             <span aria-hidden className="w-8 h-8 rounded-lg flex-none bg-gradient-to-br from-neutral-500 to-neutral-800 blur-[3px]" />
-            <span aria-hidden className="text-body-sm font-semibold text-white blur-[5px] select-none truncate">{t.name}</span>
+            <BlurredName quote={t.quote} />
             <span className="sr-only">A client</span>
             {t.role && <span className="text-label text-neutral-400 truncate">{t.role}</span>}
             {t.time && <span className="text-label text-neutral-500 flex-none">{t.time}</span>}
@@ -507,25 +552,21 @@ export const FAQ: React.FC<{ heading?: React.ReactNode; items?: typeof FAQ_ITEMS
 // ─── Close ────────────────────────────────────────────────────────────────────
 
 export const CallPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <GhostPill
-        data-cal-link="magnetengine/15min"
-        data-cal-namespace="15min"
-        data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-    >
-        {children}
-    </GhostPill>
+    <GhostPill {...CALL_BOOKING}>{children}</GhostPill>
 );
 
-export const Close: React.FC<{ heading: React.ReactNode; body: React.ReactNode }> = ({ heading, body }) => (
+export const Close: React.FC<{
+    heading: React.ReactNode;
+    body: React.ReactNode;
+    actions?: React.ReactNode;
+    terms?: React.ReactNode;
+}> = ({ heading, body, actions = <TrialActions />, terms }) => (
     <Section id="start" className="pb-32 md:pb-40">
         <div className="max-w-3xl mx-auto text-center">
             <Heading className="mx-auto max-w-[18ch]">{heading}</Heading>
             <p className="mt-6 text-lead text-neutral-400 max-w-[48ch] mx-auto">{body}</p>
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
-                <CallPill>{CALL_CTA}</CallPill>
-            </div>
-            <TrialTerms className="mt-6" />
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">{actions}</div>
+            {terms ? <p className="mt-6 text-meta text-neutral-400">{terms}</p> : <TrialTerms className="mt-6" />}
         </div>
     </Section>
 );

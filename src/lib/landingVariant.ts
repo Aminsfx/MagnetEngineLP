@@ -2,6 +2,8 @@
  * Which landing page a visitor came through, for the owner's A/B test.
  *
  * Three pages sell the same product: A at `/`, B at `/lp/b`, C at `/lp/c`.
+ * A fourth, `/lp/dfy`, sells the done-for-you service instead of the software;
+ * it is tagged the same way so its sign-ups can be told apart.
  * The first one a visitor sees is remembered in this browser and written into
  * the new Supabase user's metadata as `landing_variant`, so paying customers
  * can be counted per page —
@@ -14,14 +16,14 @@
  * every access is guarded and the only cost is an untagged visit.
  */
 
-export type LandingVariant = 'a' | 'b' | 'c';
+export type LandingVariant = 'a' | 'b' | 'c' | 'dfy';
 
 /** Where each variant lives. A is the site's front door; App.tsx routes these. */
-export const LANDING_PATH: Record<LandingVariant, string> = { a: '/', b: '/lp/b', c: '/lp/c' };
+export const LANDING_PATH: Record<LandingVariant, string> = { a: '/', b: '/lp/b', c: '/lp/c', dfy: '/lp/dfy' };
 
 const KEY = 'me_landing_variant';
 
-const isVariant = (v: unknown): v is LandingVariant => v === 'a' || v === 'b' || v === 'c';
+const isVariant = (v: unknown): v is LandingVariant => v === 'a' || v === 'b' || v === 'c' || v === 'dfy';
 
 /** The variant this browser first landed on, or null if it never saw one. */
 export function landingVariant(): LandingVariant | null {

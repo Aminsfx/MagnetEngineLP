@@ -90,7 +90,14 @@ const TRACE = [
 /** How many drafts the example queue holds. One number, used everywhere it's shown. */
 export const EXAMPLE_QUEUE_SIZE = 38;
 
-const Card: React.FC<{ tone: PreviewTone }> = ({ tone }) => {
+/** Where the approved DM goes from. The software sends from the Operator's own browser. */
+const SENDS_FROM = (
+    <>
+        Sends from your browser<br />one every 3–8 min
+    </>
+);
+
+const Card: React.FC<{ tone: PreviewTone; sendNote: React.ReactNode }> = ({ tone, sendNote }) => {
     const [lit, setLit] = useState<number | null>(null);
     const mono = tone === 'mono';
 
@@ -173,7 +180,7 @@ const Card: React.FC<{ tone: PreviewTone }> = ({ tone }) => {
                             <X size={13} strokeWidth={2.6} aria-hidden /> Reject
                         </span>
                         <span className="ml-auto text-label text-neutral-400 text-right leading-snug whitespace-nowrap">
-                            Sends from your browser<br />one every 3–8 min
+                            {sendNote}
                         </span>
                     </div>
                 </div>
@@ -187,14 +194,15 @@ const Card: React.FC<{ tone: PreviewTone }> = ({ tone }) => {
  * beneath it, so "1 of 38" is something you see rather than read. The stack is
  * layout, not ornament — it is what the Approval Queue actually is.
  */
-export const ApprovalPreview: React.FC<{ stacked?: boolean; tone?: PreviewTone }> = ({
+export const ApprovalPreview: React.FC<{ stacked?: boolean; tone?: PreviewTone; sendNote?: React.ReactNode }> = ({
     stacked = false,
     tone = 'brand',
+    sendNote = SENDS_FROM,
 }) => {
     const ref = usePlayOnce<HTMLDivElement>();
 
     if (!stacked) {
-        return <div ref={ref}><Card tone={tone} /></div>;
+        return <div ref={ref}><Card tone={tone} sendNote={sendNote} /></div>;
     }
 
     return (
@@ -212,7 +220,7 @@ export const ApprovalPreview: React.FC<{ stacked?: boolean; tone?: PreviewTone }
                 />
             ))}
             <div className="relative">
-                <Card tone={tone} />
+                <Card tone={tone} sendNote={sendNote} />
             </div>
         </div>
     );

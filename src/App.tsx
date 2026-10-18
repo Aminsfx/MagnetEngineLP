@@ -13,6 +13,8 @@ import { Loader2 } from 'lucide-react';
 const LandingA = lazy(() => import('./pages/landing/VariantA'));
 const LandingB = lazy(() => import('./pages/landing/VariantB'));
 const LandingC = lazy(() => import('./pages/landing/VariantC'));
+// Done-for-you service page (noindex) — the same engine sold as a service.
+const LandingDFY = lazy(() => import('./pages/landing/DoneForYou'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PendingActivationPage = lazy(() => import('./pages/PendingActivationPage'));
@@ -93,6 +95,7 @@ const App: React.FC = () => {
         <Route path="/" element={<LandingA />} />
         <Route path="/lp/b" element={<LandingB />} />
         <Route path="/lp/c" element={<LandingC />} />
+        <Route path="/lp/dfy" element={<LandingDFY />} />
         {/* The addresses the three were first previewed at, kept working. */}
         <Route path="/preview/a" element={<Navigate to="/" replace />} />
         <Route path="/preview/b" element={<Navigate to="/lp/b" replace />} />

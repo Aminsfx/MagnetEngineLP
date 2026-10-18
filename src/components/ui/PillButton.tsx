@@ -28,21 +28,26 @@ const SIZES: Record<Size, { button: string; disc: string; icon: number }> = {
     },
 };
 
-export const PillButton: React.FC<{
-    to: string;
-    children: React.ReactNode;
-    size?: Size;
-    block?: boolean;
-    className?: string;
-}> = ({ to, children, size = 'lg', block = false, className = '' }) => {
+/**
+ * With `to` it is a link; without, a button that takes the rest of its props —
+ * which is how the done-for-you page makes its primary action open the call
+ * booking (`CALL_BOOKING`) rather than navigate.
+ */
+export const PillButton: React.FC<
+    {
+        to?: string;
+        children: React.ReactNode;
+        size?: Size;
+        block?: boolean;
+        className?: string;
+    } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'children'>
+> = ({ to, children, size = 'lg', block = false, className = '', ...rest }) => {
     const s = SIZES[size];
-    return (
-        <Link
-            to={to}
-            className={`group relative inline-flex items-center overflow-hidden rounded-full whitespace-nowrap bg-white text-surface font-semibold shadow-[0_10px_30px_-12px_rgba(255,255,255,0.35)] transition-[padding,background-color,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-neutral-100 active:scale-[0.98] focus-visible:outline-offset-4 ${
-                block ? 'flex w-full justify-center' : 'w-fit'
-            } ${s.button} ${className}`}
-        >
+    const classes = `group relative inline-flex items-center overflow-hidden rounded-full whitespace-nowrap bg-white text-surface font-semibold shadow-[0_10px_30px_-12px_rgba(255,255,255,0.35)] transition-[padding,background-color,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-neutral-100 active:scale-[0.98] focus-visible:outline-offset-4 ${
+        block ? 'flex w-full justify-center' : 'w-fit'
+    } ${s.button} ${className}`;
+    const inner = (
+        <>
             <span className="relative z-10">{children}</span>
             <span
                 aria-hidden
@@ -50,7 +55,16 @@ export const PillButton: React.FC<{
             >
                 <ArrowUpRight size={s.icon} strokeWidth={2.2} />
             </span>
+        </>
+    );
+    return to ? (
+        <Link to={to} className={classes}>
+            {inner}
         </Link>
+    ) : (
+        <button type="button" {...rest} className={classes}>
+            {inner}
+        </button>
     );
 };
 

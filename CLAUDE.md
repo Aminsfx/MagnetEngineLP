@@ -7,7 +7,7 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 - **React 19 + TypeScript**
 - **Vite 6** — dev server on port 3000, env vars via `VITE_` prefix (`import.meta.env`)
 - **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. Every surface — dashboard, auth, legal, the extension popup — is black and white, with `positive` (emerald) and `danger` (red) as its only two hues; orange (`brand`) survives only in the unrouted, retired `src/pages/LandingPage.tsx`. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
-- **React Router v7** — public: `/` (landing A), `/lp/b` and `/lp/c` (A/B-test variants, `noindex`; `/preview/a|b|c` redirect to them), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
+- **React Router v7** — public: `/` (landing A), `/lp/b` and `/lp/c` (A/B-test variants, `noindex`; `/preview/a|b|c` redirect to them), `/lp/dfy` (done-for-you service page, `noindex`), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Dashboard reports** — `src/lib/reports.ts`: revenue, the outcome funnel and the weekly report, computed from Lead milestone dates (no chart library)
 - **Lucide React** — icons
@@ -21,6 +21,7 @@ src/
     landing/VariantA.tsx         # Live landing page (`/`) — "The Magnet"
     landing/VariantB.tsx         # A/B variant at /lp/b — "Not a template"
     landing/VariantC.tsx         # A/B variant at /lp/c — "The hire"
+    landing/DoneForYou.tsx       # /lp/dfy — the service: $200/mo, 3,000 DMs, 3 calls or a refund; every CTA books the call
     LandingPage.tsx              # Retired orange landing page — no route renders it
     LoginPage.tsx                # Sign in / sign up / forgot-password (Supabase)
     ResetPasswordPage.tsx        # Password-recovery landing (from email link)
@@ -165,6 +166,10 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   (first touch) and written into the new Supabase user's metadata
   (`raw_user_meta_data->>'landing_variant'`).
 - B and C set `robots: noindex` — they are the same offer as `/`.
+- **DFY** at `/lp/dfy` (`variant="dfy"`, also noindex) sells the same engine as a
+  done-for-you service. It has no trial, so `LandingShell`'s `ctaBooksCall` and the
+  `actions`/`terms` props on `Hero` and `Close` swap every trial button for the call
+  (`CALL_BOOKING` in `content.ts`). Its hero field is `motion/CalendarFill.tsx`.
 - The FAQ is short. It answers "will this get my account banned?" with how the
   product works (no password, no stored login, sends from the Operator's own
   browser) and never promises the account is safe (owner decision, 2026-10-06;

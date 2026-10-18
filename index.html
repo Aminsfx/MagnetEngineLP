@@ -57,9 +57,12 @@
 
     <link rel="stylesheet" href="/index.css">
     <!-- Cal element-click embed. The stub is inert; embed.js (~100 KB) is only
-         fetched once the browser is idle on the landing page, or the moment a
-         pointer or keyboard focus reaches a booking button anywhere else. It
-         used to load at parse time on every route, dashboard included. -->
+         fetched once the browser is idle on a landing page (/ and /lp/*), or
+         the moment a pointer or keyboard focus reaches a booking button
+         anywhere else. It used to load at parse time on every route, dashboard
+         included. A click that lands before embed.js has run (a phone's tap
+         comes right on the heels of its touchstart) is not lost: it queues the
+         modal itself, which embed.js opens as soon as it loads. -->
     <script type="text/javascript">
         (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if (typeof namespace === "string") { cal.ns[namespace] = cal.ns[namespace] || api; p(cal.ns[namespace], ar); p(cal, ["initNamespace", namespace]); } else p(cal, ar); return; } p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
         (function () {
@@ -73,10 +76,20 @@
             function onIntent(e) {
                 if (e.target && e.target.closest && e.target.closest("[data-cal-link]")) startCal();
             }
+            function onClick(e) {
+                var el = e.target && e.target.closest && e.target.closest("[data-cal-link]");
+                // Once embed.js has run (it defines cal-modal-box) it answers the click itself.
+                if (!el || (window.customElements && customElements.get("cal-modal-box"))) return;
+                startCal();
+                var config = {};
+                try { config = JSON.parse(el.getAttribute("data-cal-config") || "{}"); } catch (_) { }
+                Cal.ns["15min"]("modal", { calLink: el.getAttribute("data-cal-link"), config: config });
+            }
             document.addEventListener("pointerover", onIntent, { passive: true });
             document.addEventListener("focusin", onIntent);
             document.addEventListener("touchstart", onIntent, { passive: true });
-            if (location.pathname === "/") {
+            document.addEventListener("click", onClick);
+            if (location.pathname === "/" || location.pathname.indexOf("/lp/") === 0) {
                 window.addEventListener("load", function () {
                     (window.requestIdleCallback || function (f) { setTimeout(f, 1200); })(startCal, { timeout: 4000 });
                 });

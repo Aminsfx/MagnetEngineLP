@@ -83,8 +83,8 @@ const VariantA: React.FC = () => (
             sub={
                 <>
                     MagnetEngine is an AI appointment setter for Instagram. It finds the people you want as
-                    clients, writes each one a DM from their own profile, and sends it from your account at a
-                    human pace. Your part takes ten minutes a day.
+                    clients, writes each one a DM from their own profile, and sends it at a human pace. Your
+                    part is closing the calls.
                 </>
             }
         >

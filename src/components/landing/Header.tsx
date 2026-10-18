@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Magnet, Menu, X } from 'lucide-react';
 import { PillButton } from '../ui/PillButton';
 import { Sheet } from '../ui/Sheet';
+import { CALL_BOOKING } from './content';
 
 /**
  * The public header, from the shadcnspace hero-01 reference: transparent over
@@ -66,12 +67,23 @@ function useActiveSection(ids: string[]): string | null {
     return active;
 }
 
-export const Header: React.FC<{ nav: NavItem[]; cta: string; home?: string }> = ({ nav, cta, home = '/' }) => {
+/**
+ * `cta` is the label of the header's one action. It starts the trial; with
+ * `ctaBooksCall` it opens the call booking instead (the done-for-you page has
+ * no trial to start).
+ */
+export const Header: React.FC<{ nav: NavItem[]; cta: string; ctaBooksCall?: boolean; home?: string }> = ({
+    nav,
+    cta,
+    ctaBooksCall = false,
+    home = '/',
+}) => {
     const [condensed, setCondensed] = useState(false);
     const [open, setOpen] = useState(false);
     const [ids] = useState(() => nav.map(n => n.href.slice(1)));
     const active = useActiveSection(ids);
     const close = useCallback(() => setOpen(false), []);
+    const action = ctaBooksCall ? CALL_BOOKING : { to: '/login?mode=signup' };
 
     useEffect(() => {
         const onScroll = () => setCondensed(window.scrollY >= 50);
@@ -128,7 +140,7 @@ export const Header: React.FC<{ nav: NavItem[]; cta: string; home?: string }> = 
                     >
                         Sign in
                     </Link>
-                    <PillButton to="/login?mode=signup" size="md" className="max-lg:hidden">
+                    <PillButton {...action} size="md" className="max-lg:hidden">
                         {cta}
                     </PillButton>
                     <button
@@ -185,7 +197,7 @@ export const Header: React.FC<{ nav: NavItem[]; cta: string; home?: string }> = 
                     </ul>
 
                     <div className="flex flex-col gap-4">
-                        <PillButton to="/login?mode=signup">{cta}</PillButton>
+                        <PillButton {...action}>{cta}</PillButton>
                         <Link to="/login" className="text-body-sm text-neutral-400 hover:text-white w-fit">
                             Already a member? Sign in
                         </Link>
