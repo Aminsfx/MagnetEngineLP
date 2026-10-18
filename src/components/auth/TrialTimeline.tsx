@@ -27,7 +27,7 @@ export const TrialTimeline: React.FC<{
     const price = `${PRICES[billing].label}${PRICES[billing].suffix}`;
 
     const steps = [
-        { when: 'Today', what: 'Create your account', note: 'Name, email, password.' },
+        { when: 'Today', what: 'Create your account', note: 'Name, email, phone, password.' },
         { when: 'Today', what: 'Start the 3-day trial', note: 'Card required. Nothing is charged today.' },
         { when: 'Within 48 hours', what: 'Your first DMs are in the queue', note: 'Search a niche, read the drafts, approve the good ones.' },
         { when: fmt(charge), what: `First charge: ${price}`, note: `Cancel before ${fmt(charge)} and you pay nothing.`, emphasis: true },

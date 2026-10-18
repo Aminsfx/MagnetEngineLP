@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
-import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange } from '../lib/auth';
+import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, resetPassword as authResetPassword, onAuthStateChange, type SignUpProfile } from '../lib/auth';
 import { posthogCapture, posthogIdentify, posthogReset } from '../lib/posthog';
 import { shareSession } from '../lib/extensionProtocol';
 
@@ -10,7 +10,7 @@ interface AuthContextValue {
   /** True while the initial session is being resolved — show a global loader during this */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string, firstName?: string, lastName?: string) => Promise<string | null>;
+  signUp: (email: string, password: string, profile?: SignUpProfile) => Promise<string | null>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<string | null>;
 }
@@ -74,8 +74,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result.error;
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, firstName?: string, lastName?: string): Promise<string | null> => {
-    const result = await authSignUp(email, password, firstName, lastName);
+  const signUp = useCallback(async (email: string, password: string, profile: SignUpProfile = {}): Promise<string | null> => {
+    const result = await authSignUp(email, password, profile);
+    // The phone number stays out of PostHog: analytics needs who signed up and
+    // from where, not a way to call them.
+    const { firstName, lastName, heardAbout } = profile;
     // Supabase answers a sign-up for an email that already has an account with
     // a stand-in user and no identities, to hide which emails exist — that is
     // not a new account, so it is not a sign-up. Identify here as well as on
@@ -86,8 +89,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...(result.user.email ? { email: result.user.email } : {}),
         ...(firstName ? { first_name: firstName } : {}),
         ...(lastName ? { last_name: lastName } : {}),
+        ...(heardAbout ? { heard_about: heardAbout.source } : {}),
       });
-      posthogCapture('sign_up_completed', { sign_up_method: 'email' });
+      posthogCapture('sign_up_completed', {
+        sign_up_method: 'email',
+        ...(heardAbout ? { heard_about: heardAbout.source } : {}),
+      });
     }
     if (!result.error && result.user) {
       // If email confirmation is disabled in Supabase settings, user is immediately active

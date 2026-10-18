@@ -95,6 +95,10 @@ servePost<Body>("admin-api", async ({ body, sb }) => {
         id: u.id,
         email: u.email ?? "",
         name: name || null,
+        // From the sign-up form (src/pages/LoginPage.tsx); null for accounts
+        // made before it asked.
+        phone: typeof meta.phone === "string" ? meta.phone : null,
+        heardAbout: typeof meta.heard_about === "string" ? meta.heard_about : null,
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at ?? null,
         status: sub?.status ?? "pending",

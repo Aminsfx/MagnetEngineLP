@@ -14,6 +14,11 @@ import {
     type AdminUsersResponse,
 } from '../lib/adminApi';
 import { CARD_BEZEL, CARD_BEZEL_STRONG } from '../lib/theme';
+import { HEARD_ABOUT_OPTIONS } from '../lib/heardAbout';
+
+/** A sign-up form answer as its label, or the raw key for one since renamed. */
+const heardAboutLabel = (key?: string | null): string =>
+    key ? HEARD_ABOUT_OPTIONS.find(o => o.value === key)?.label ?? key : '—';
 
 /** Owner-only business console — gated by RequireAdmin in App.tsx and
  *  enforced server-side by the admin-api Edge Function (ADMIN_EMAILS secret). */
@@ -227,7 +232,7 @@ const AdminPage: React.FC = () => {
                             <table className="w-full text-left text-sm">
                                 <thead className="border-b border-white/5">
                                     <tr>
-                                        {['Email', 'Name', 'Signed up', 'Last sign-in', 'Status', 'Actions'].map(h => (
+                                        {['Email', 'Name', 'Phone', 'Heard about us', 'Signed up', 'Last sign-in', 'Status', 'Actions'].map(h => (
                                             <th key={h} className="px-5 py-3 text-[10px] font-semibold text-neutral-600 uppercase tracking-widest">{h}</th>
                                         ))}
                                     </tr>
@@ -237,6 +242,10 @@ const AdminPage: React.FC = () => {
                                         <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
                                             <td className="px-5 py-3.5 text-neutral-300 text-xs">{u.email}</td>
                                             <td className="px-5 py-3.5 text-neutral-500 text-xs">{u.name ?? '—'}</td>
+                                            <td className="px-5 py-3.5 text-neutral-300 text-xs font-mono whitespace-nowrap">
+                                                {u.phone ? <a href={`tel:${u.phone}`} className="hover:text-white transition-colors">{u.phone}</a> : '—'}
+                                            </td>
+                                            <td className="px-5 py-3.5 text-neutral-500 text-xs whitespace-nowrap">{heardAboutLabel(u.heardAbout)}</td>
                                             <td className="px-5 py-3.5 text-neutral-500 text-xs whitespace-nowrap">{fmtDate(u.createdAt)}</td>
                                             <td className="px-5 py-3.5 text-neutral-500 text-xs whitespace-nowrap">{fmtDate(u.lastSignInAt)}</td>
                                             <td className="px-5 py-3.5">
@@ -278,12 +287,12 @@ const AdminPage: React.FC = () => {
                                     ))}
                                     {users.length === 0 && !loading && (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-10 text-center text-neutral-600 text-sm">No members yet.</td>
+                                            <td colSpan={8} className="px-6 py-10 text-center text-neutral-600 text-sm">No members yet.</td>
                                         </tr>
                                     )}
                                     {loading && users.length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-10 text-center">
+                                            <td colSpan={8} className="px-6 py-10 text-center">
                                                 <Loader2 className="w-5 h-5 animate-spin text-white mx-auto" />
                                             </td>
                                         </tr>

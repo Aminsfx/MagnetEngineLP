@@ -142,9 +142,17 @@ Deno.serve(async (req) => {
   if (data.email_action_type === "signup") {
     const lastName = (user.user_metadata?.last_name as string | undefined) ?? null;
     const name = [firstName, lastName].filter(Boolean).join(" ");
+    // The sign-up form's "Where did you hear about us?" (src/lib/heardAbout.ts).
+    const heardAbout = (user.user_metadata?.heard_about as string | undefined) ?? null;
+    const phone = (user.user_metadata?.phone as string | undefined) ?? null;
     await notifyOwner({
       title: "🆕 New signup",
-      lines: [name ? `${name} <${user.email}>` : user.email, "Confirmation email sent — awaiting payment."],
+      lines: [
+        name ? `${name} <${user.email}>` : user.email,
+        ...(phone ? [`Phone: ${phone}`] : []),
+        ...(heardAbout ? [`Heard about us: ${heardAbout}`] : []),
+        "Confirmation email sent — awaiting payment.",
+      ],
     });
     await runInBackground(
       syncContact({ email: user.email, firstName, lastName }, segmentIds(["all"])),

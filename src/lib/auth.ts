@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { landingVariant } from './landingVariant';
+import type { HeardAboutAnswer } from './heardAbout';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 
 export interface AuthResult {
@@ -16,20 +17,49 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   };
 }
 
+/** What the sign-up form asks besides email and password. */
+export interface SignUpProfile {
+  firstName?: string;
+  lastName?: string;
+  /** As `normalizePhone` leaves it: digits, with a leading + when typed. */
+  phone?: string;
+  heardAbout?: HeardAboutAnswer;
+}
+
+/**
+ * A phone number as the sign-up form stores it: the digits, keeping a leading
+ * + so the country code survives. Null when it is not 7–15 digits (E.164's
+ * range), which the form reports instead of saving.
+ */
+export function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return null;
+  return raw.trim().startsWith('+') ? `+${digits}` : digits;
+}
+
 /** Create a new account */
 export async function signUp(
   email: string,
   password: string,
-  firstName?: string,
-  lastName?: string,
+  profile: SignUpProfile = {},
 ): Promise<AuthResult> {
+  const { firstName, lastName, phone, heardAbout } = profile;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       // landing_variant: which A/B landing page this person first saw
       // (src/lib/landingVariant.ts). Absent when they never saw one.
-      data: { first_name: firstName ?? '', last_name: lastName ?? '', landing_variant: landingVariant() ?? undefined },
+      // heard_about: their answer to "Where did you hear about us?"
+      // (src/lib/heardAbout.ts). phone lives here, in metadata, not in
+      // auth.users.phone — that column is Supabase's phone sign-in, unused.
+      data: {
+        first_name: firstName ?? '',
+        last_name: lastName ?? '',
+        phone: phone || undefined,
+        landing_variant: landingVariant() ?? undefined,
+        heard_about: heardAbout?.source,
+      },
       // Confirmation email link returns the user to the app (Supabase must
       // also allow this URL under Auth → URL Configuration → Redirect URLs)
       emailRedirectTo: `${window.location.origin}/login`,

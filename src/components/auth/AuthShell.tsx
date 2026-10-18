@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Loader2, ArrowRight, ChevronDown } from 'lucide-react';
 import Logo from '../Logo';
 import { CHANNEL, alpha } from '../../lib/theme';
 
@@ -71,6 +71,30 @@ export const Field: React.FC<
         <label htmlFor={id} className="block text-meta font-medium text-neutral-300 mb-2">{label}</label>
         <input id={id} className={`${INPUT} ${className}`} {...input} />
         {hint && <div className="mt-2">{hint}</div>}
+    </div>
+);
+
+/**
+ * A labelled native select, drawn like `Field`. Native on purpose: it is
+ * keyboard- and screen-reader-complete, and a phone opens its own picker. An
+ * empty value reads as a placeholder.
+ */
+export const SelectField: React.FC<
+    React.SelectHTMLAttributes<HTMLSelectElement> & { id: string; label: string; children: React.ReactNode }
+> = ({ id, label, className = '', children, value, ...select }) => (
+    <div>
+        <label htmlFor={id} className="block text-meta font-medium text-neutral-300 mb-2">{label}</label>
+        <div className="relative">
+            <select
+                id={id}
+                value={value}
+                className={`${INPUT} appearance-none pr-11 cursor-pointer [color-scheme:dark] ${value ? '' : '!text-neutral-500'} ${className}`}
+                {...select}
+            >
+                {children}
+            </select>
+            <ChevronDown aria-hidden className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+        </div>
     </div>
 );
 

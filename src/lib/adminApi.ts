@@ -16,6 +16,10 @@ export interface AdminUserRow {
     id: string;
     email: string;
     name: string | null;
+    /** From the sign-up form; null for accounts made before it asked, or until admin-api is redeployed. */
+    phone?: string | null;
+    /** `heard_about` key from src/lib/heardAbout.ts. */
+    heardAbout?: string | null;
     createdAt: string;
     lastSignInAt: string | null;
     status: 'pending' | 'active' | 'cancelled' | string;

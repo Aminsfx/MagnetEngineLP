@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { MailCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { AuthShell, AuthHeading, Field, PasswordField, FormError, SubmitButton, TextAction } from '../components/auth/AuthShell';
+import { AuthShell, AuthHeading, Field, PasswordField, SelectField, FormError, SubmitButton, TextAction } from '../components/auth/AuthShell';
 import { TrialTimeline } from '../components/auth/TrialTimeline';
 import { ApprovalPreview } from '../components/ApprovalPreview';
+import { HEARD_ABOUT_OPTIONS, type HeardAbout } from '../lib/heardAbout';
+import { normalizePhone } from '../lib/auth';
 
 type Mode = 'login' | 'signup' | 'forgot';
 
@@ -38,6 +40,8 @@ const LoginPage: React.FC = () => {
     const [password, setPassword] = useState('');
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [heardAbout, setHeardAbout] = useState<HeardAbout | ''>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sentTo, setSentTo] = useState<null | 'confirm' | 'reset'>(null);
@@ -62,7 +66,17 @@ const LoginPage: React.FC = () => {
                 if (err) setError(err);
                 else setSentTo('reset');
             } else {
-                const result = await signUp(email, password, firstName.trim(), lastName.trim());
+                const phoneNumber = normalizePhone(phone);
+                if (!phoneNumber) {
+                    setError('Enter a phone number we can reach you on, with your country code.');
+                    return;
+                }
+                const result = await signUp(email, password, {
+                    firstName: firstName.trim(),
+                    lastName: lastName.trim(),
+                    phone: phoneNumber,
+                    heardAbout: heardAbout ? { source: heardAbout } : undefined,
+                });
                 if (result === '__CONFIRM_EMAIL__') {
                     setSentTo('confirm');
                 } else if (result) {
@@ -125,6 +139,13 @@ const LoginPage: React.FC = () => {
                     value={email} onChange={e => setEmail(e.target.value)} placeholder="you@youragency.com"
                 />
 
+                {mode === 'signup' && (
+                    <Field
+                        id="phone" label="Phone number" type="tel" required autoComplete="tel" inputMode="tel"
+                        value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 555 123 4567"
+                    />
+                )}
+
                 {mode !== 'forgot' && (
                     <PasswordField
                         id="password"
@@ -144,6 +165,18 @@ const LoginPage: React.FC = () => {
                             </p>
                         )}
                     />
+                )}
+
+                {mode === 'signup' && (
+                    <SelectField
+                        id="heard-about" label="Where did you hear about us?" required
+                        value={heardAbout} onChange={e => setHeardAbout(e.target.value as HeardAbout)}
+                    >
+                        <option value="" disabled>Choose one</option>
+                        {HEARD_ABOUT_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value} className="bg-surface-raised text-white">{o.label}</option>
+                        ))}
+                    </SelectField>
                 )}
 
                 {error && <FormError>{error}</FormError>}

@@ -49,7 +49,7 @@ const PrivacyPolicy: React.FC = () => {
                 <Section title="2. Information We Collect">
                     <p><strong className="text-white">a) Information you provide directly:</strong></p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>Account registration details (e.g., name, email address, password).</li>
+                        <li>Account registration details (e.g., name, email address, phone number, password, and how you heard about us).</li>
                         <li>Profile information you choose to provide.</li>
                         <li>Communications with our support team.</li>
                     </ul>
