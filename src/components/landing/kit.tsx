@@ -9,7 +9,7 @@ import { Marquee } from '../ui/Marquee';
 import { ApprovalPreview, BrandPanel, EXAMPLE_QUEUE_SIZE } from '../ApprovalPreview';
 import { PRICES, SUPPORT_EMAIL } from '../../lib/plans';
 import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
-import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
+import { AUDIENCE, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
 
 /**
  * The public landing kit: the pieces the three /preview variants share, in the
@@ -18,11 +18,11 @@ import { ANCHOR_PRICE, FAQ_ITEMS, MONTHLY_DMS, SEATS_CLAIMED, SEATS_TOTAL, TESTI
  * replied, found, the trial you pay nothing for).
  *
  * Every number printed here is one the code or the owner stands behind:
- * `PRICES`, the seat count the owner edits, send pacing and the default cap
- * from `extension/background.js`. Customer proof is only what customers
- * actually said (`TESTIMONIALS` in content.ts) — the reference's avatars,
- * stars and logo strip became the seat count, the trial terms and things the
- * product can actually search.
+ * `PRICES`, send pacing and the default cap from `extension/background.js`.
+ * Customer proof is only what customers actually said (`TESTIMONIALS` in
+ * content.ts) — the reference's avatars, stars and logo strip became the
+ * trial terms, the call and things the product can actually search. No
+ * scarcity: the founding-seat count was removed (owner, 2026-10-18).
  */
 
 const SIGNUP = '/login?mode=signup';
@@ -100,43 +100,23 @@ export const LandingShell: React.FC<{ nav: NavItem[]; variant: LandingVariant; c
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
 /**
- * The seat count, drawn as the hundred seats it counts. It stands where the
- * reference put an avatar stack and five stars: the one piece of scarcity this
- * product has is real, so it gets the visual weight proof would have had.
+ * The terms, printed wherever the trial is offered. No charge date on the
+ * landing pages (owner, 2026-10-18): the dated timeline — today, the charge
+ * day — is shown on /activate before the card goes in.
  */
-export const SeatMap: React.FC = () => (
-    <div className="flex items-center gap-3.5 text-left">
-        <span
-            aria-hidden
-            className="grid grid-cols-[repeat(20,3px)] grid-rows-[repeat(5,3px)] gap-[2px] flex-none"
-        >
-            {Array.from({ length: SEATS_TOTAL }, (_, i) => (
-                <span key={i} className={`rounded-[1px] ${i < SEATS_CLAIMED ? 'bg-white' : 'bg-white/12'}`} />
-            ))}
-        </span>
-        <span className="leading-tight">
-            <span className="block text-body-sm font-semibold text-white tabular-nums">
-                {SEATS_CLAIMED} of {SEATS_TOTAL} founding seats
-            </span>
-            <span className="block text-meta text-neutral-400">claimed at {PRICES.monthly.label}/month</span>
-        </span>
-    </div>
-);
-
-/** The terms, printed wherever the trial is offered. */
 export const TrialTerms: React.FC<{ className?: string; style?: React.CSSProperties }> = ({
     className = '',
     style,
 }) => (
     <p className={`text-meta text-neutral-400 ${className}`} style={style}>
-        Card required · cancel before day 4 and pay nothing · {PRICES.monthly.label}/month after
+        Card required · cancel anytime
     </p>
 );
 
 /**
  * The first viewport, after the reference: the claim centred at display size,
- * its subhead, the action beside the seat count, and the terms — over a motion
- * field that belongs to the variant. The approval card (children) rises into
+ * who it is for, its subhead, the trial with the call beside it, and the
+ * terms — over a motion field that belongs to the variant. The approval card (children) rises into
  * the bottom of the field, which fades out beneath it.
  */
 export const Hero: React.FC<{
@@ -163,15 +143,16 @@ export const Hero: React.FC<{
                 className="landing-in mt-7 mx-auto max-w-[50ch] text-lead text-neutral-300"
                 style={{ '--d': '100ms' } as React.CSSProperties}
             >
+                <span className="block mb-2 text-white font-medium">{AUDIENCE}</span>
                 {sub}
             </p>
 
             <div
-                className="landing-in mt-10 flex flex-col md:flex-row items-center justify-center gap-7 md:gap-9"
+                className="landing-in mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
                 style={{ '--d': '200ms' } as React.CSSProperties}
             >
                 <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
-                <SeatMap />
+                <CallPill>{CALL_CTA}</CallPill>
             </div>
 
             <TrialTerms className="landing-in mt-7" style={{ '--d': '260ms' } as React.CSSProperties} />
@@ -271,7 +252,6 @@ const COST_OF_AN_AGENCY = '$3,000';
 const ANCHORS: [string, string][] = [
     ['Hiring someone to do it', `${COST_OF_A_HUMAN}/mo`],
     ['Paying an agency to do it', `${COST_OF_AN_AGENCY}/mo`],
-    [`This, once the ${SEATS_TOTAL} seats are gone`, `${ANCHOR_PRICE}/mo`],
 ];
 
 const FEATURES = [
@@ -288,18 +268,13 @@ export const Pricing: React.FC<{ heading: React.ReactNode; id?: string }> = ({ h
             <Heading className="mb-12 text-center">{heading}</Heading>
 
             <Panel accent className="p-7 md:p-9">
-                <div className="flex items-center justify-between gap-4 mb-7">
-                    <span className="px-3 py-1 rounded-full text-label font-semibold bg-white/[0.06] border border-white/12 text-white">
-                        Founding member
-                    </span>
-                    <span className="text-meta text-neutral-400 font-mono tabular-nums">
-                        {SEATS_CLAIMED}/{SEATS_TOTAL} claimed
-                    </span>
-                </div>
+                <span className="inline-block mb-7 px-3 py-1 rounded-full text-label font-semibold bg-white/[0.06] border border-white/12 text-white">
+                    One plan · everything included
+                </span>
 
-                {/* What the job costs elsewhere, then our own later price, then
-                    theirs. Stepping down from a number the reader can check
-                    beats striking through one of ours. */}
+                {/* What the job costs elsewhere, then ours. Stepping down from
+                    a number the reader can check beats striking through one
+                    of ours. */}
                 <dl className="mb-7 pb-7 border-b border-white/8 space-y-2.5">
                     {ANCHORS.map(([label, price]) => (
                         <div key={label} className="flex items-baseline justify-between gap-3">
@@ -339,9 +314,7 @@ export const Pricing: React.FC<{ heading: React.ReactNode; id?: string }> = ({ h
                 <PillButton to={SIGNUP} block>
                     Start my 3-day trial
                 </PillButton>
-                <p className="text-center text-neutral-400 text-meta mt-4">
-                    Card required. You are charged {PRICES.monthly.label} on day 4 unless you cancel.
-                </p>
+                <TrialTerms className="text-center mt-4" />
             </Panel>
         </div>
     </Section>
@@ -389,12 +362,11 @@ const MessageCard: React.FC<{ t: Testimonial; className?: string; style?: React.
             <span aria-hidden className="w-8 h-8 rounded-lg flex-none bg-gradient-to-br from-neutral-500 to-neutral-800 blur-[3px]" />
             <span aria-hidden className="text-body-sm font-semibold text-white blur-[5px] select-none truncate">{t.name}</span>
             <span className="sr-only">A client</span>
+            {t.role && <span className="text-label text-neutral-400 truncate">{t.role}</span>}
             {t.time && <span className="text-label text-neutral-500 flex-none">{t.time}</span>}
-            {t.example && (
-                <span className="ml-auto flex-none px-2 py-0.5 rounded-full border border-white/15 text-label text-neutral-400">Example</span>
-            )}
         </figcaption>
-        <blockquote className="mt-2 text-body-sm text-neutral-200 leading-relaxed">{t.quote}</blockquote>
+        {t.topic && <p className="mt-3 text-body-sm font-semibold text-white">{t.topic}</p>}
+        <blockquote className={`${t.topic ? 'mt-1' : 'mt-2'} text-body-sm text-neutral-200 leading-relaxed`}>{t.quote}</blockquote>
         {t.reactions && t.reactions.length > 0 && (
             <div className="mt-2.5 flex gap-1.5" aria-label="Reactions">
                 {t.reactions.map(([emoji, count]) => (
@@ -410,8 +382,11 @@ const MessageCard: React.FC<{ t: Testimonial; className?: string; style?: React.
 
 /**
  * "What our clients are saying": real client messages scattered around the
- * call to action. Example entries render on localhost only, and the section
- * renders nothing in production until a real message exists (content.ts).
+ * heading — no button in the middle, because the page already asks for a card
+ * in the hero, at the price and at the close. More than the wall's eight
+ * become a plain grid under the heading. Example entries render on localhost
+ * only, and the section renders nothing in production until a real message
+ * exists (content.ts).
  */
 export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
     heading = (
@@ -420,8 +395,9 @@ export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
         </>
     ),
 }) => {
-    const items = TESTIMONIALS.filter(t => !t.example || import.meta.env.DEV).slice(0, WALL.length);
+    const items = TESTIMONIALS.filter(t => !t.example || import.meta.env.DEV);
     if (items.length === 0) return null;
+    const wall = items.length <= WALL.length;
     const few = items.length <= WALL_FEW.length;
     const spots = few ? WALL_FEW : WALL;
     const examples = items.some(t => t.example);
@@ -429,9 +405,6 @@ export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
     const center = (
         <div className="text-center px-6">
             <Heading className="mx-auto max-w-[14ch]">{heading}</Heading>
-            <div className="mt-9 flex justify-center">
-                <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
-            </div>
             {examples && (
                 <p className="mt-6 mx-auto max-w-[44ch] text-meta text-neutral-400">
                     These are example messages and show on localhost only. Add your clients' real messages in{' '}
@@ -444,7 +417,7 @@ export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
     return (
         <section id="reviews" className="relative scroll-mt-24 py-24 md:py-32 overflow-hidden">
             {/* Wide screens: the scattered wall, heading in the middle. */}
-            <div className="hidden xl:block relative max-w-[1400px] mx-auto" style={{ height: few ? 600 : 880 }}>
+            {wall && <div className="hidden xl:block relative max-w-[1400px] mx-auto" style={{ height: few ? 600 : 880 }}>
                 {items.map((t, i) => {
                     const spot = spots[i];
                     return (
@@ -461,15 +434,15 @@ export const Testimonials: React.FC<{ heading?: React.ReactNode }> = ({
                         />
                     );
                 })}
-                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none [&_a]:pointer-events-auto">
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none">
                     {center}
                 </div>
-            </div>
+            </div>}
 
-            {/* Narrower screens: heading first, then the messages in columns. */}
-            <div className="xl:hidden">
+            {/* Narrower screens, or more than the wall holds: heading first, then the messages in columns. */}
+            <div className={wall ? 'xl:hidden' : ''}>
                 {center}
-                <div className="mt-14 px-6 max-w-3xl mx-auto columns-1 sm:columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+                <div className={`mt-14 px-6 mx-auto columns-1 sm:columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid ${wall ? 'max-w-3xl' : 'max-w-6xl lg:columns-3'}`}>
                     {items.map((t, i) => <MessageCard key={i} t={t} />)}
                 </div>
             </div>
@@ -550,7 +523,7 @@ export const Close: React.FC<{ heading: React.ReactNode; body: React.ReactNode }
             <p className="mt-6 text-lead text-neutral-400 max-w-[48ch] mx-auto">{body}</p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <PillButton to={SIGNUP}>{TRIAL_CTA}</PillButton>
-                <CallPill>Book a 15-minute list check</CallPill>
+                <CallPill>{CALL_CTA}</CallPill>
             </div>
             <TrialTerms className="mt-6" />
         </div>

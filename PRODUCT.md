@@ -126,10 +126,11 @@ Hard constraints, read out of the code rather than estimated:
 
 The offer as it ships: **$147/month or $1,470/year, behind a 3-day free trial** —
 card required, cancel before day 4 and pay nothing, auto-bills on day 4, one
-trial per customer, payments final after that. A $497/month anchor sits above it.
-Seats are framed as founding-member scarcity with an owner-maintained count
-(currently 7 of 100), never a resetting countdown. The former 7-day money-back
-guarantee has been retired from every surface.
+trial per customer, payments final after that. The price is anchored only
+against what the job costs elsewhere (a hire, an agency). The founding-seat
+count (7 of 100) and the $497 "after the seats" anchor were removed from the
+landing pages on 2026-10-18 — no scarcity on the page. The former 7-day
+money-back guarantee has been retired from every surface.
 
 **The monthly DM allowance is 1,500.** Server side it is live (2026-09-24): the
 `MONTHLY_DM_LIMIT` secret is 1500 and generate-dm version 12, the first deploy
@@ -169,8 +170,9 @@ the synonyms to avoid. Use the product's words, in the interface and in copy.
 - **Honesty commitments that are product decisions, not copy preferences:** no
   invented logos or testimonials — four fabricated company logos and five
   fabricated testimonials were removed from the site and must never return; no
-  page claims the Operator's account is safe; the charge date is printed on the
-  trial button, because a trial that hides when it bills reads as a trap; and
+  page claims the Operator's account is safe; the charge date is shown, with
+  real dates, on /activate before the card goes in — the landing pages say
+  only "card required · cancel anytime" (owner, 2026-10-18); and
   scarcity appears only where it is a real product decision.
 - The same principle is enforced inside the product by the **Offer Ledger**: a
   number the Operator never entered does not reach a prospect, and an empty
@@ -203,7 +205,6 @@ What genuinely exists and may be cited:
 - Market-rate anchors used on the landing page — $2,400 for a human, $3,000 for
   an agency. These are claims about what the job costs elsewhere, checkable by
   the reader in an hour, not claims about MagnetEngine.
-- The owner-maintained seat count (7 of 100).
 - The DM Psychology Playbook PDF at
   `public/downloads/MagnetEngine-DM-Playbook.pdf`, with its source content in
   `docs/sops/`.
@@ -222,7 +223,7 @@ stale, superseded by the single $147 plan above.
    reaches a prospect only through the Offer Ledger. The same rule governs the
    marketing surface: no proof we do not have.
 3. **Say the uncomfortable thing first — where it is the buyer's to know.** The
-   charge date sits on the trial button. The ToS position lives in the Terms of
+   charge date sits on /activate, beside the card form. The ToS position lives in the Terms of
    Service and the open-tab requirement in onboarding, not in the landing copy
    (owner decision, 2026-09-24).
 4. **One channel, done properly.** Instagram DMs. Breadth across channels would

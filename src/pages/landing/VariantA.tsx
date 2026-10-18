@@ -12,7 +12,9 @@ import type { NavItem } from '../../components/landing/Header';
 /**
  * Landing A — "The Magnet", live at `/`. Outcome first: booked calls without the
  * prospecting. The hero field is the same wall of messages as B, no two alike.
- * The argument runs problem → mechanism → the math.
+ * The argument runs problem → mechanism → the math. The problem comes straight
+ * after the hero (owner, 2026-10-18): it is the section that makes the reader
+ * feel understood, so it goes before anything asks them to believe.
  */
 
 const NAV: NavItem[] = [
@@ -89,18 +91,6 @@ const VariantA: React.FC = () => (
             <ProductPreview />
         </Hero>
 
-        <MarqueeBand label="Search any niche on Instagram — by keyword, hashtag or place">
-            {NICHES.map(n => (
-                <span
-                    key={n}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/8 text-meta text-neutral-300 whitespace-nowrap"
-                >
-                    <Search size={13} strokeWidth={2.2} aria-hidden className="text-neutral-500" />
-                    {n}
-                </span>
-            ))}
-        </MarqueeBand>
-
         <Section id="problem">
             <div className="max-w-3xl mx-auto">
                 <Heading className="mb-14">
@@ -128,6 +118,18 @@ const VariantA: React.FC = () => (
                 </p>
             </div>
         </Section>
+
+        <MarqueeBand label="Search any niche on Instagram — by keyword, hashtag or place">
+            {NICHES.map(n => (
+                <span
+                    key={n}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/8 text-meta text-neutral-300 whitespace-nowrap"
+                >
+                    <Search size={13} strokeWidth={2.2} aria-hidden className="text-neutral-500" />
+                    {n}
+                </span>
+            ))}
+        </MarqueeBand>
 
         <HormoziClip />
 

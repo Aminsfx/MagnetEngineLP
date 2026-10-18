@@ -2,18 +2,26 @@
  * The landing kit's facts and words, kept apart from its components so the
  * pages and the kit read one copy of each.
  *
- * Every figure here is one the owner stands behind: SEATS_CLAIMED is a real
- * number the owner edits by hand, never a countdown; MONTHLY_DMS is the decided
+ * Every figure here is one the owner stands behind: MONTHLY_DMS is the decided
  * allowance (see PRODUCT.md for the code values that still have to catch up).
+ * The founding-seat count and the $497 "after the seats" anchor are gone
+ * (owner, 2026-10-18): no scarcity on the page.
  */
 
-export const SEATS_CLAIMED = 7;
-export const SEATS_TOTAL = 100;
-export const ANCHOR_PRICE = '$497';
 export const MONTHLY_DMS = '1,500';
 
-/** The trial's page-wide call to action. One wording, every button. */
+/** Who the page is for, said in the hero. */
+export const AUDIENCE = 'For agency owners and coaches who sell through DMs.';
+
+/**
+ * The trial's page-wide call to action. One wording, every button — and only
+ * three of them in the page body (hero, pricing, close), because each one
+ * asks for a card.
+ */
 export const TRIAL_CTA = 'Start the 3-day trial';
+
+/** The call is where sales close, so it rides beside the trial as the second action. */
+export const CALL_CTA = 'Get a Demo for Your Business';
 
 /**
  * Only the questions a buyer actually hesitates on — the objections — owner's
@@ -52,7 +60,7 @@ export const FAQ_ITEMS = [
     },
     {
         question: 'What if it doesn’t work for my niche?',
-        answer: "The 3-day trial gives you the whole product, so you can search your niche and send your first DMs before you're charged. If the conversations don't start, cancel before day 4 and you pay nothing.",
+        answer: "The 3-day trial gives you the whole product, so you can search your niche and send your first DMs before you decide. If the conversations don't start, cancel during the trial and you pay nothing.",
     },
 ];
 
@@ -70,19 +78,30 @@ export interface Testimonial {
     quote: string;
     /** Drawn blurred. Kept for the record of who said it. */
     name: string;
+    /** What they do, shown in the clear — e.g. "Agency owner". */
+    role?: string;
+    /** The one thing the message is about, as a short headline. */
+    topic?: string;
     /** As shown on the original message, e.g. "8:17 PM". */
     time?: string;
     reactions?: Array<[emoji: string, count: number]>;
     example?: boolean;
 }
 
-// What customers told the owner about MagnetEngine, as the owner reported it
-// on 2026-10-16 — first person, nothing added: no timestamps or reactions,
-// because the owner gave none and invented ones would dress these up as
-// screenshots. Swap in each customer's exact words when you have them.
 export const TESTIMONIALS: Testimonial[] = [
-    { name: 'Jack', quote: 'I love this software. I got a lot of clients from it.' },
-    { name: 'Daniel', quote: "Without this tool I wouldn't have gotten my first ever client." },
-    { name: 'Customer', quote: "The scraping is what got me so many replies — I could go after my competitors' leads." },
-    { name: 'Customer', quote: "I use MagnetEngine every day. Without it I wouldn't have started my agency." },
+    // Sample copy from the owner (2026-10-18) — one per thing a buyer weighs.
+    // The four real client messages were dropped the same day (owner's call;
+    // git history has them). These are layout placeholders: localhost only,
+    // never in a production build — so the section is absent from production
+    // until a real client's words replace one.
+    { example: true, name: 'Sample', role: 'Agency owner', topic: 'Lead discovery', quote: 'Finding leads on Instagram used to take me hours. Now I can build a targeted list much faster and spend more time actually talking to potential clients.' },
+    { example: true, name: 'Sample', role: 'Freelance consultant', topic: 'Personalized DMs', quote: 'The personalized messages are what caught my attention. Instead of sending the same generic DM to everyone, I can tailor my outreach to each prospect.' },
+    { example: true, name: 'Sample', role: 'Marketing agency founder', topic: 'Time saving', quote: 'Instagram prospecting was becoming a full-time job on its own. Having lead discovery and message generation in one workflow makes things much easier.' },
+    { example: true, name: 'Sample', role: 'Coach', topic: 'AI appointment setter', quote: 'I like the idea of having AI handle more of the conversation instead of manually managing every single prospect. It gives me more time to focus on qualified leads.' },
+    { example: true, name: 'Sample', role: 'Online business owner', topic: 'Follow-ups', quote: 'Most opportunities get lost because you forget to follow up. Having follow-ups built into the outreach process makes it easier to stay consistent.' },
+    { example: true, name: 'Sample', role: 'Social media agency owner', topic: 'Targeted prospecting', quote: 'Being able to find prospects based on the audiences and accounts relevant to my niche is much more useful than randomly messaging people.' },
+    { example: true, name: 'Sample', role: 'Consultant', topic: 'Simpler workflow', quote: 'I used to jump between different tools to find leads, write messages, and track conversations. Having more of that process in one place is a big plus.' },
+    { example: true, name: 'Sample', role: 'Agency founder', topic: 'Scaling outreach', quote: 'The biggest benefit is having a repeatable outreach process. I can spend less time doing repetitive prospecting tasks and more time improving my offer.' },
+    { example: true, name: 'Sample', role: 'Business coach', topic: 'For coaches', quote: 'If you sell services through Instagram, you know how much time goes into finding the right people and starting conversations. This kind of workflow can simplify that process.' },
+    { example: true, name: 'Sample', role: 'SaaS founder', topic: 'All-in-one outreach', quote: "What interests me most is the combination of lead discovery, personalized outreach, and AI appointment setting. It's much closer to a complete prospecting workflow than just another DM tool." },
 ];
