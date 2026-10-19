@@ -63,7 +63,7 @@ function render(d) {
 
     document.getElementById('sentNum').textContent    = sent;
     document.getElementById('totalNum').textContent   = total;
-    document.getElementById('bar').style.width        = pct + '%';
+    document.getElementById('bar').style.transform    = `scaleX(${pct / 100})`;
     document.getElementById('statToday').textContent  = `${todayCnt}/${dailyCap}`;
     document.getElementById('statLeft').textContent   = left;
     document.getElementById('statFailed').textContent = failedCount;
@@ -112,13 +112,13 @@ refresh();
 setInterval(refresh, 1000);
 
 document.getElementById('btnStart').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'resumeCampaign' }, refresh);
+    chrome.runtime.sendMessage({ action: MAGNET_PROTOCOL.RUNTIME.RESUME }, refresh);
 });
 document.getElementById('btnPause').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'pauseCampaign' }, refresh);
+    chrome.runtime.sendMessage({ action: MAGNET_PROTOCOL.RUNTIME.PAUSE }, refresh);
 });
 document.getElementById('btnStop').addEventListener('click', () => {
     if (confirm('Clear the queue? This cannot be undone.')) {
-        chrome.runtime.sendMessage({ action: 'clearCampaign' }, refresh);
+        chrome.runtime.sendMessage({ action: MAGNET_PROTOCOL.RUNTIME.CLEAR }, refresh);
     }
 });
