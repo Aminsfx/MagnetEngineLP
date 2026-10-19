@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LogOut, RefreshCw, Mail, Check, Loader2, Lock } from 'lucide-react';
-import { WhopCheckoutEmbed } from '@whop/checkout/react';
+import { loadWhop, type Appearance } from '@whop/elements';
+import { WhopElements, Checkout, CheckoutElement } from '@whop/elements-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { WHOP_PLAN_IDS, PRICES, UPGRADE_CONTACT, PLAN_LIMITS } from '../lib/plans';
@@ -22,6 +23,20 @@ const FEATURES = [
     'Direct Slack access to founder',
 ];
 
+/*
+ * Whop Elements draws the checkout in its own frame, so the page's classes
+ * can't reach it; these are its documented `whop-*` parts. Paying is the
+ * confirming action, so the pay button takes the dashboard's green: the one
+ * hue it has, and what it means.
+ */
+const CHECKOUT_APPEARANCE: Appearance = {
+    theme: { appearance: 'dark', accentColor: 'green', grayColor: 'gray' },
+    classes: {
+        'whop-Checkout': { backgroundColor: SURFACE.raised },
+        'whop-CheckoutPayButton': { backgroundColor: POSITIVE[500], borderRadius: '12px' },
+    },
+};
+
 /**
  * Shown to signed-in users whose subscription is not yet activated.
  * Flow: user pays via the embedded Whop checkout (email locked to their signup
@@ -36,8 +51,19 @@ const PendingActivationPage: React.FC = () => {
     const [checking, setChecking] = useState(false);
     const [stillPending, setStillPending] = useState(false);
     const [billing, setBilling] = useState<BillingCycle>('monthly');
-    const [awaitingActivation, setAwaitingActivation] = useState(false);
+    // Whop sends the buyer back here (`returnUrl`) after a finished checkout or
+    // an off-site step such as 3-D Secure, with `status` on the URL. A declined
+    // or abandoned step lands here too, so only `succeeded` waits for access.
+    const [searchParams] = useSearchParams();
+    const [returnedStatus] = useState(() => searchParams.get('status'));
+    const [awaitingActivation, setAwaitingActivation] = useState(returnedStatus === 'succeeded');
+    const [paymentFailed, setPaymentFailed] = useState(returnedStatus !== null && returnedStatus !== 'succeeded');
+    const [checkoutLoadFailed, setCheckoutLoadFailed] = useState(false);
+    // One shared load however often this renders; it injects Whop's script once.
+    // A failed load stays failed, so "Try again" swaps in the load `retry()` starts.
+    const [whop, setWhop] = useState(() => loadWhop());
     const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const handledReturn = useRef(false);
 
     // If the subscription is (or becomes) active, this page shouldn't be shown
     useEffect(() => {
@@ -53,13 +79,8 @@ const PendingActivationPage: React.FC = () => {
 
     // After Whop reports the checkout complete, poll until the webhook has
     // flipped the subscription to active (usually a few seconds).
-    const handleCheckoutComplete = useCallback(() => {
-        // The browser's view of payment; `subscription_started` (whop-webhook)
-        // is the confirmed one.
-        posthogCapture('checkout_completed', { billing_cycle: billing, price: PRICES[billing].amount, currency: 'USD' });
-        setAwaitingActivation(true);
-        setStillPending(false);
-
+    const pollForActivation = useCallback(() => {
+        if (pollTimer.current) clearTimeout(pollTimer.current);
         let attempts = 0;
         const poll = async () => {
             attempts += 1;
@@ -76,7 +97,26 @@ const PendingActivationPage: React.FC = () => {
             pollTimer.current = setTimeout(poll, 3000);
         };
         poll();
-    }, [refresh, navigate, billing]);
+    }, [refresh, navigate]);
+
+    const handleCheckoutComplete = useCallback(() => {
+        // The browser's view of payment; `subscription_started` (whop-webhook)
+        // is the confirmed one.
+        posthogCapture('checkout_completed', { billing_cycle: billing, price: PRICES[billing].amount, currency: 'USD' });
+        setAwaitingActivation(true);
+        setStillPending(false);
+        setPaymentFailed(false);
+        pollForActivation();
+    }, [billing, pollForActivation]);
+
+    // Back from Whop: drop its query string so a reload doesn't replay it, and
+    // wait for the webhook if the payment went through. Once per visit.
+    useEffect(() => {
+        if (!returnedStatus || handledReturn.current) return;
+        handledReturn.current = true;
+        navigate('/activate', { replace: true });
+        if (returnedStatus === 'succeeded') pollForActivation();
+    }, [returnedStatus, navigate, pollForActivation]);
 
     const handleCheck = async () => {
         setChecking(true);
@@ -202,24 +242,46 @@ const PendingActivationPage: React.FC = () => {
                                 <p className="text-body-sm text-white font-medium">Payment received — opening your dashboard…</p>
                                 <p className="text-meta text-neutral-400">This usually takes a few seconds.</p>
                             </div>
+                        ) : planId && checkoutLoadFailed ? (
+                            <div className="p-6">
+                                <p className="text-body-sm text-neutral-300 mb-4">
+                                    The secure checkout couldn't load. A browser extension that blocks scripts can cause this.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => { setWhop(load => load.retry()); setCheckoutLoadFailed(false); }}
+                                    className="w-full flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-body-sm transition-colors bg-white hover:bg-neutral-200 text-surface"
+                                >
+                                    <RefreshCw className="w-4 h-4" aria-hidden />
+                                    Try again
+                                </button>
+                            </div>
                         ) : planId ? (
-                            <WhopCheckoutEmbed
-                                key={billing}
-                                planId={planId}
-                                theme="dark"
-                                // Paying is the confirming action, so Whop's button takes the
-                                // dashboard's green: the one hue it has, and what it means.
-                                themeOptions={{ accentColor: POSITIVE[500], backgroundColor: SURFACE.raised, borderRadius: 12 }}
-                                prefill={user?.email ? { email: user.email } : undefined}
-                                disableEmail={!!user?.email}
-                                onComplete={handleCheckoutComplete}
-                                fallback={
-                                    <div role="status" className="flex items-center justify-center gap-2 py-16 text-neutral-400 text-body-sm">
-                                        <Loader2 className="w-4 h-4 animate-spin text-neutral-300" aria-hidden />
-                                        Loading secure checkout…
-                                    </div>
-                                }
-                            />
+                            <WhopElements
+                                elements={whop}
+                                appearance={CHECKOUT_APPEARANCE}
+                                onLoadError={() => setCheckoutLoadFailed(true)}
+                            >
+                                {/* Options are fixed when Whop opens the session, so switching
+                                    billing mounts a fresh checkout rather than updating this one. */}
+                                <Checkout
+                                    key={billing}
+                                    plan={planId}
+                                    returnUrl={`${window.location.origin}/activate`}
+                                    onComplete={result => { if (result.result !== 'waitlist_entry') handleCheckoutComplete(); }}
+                                    fallback={
+                                        <div role="status" className="flex items-center justify-center gap-2 py-16 text-neutral-400 text-body-sm">
+                                            <Loader2 className="w-4 h-4 animate-spin text-neutral-300" aria-hidden />
+                                            Loading secure checkout…
+                                        </div>
+                                    }
+                                >
+                                    <CheckoutElement
+                                        buyerEmail={user?.email ?? ''}
+                                        lockBuyerEmail={!!user?.email}
+                                    />
+                                </Checkout>
+                            </WhopElements>
                         ) : (
                             <div className="p-6">
                                 <p className="text-body-sm text-neutral-300 mb-4">
@@ -235,6 +297,11 @@ const PendingActivationPage: React.FC = () => {
                             </div>
                         )}
                     </div>
+                    {paymentFailed && (
+                        <p role="status" className="mt-3 px-1 text-meta text-caution-300">
+                            That payment didn't go through, and nothing was charged. Try again, or use another card.
+                        </p>
+                    )}
 
                     {/* Already paid */}
                     <div className="mt-5 flex flex-wrap items-center justify-between gap-3 px-1">

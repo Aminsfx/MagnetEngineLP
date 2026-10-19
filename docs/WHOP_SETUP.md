@@ -1,7 +1,9 @@
 # Whop Setup — embedded checkout + automatic activation
 
 One plan, two billing cycles: **$197/month** or **$1,970/year** (2 months free).
-Customers pay through the **embedded Whop checkout on /activate** (their signup
+Customers pay through the **embedded Whop checkout on /activate** — Whop
+Elements (`@whop/elements-react`), which replaced the retired `@whop/checkout`
+embed (their signup
 email is prefilled and locked), the `whop-webhook` Edge Function activates their
 account automatically, and the owner can activate/revoke anyone manually from
 **/admin**. Follow these steps once.
