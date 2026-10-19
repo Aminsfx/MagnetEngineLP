@@ -74,6 +74,12 @@ export const FAQ_ITEMS = [
     },
 ];
 
+/** The niche question answered for a page with no trial (`/`): the demo is where they find out. */
+export const NICHE_FAQ_CALL = {
+    question: FAQ_ITEMS[FAQ_ITEMS.length - 1].question,
+    answer: "That's what the demo is for. Bring your niche to the call and see the kind of profiles it finds and the messages it writes for them before you decide anything.",
+};
+
 /**
  * Client messages for the testimonials wall, exactly as the client sent them.
  * Names and avatars are always drawn as blurred stand-ins, so the quote is the

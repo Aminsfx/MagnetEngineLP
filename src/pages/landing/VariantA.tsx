@@ -2,9 +2,10 @@ import React from 'react';
 import { Search, PenLine, CheckCheck, Send } from 'lucide-react';
 import {
     LandingShell, Hero, ProductPreview, MarqueeBand, Section, Heading, Em, Panel, Pipeline,
-    Pricing, FAQ, Close, Testimonials, type Step,
+    FAQ, Close, Testimonials, type Step,
 } from '../../components/landing/kit';
-import { MONTHLY_DMS } from '../../components/landing/content';
+import { CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, NICHE_FAQ_CALL } from '../../components/landing/content';
+import { PillButton } from '../../components/ui/PillButton';
 import { DMStream } from '../../components/landing/motion/DMStream';
 import { HormoziClip } from '../../components/landing/HormoziClip';
 import type { NavItem } from '../../components/landing/Header';
@@ -15,15 +16,26 @@ import type { NavItem } from '../../components/landing/Header';
  * The argument runs problem → mechanism → the math. The problem comes straight
  * after the hero (owner, 2026-10-18): it is the section that makes the reader
  * feel understood, so it goes before anything asks them to believe.
+ *
+ * No price and no trial on this page (owner, 2026-10-19): every action books
+ * the demo call, and the math counts conversations, not a break-even. B and C
+ * still sell the trial.
  */
 
 const NAV: NavItem[] = [
     { href: '#problem', label: 'The problem' },
     { href: '#how', label: 'How it works' },
     { href: '#math', label: 'The math' },
-    { href: '#pricing', label: 'Pricing' },
     { href: '#faq', label: 'FAQ' },
 ];
+
+/** The page's one action: the demo call. */
+const BookCall: React.FC = () => <PillButton {...CALL_BOOKING}>{CALL_CTA}</PillButton>;
+
+const CALL_TERMS = 'A 15-minute call';
+
+/** The shared FAQ, with the niche question answered by the demo instead of the trial. */
+const FAQ_A = [...FAQ_ITEMS.filter(f => f.question !== NICHE_FAQ_CALL.question), NICHE_FAQ_CALL];
 
 /** Search terms the Campaign Builder takes as-is. Niches, not customers. */
 const NICHES = [
@@ -65,14 +77,18 @@ const STEPS: Step[] = [
     },
 ];
 
+/** An assumption to run your own numbers against — the page says so under the math. */
+const REPLY_RATE = 0.08;
+const CONVERSATIONS = Math.round(Number(MONTHLY_DMS.replace(/,/g, '')) * REPLY_RATE).toLocaleString('en-US');
+
 const MATH_ROWS = [
     [`${MONTHLY_DMS} DMs sent a month`, 'your allowance'],
-    ['× your reply rate', 'assume 8% until you have your own'],
+    ['× your reply rate', `assume ${REPLY_RATE * 100}% until you have your own`],
     ['= the conversations you start', 'the only thing being sold here'],
 ] as const;
 
 const VariantA: React.FC = () => (
-    <LandingShell nav={NAV} variant="a">
+    <LandingShell nav={NAV} variant="a" cta={CALL_CTA} ctaBooksCall>
         <Hero
             field={<DMStream />}
             title={
@@ -87,6 +103,8 @@ const VariantA: React.FC = () => (
                     part is closing the calls.
                 </>
             }
+            actions={<BookCall />}
+            terms={CALL_TERMS}
         >
             <ProductPreview />
         </Hero>
@@ -145,7 +163,7 @@ const VariantA: React.FC = () => (
         <Section id="math">
             <div className="max-w-2xl mx-auto">
                 <Heading className="mb-12 text-center">
-                    One client a year <Em>pays for it.</Em>
+                    What {MONTHLY_DMS} DMs <Em>turn into.</Em>
                 </Heading>
                 <Panel className="p-7 md:p-9">
                     <dl>
@@ -161,13 +179,13 @@ const VariantA: React.FC = () => (
                     </dl>
                     <div className="mt-7 pt-7 border-t border-white/12">
                         <p className="text-body-sm text-neutral-300">
-                            If a client is worth <span className="text-white font-medium">$3,000</span> to you, this has
-                            to work <span className="text-white font-medium">once in twelve months</span> to break even.
-                            Once a month and it's the best money you spend all year.
+                            At {REPLY_RATE * 100}%, that's{' '}
+                            <span className="text-white font-medium">{CONVERSATIONS} conversations a month</span> with
+                            people who wrote back — every one of them a call you could book.
                         </p>
                         <p className="text-meta text-neutral-400 mt-4">
-                            The 8% is an assumption to run your own numbers against, not a result we've measured —
-                            your niche and your offer decide it.
+                            The {REPLY_RATE * 100}% is an assumption to run your own numbers against, not a result we've
+                            measured — your niche and your offer decide it.
                         </p>
                     </div>
                 </Panel>
@@ -176,15 +194,7 @@ const VariantA: React.FC = () => (
 
         <Testimonials />
 
-        <Pricing
-            heading={
-                <>
-                    Priced so one client <Em>covers the year.</Em>
-                </>
-            }
-        />
-
-        <FAQ />
+        <FAQ items={FAQ_A} />
 
         <Close
             heading={
@@ -198,6 +208,8 @@ const VariantA: React.FC = () => (
                     month while you work on something else.
                 </>
             }
+            actions={<BookCall />}
+            terms={CALL_TERMS}
         />
     </LandingShell>
 );

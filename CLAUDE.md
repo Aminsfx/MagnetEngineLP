@@ -166,6 +166,10 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   (first touch) and written into the new Supabase user's metadata
   (`raw_user_meta_data->>'landing_variant'`).
 - B and C set `robots: noindex` — they are the same offer as `/`.
+- **A shows no price and no trial** (owner, 2026-10-19): header, hero and close all
+  book the demo call (`ctaBooksCall`, `CALL_BOOKING`), there is no Pricing section, the
+  niche FAQ points at the demo (`NICHE_FAQ_CALL`), and `index.html`'s JSON-LD carries no
+  offer. B and C still sell the trial.
 - **DFY** at `/lp/dfy` (`variant="dfy"`, also noindex) sells the same engine as a
   done-for-you service. It has no trial, so `LandingShell`'s `ctaBooksCall` and the
   `actions`/`terms` props on `Hero` and `Close` swap every trial button for the call
