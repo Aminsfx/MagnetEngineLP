@@ -17,8 +17,7 @@
 import { json, servePost } from "../_shared/http.ts";
 import { onboardingEmail, sendEmail } from "../_shared/emails.ts";
 import { segmentIds, syncContact } from "../_shared/contacts.ts";
-
-const MONTHLY_PRICE = 197;
+import { PLAN_PRICES } from "../_shared/prices.ts";
 
 interface Body {
   action?: string;
@@ -66,7 +65,7 @@ servePost<Body>("admin-api", async ({ body, sb }) => {
     return json(200, {
       totalUsers,
       subscriptions: { active, pending, cancelled },
-      estMRR: active * MONTHLY_PRICE,
+      estMRR: active * PLAN_PRICES.monthly,
       dmsThisMonth,
     });
   }

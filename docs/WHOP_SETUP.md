@@ -1,6 +1,6 @@
 # Whop Setup — embedded checkout + automatic activation
 
-One plan, two billing cycles: **$197/month** or **$1,970/year** (2 months free).
+One plan, two billing cycles: **$147/month** or **$1,470/year** (2 months free).
 Customers pay through the **embedded Whop checkout on /activate** — Whop
 Elements (`@whop/elements-react`), which replaced the retired `@whop/checkout`
 embed (their signup
@@ -12,8 +12,8 @@ account automatically, and the owner can activate/revoke anyone manually from
 
 Whop dashboard → your product → **Manage Pricing** (or Checkout links):
 
-1. **MagnetEngine Membership — Monthly** — subscription, **$197/month**
-2. **MagnetEngine Membership — Annual** — subscription, **$1,970/year**
+1. **MagnetEngine Membership — Monthly** — subscription, **$147/month**
+2. **MagnetEngine Membership — Annual** — subscription, **$1,470/year**
 
 For each plan, copy its **Plan ID** (starts with `plan_`):
 Dashboard → **Checkout links** → click the **three dots (⋮)** on the pricing
@@ -21,6 +21,18 @@ option → hover **Details** → click the ID to copy it.
 
 > No need to attach any benefits/apps to the plans — access is granted by this
 > app's own webhook, not by Whop.
+
+Then send buyers back to MagnetEngine after they pay: your product →
+**Advanced options** → **Redirect after checkout** →
+
+```
+https://magnetengine.xyz/activate?status=succeeded
+```
+
+Without it Whop sends a buyer to whop.com once the checkout finishes. The
+checkout's own `returnUrl` only covers the trip back from 3-D Secure or a bank
+page. `/activate?status=succeeded` waits for the webhook and opens the
+dashboard, or asks the buyer to sign in first if they aren't signed in.
 
 ## 2. Put the plan IDs in the frontend env
 

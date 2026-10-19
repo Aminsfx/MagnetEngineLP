@@ -182,7 +182,7 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
 ## Access Gating (payment before access)
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
 - `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
-- Payment is an **embedded Whop checkout** on `/activate` (single plan: $197/mo or $1,970/yr via `WHOP_PLAN_IDS`/`PRICES` in `src/lib/plans.ts`, fed by `VITE_WHOP_PLAN_ID_MONTHLY|ANNUAL`); the signup email is prefilled + locked. Fallback is the `UPGRADE_CONTACT` mailto until plan IDs are set.
+- Payment is an **embedded Whop checkout** on `/activate` (single plan: $147/mo or $1,470/yr via `WHOP_PLAN_IDS`/`PRICES` in `src/lib/plans.ts`, fed by `VITE_WHOP_PLAN_ID_MONTHLY|ANNUAL`); the signup email is prefilled + locked. Fallback is the `UPGRADE_CONTACT` mailto until plan IDs are set.
 - The embed is **Whop Elements** (`@whop/elements` + `@whop/elements-react`). The old `@whop/checkout` embed was retired by Whop and refused cards with "This product is not available through this checkout" — don't bring it back. Whop returns the buyer to `/activate?status=…` after 3-D Secure; only `succeeded` waits for activation.
 - Activation is automatic: the `whop-webhook` Edge Function (Standard Webhooks signature check) matches the payment email to the user and flips `subscriptions` to active; `membership.deactivated` revokes. Manual activate/revoke lives in the owner console at `/admin` (client gate `VITE_ADMIN_EMAILS` + server enforcement via the `admin-api` function's `ADMIN_EMAILS` secret). No client-side write path to `subscriptions` exists on purpose.
 - Without Supabase env vars (local dev): subscription is treated as `active` starter so the app runs standalone.
@@ -272,7 +272,7 @@ APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
 ```
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # anon/publishable key — safe in browser (RLS protects data)
-VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($197/mo · $1,970/yr)
+VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($147/mo · $1,470/yr)
 VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin gate (admin-api enforces server-side)
 VITE_POSTHOG_KEY / VITE_POSTHOG_HOST         # PostHog project key (phc_, public) + ingestion host
 VITE_EXTENSION_URL                           # Chrome Web Store listing (onboarding, Inbox, extension notice)

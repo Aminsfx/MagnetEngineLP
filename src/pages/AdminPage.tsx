@@ -373,7 +373,7 @@ const AdminPage: React.FC = () => {
                             <div className="space-y-3 text-[11px] text-neutral-500 leading-relaxed mb-5">
                                 <p>
                                     <span className="text-neutral-300 font-medium">Money flow:</span>{' '}
-                                    customer signs up → pays $197/mo or $1,970/yr via the embedded Whop checkout on
+                                    customer signs up → pays $147/mo or $1,470/yr via the embedded Whop checkout on
                                     /activate → Whop fires a webhook → <code className="text-white/90">whop-webhook</code>{' '}
                                     matches by email and flips their subscription to active → dashboard unlocks.
                                     Cancellations revoke automatically the same way.

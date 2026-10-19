@@ -21,9 +21,7 @@ import { onboardingEmail, paymentConfirmedEmail, sendEmail } from "../_shared/em
 import { notifyOwner, runInBackground } from "../_shared/notify.ts";
 import { segmentIds, syncContact } from "../_shared/contacts.ts";
 import { captureServer } from "../_shared/posthog.ts";
-
-// Mirrors PRICES in src/lib/plans.ts (whole dollars) — PostHog's revenue.
-const PLAN_PRICES = { monthly: 147, annual: 1470 } as const;
+import { PLAN_PRICES, planLabel as labelFor } from "../_shared/prices.ts";
 
 // Activation is gated to the canonical "membership became valid" event AND a
 // recognized plan id (see below). payment.succeeded is intentionally NOT an
@@ -182,9 +180,7 @@ Deno.serve(async (req) => {
       });
 
       const firstName = await getFirstName(supabase, userId);
-      const planLabel = planId === Deno.env.get("WHOP_PLAN_ID_ANNUAL")
-        ? "Annual ($1,970/yr)"
-        : "Monthly ($197/mo)";
+      const planLabel = labelFor(billingCycle);
       await sendEmail(email, paymentConfirmedEmail(firstName, planLabel), {
         idempotencyKey: `payment-confirmed/${userId}`,
       });
