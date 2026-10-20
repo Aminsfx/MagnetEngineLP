@@ -35,10 +35,15 @@ export const WHOP_PLAN_IDS: Record<BillingCycle, string> = {
  * The same plan with no trial, for a trial account that has spent its 500
  * leads or 500 DMs and pays in full now (/activate?upgrade=trial). Unset, the
  * page tells the Operator their plan starts when the trial ends instead.
+ *
+ * The defaults are the live plans. A plan ID is public (the checkout shows
+ * it), and Vercel's production build never received these two variables, so
+ * the page fell back to "starts on day 3" for every capped trial. A VITE_
+ * variable still overrides them.
  */
 export const WHOP_PAY_NOW_PLAN_IDS: Record<BillingCycle, string> = {
-    monthly: (import.meta.env.VITE_WHOP_PLAN_ID_MONTHLY_NOW as string) ?? '',
-    annual: (import.meta.env.VITE_WHOP_PLAN_ID_ANNUAL_NOW as string) ?? '',
+    monthly: (import.meta.env.VITE_WHOP_PLAN_ID_MONTHLY_NOW as string) || 'plan_SENnzaYGzdMSu',
+    annual: (import.meta.env.VITE_WHOP_PLAN_ID_ANNUAL_NOW as string) || 'plan_ngyg3Z6q3tOvu',
 };
 
 /** Single source of truth for displayed prices (landing page + /activate). */
