@@ -8,6 +8,9 @@ interface ImportMetaEnv {
     // Whop plan IDs are public identifiers shown in the checkout embed.
     readonly VITE_WHOP_PLAN_ID_MONTHLY?: string;
     readonly VITE_WHOP_PLAN_ID_ANNUAL?: string;
+    // The same plans with no trial: a trial that spent its allowance pays in full now.
+    readonly VITE_WHOP_PLAN_ID_MONTHLY_NOW?: string;
+    readonly VITE_WHOP_PLAN_ID_ANNUAL_NOW?: string;
     // Owner emails — cosmetic /admin UI gate; real enforcement is server-side.
     readonly VITE_ADMIN_EMAILS?: string;
     // 'true' only under `npm run demo` (.env.demo): the Campaign Builder scrapes

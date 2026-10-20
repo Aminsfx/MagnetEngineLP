@@ -24,12 +24,20 @@
 // Errors carry a `code` the client branches on:
 //   404 not_found, 422 private_target — about this one query: noted, run continues
 //   429 scrape_quota                  — the month's lookups are spent
+//   402 trial_limit                   — the free trial's 500 leads are found (_shared/trial.ts)
 //   503 scrape_unavailable / scrape_busy, 502 scrape_upstream — about the whole run
+//
+// During a free trial every page also answers `trialLeft`: the leads the trial
+// may still find. The page that reaches the allowance is cut to it, so the
+// client can stop cleanly at 500 and keep every row instead of hitting a 402
+// part-way through a run.
 //
 // No Operator-facing message names the provider (CLAUDE.md: clients never see
 // internal integrations). The real cause goes to this function's log.
 
 import { json, servePost, serviceClient } from "../_shared/http.ts";
+import { readTrial, spendTrial, trialLimitResponse } from "../_shared/allowance.ts";
+import { trialLeft } from "../_shared/trial.ts";
 import {
   countItems,
   decodeCursor,
@@ -264,6 +272,12 @@ servePost<Body>("scrape", async ({ body, user, sb }) => {
     });
   }
 
+  // The trial allowance counts leads found, so only a page spends it; loading
+  // details for leads already found (enrich) is free.
+  const trial = op === "page" ? await readTrial(sb, user.id) : null;
+  const leadsLeft = trial?.active ? trialLeft("leads", trial.leads) : undefined;
+  if (leadsLeft === 0) return trialLimitResponse("leads");
+
   // Every billed upstream request is counted, including ones spent before a
   // later request in the same call failed — HikerAPI bills them either way.
   let units = 0;
@@ -276,6 +290,12 @@ servePost<Body>("scrape", async ({ body, user, sb }) => {
   try {
     const result = op === "page" ? await page(body, get, key) : await enrich(body, get, key);
     if (result instanceof Response) return result;
+    if (leadsLeft !== undefined) {
+      const rows = (result.rows as ProfileRow[]).slice(0, leadsLeft);
+      await spendTrial(sb, user.id, { leads: rows.length });
+      const left = leadsLeft - rows.length;
+      Object.assign(result, { rows, trialLeft: left, ...(left === 0 ? { cursor: null } : {}) });
+    }
     return json(200, { ...result, used: used + units, limit: MONTHLY_SCRAPE_LIMIT });
   } catch (e) {
     if (e instanceof HikerError) return upstreamFailure(e);

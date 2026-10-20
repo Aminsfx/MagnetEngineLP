@@ -16,6 +16,7 @@ import { ExtensionNotice } from '../components/common/ExtensionNotice';
 import { storage } from '../lib/storage';
 import { db } from '../lib/db';
 import { useOutreach } from '../lib/useOutreach';
+import { TRIAL_UPGRADE_PATH } from '../lib/trial';
 import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
@@ -109,10 +110,13 @@ const DashboardShell: React.FC = () => {
 
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
+  // A free trial that has spent its 500 leads or 500 DMs goes to pay in full.
+  const toTrialUpgrade = useCallback(() => navigate(TRIAL_UPGRADE_PATH), [navigate]);
+
   // The Lead lifecycle — add, approve, reject, edit, generate, send — behind one
   // interface with two ports (the store, and the extension protocol). This used
   // to be seventeen callbacks and six mirror refs inlined here.
-  const outreach = useOutreach({ store, config, limits, toast });
+  const outreach = useOutreach({ store, config, limits, toast, onTrialLimit: toTrialUpgrade });
 
   const [dataLoading, setDataLoading] = useState(true);
   // Real per-day sent count reported by the extension (source of truth for what
@@ -505,7 +509,7 @@ const DashboardShell: React.FC = () => {
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
           <p className="text-neutral-400 text-sm mt-1.5">Search Instagram for leads and add them to your Approval Queue.</p>
         </div>
-        <CampaignBuilder onLeadsScraped={outreach.addLeads} />
+        <CampaignBuilder onLeadsScraped={outreach.addLeads} onTrialLimit={toTrialUpgrade} />
       </div>
     ),
 

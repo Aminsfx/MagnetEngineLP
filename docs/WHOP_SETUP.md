@@ -79,12 +79,48 @@ supabase secrets set \
 - `ADMIN_EMAILS` — the server-side allowlist for /admin (this is the real
   enforcement; `VITE_ADMIN_EMAILS` only controls UI visibility).
 
+## 6. Let a capped trial pay in full now (optional)
+
+A free trial includes **500 leads and 500 DMs** (`supabase/functions/_shared/trial.ts`).
+A trial that uses either one up is sent to `/activate?upgrade=trial`. Whop can't end a
+trial early, so paying in full needs two things from you:
+
+1. **The same plans with no trial.** Whop dashboard → your MagnetEngine product →
+   **Manage Pricing** → add a monthly plan at **$147/month** and an annual one at
+   **$1,470/year**, both with **free trial off**. Copy their plan IDs.
+2. **A Whop API key** that can cancel memberships. Whop dashboard → **Developer** →
+   create an API key with the **member:manage** permission (plus `member:basic:read`).
+   The webhook uses it to cancel the old trial membership, so the buyer isn't charged
+   again when the trial would have converted.
+
+Then:
+
+```bash
+supabase secrets set \
+  WHOP_PLAN_ID_MONTHLY_NOW=plan_... \
+  WHOP_PLAN_ID_ANNUAL_NOW=plan_... \
+  WHOP_API_KEY=<the API key>
+```
+
+and in Vercel (then redeploy the frontend):
+
+```
+VITE_WHOP_PLAN_ID_MONTHLY_NOW=plan_...
+VITE_WHOP_PLAN_ID_ANNUAL_NOW=plan_...
+```
+
+Until both are set, a capped trial sees "your plan starts on <day 3>" and keeps working
+with what it already has. Without `WHOP_API_KEY`, paying in full still works, but you get
+an alert telling you which trial membership to cancel by hand.
+
 ## How it works
 
 | Event | Effect |
 |---|---|
 | `membership.activated` / `payment.succeeded` | Upsert `subscriptions` row → `status='active'` (dashboard unlocks) |
-| `membership.deactivated` | `status='cancelled'` (access revoked) |
+| First `membership.activated` of a trial | also records `trial_ends_at` → the 500-lead / 500-DM allowance applies |
+| Pay-now plan activates during the trial | clears `trial_ends_at`, cancels the old trial membership |
+| `membership.deactivated` | `status='cancelled'` (access revoked) — unless it's an old membership the account has moved off |
 | No user with that email | 202 skipped, logged — activate manually from /admin |
 | Bad signature | 403, nothing processed |
 

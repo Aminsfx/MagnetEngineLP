@@ -13,12 +13,15 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { NICHE_PRESETS } from '../../lib/presets';
+import { TRIAL_ALLOWANCE, isTrialLimit } from '../../lib/trial';
 import { CsvImport } from './CsvImport';
 import { CHANNEL, alpha } from '../../lib/theme';
 import { posthogCapture } from '../../lib/posthog';
 
 interface CampaignBuilderProps {
     onLeadsScraped: (leads: Lead[]) => void | Promise<void>;
+    /** A search was refused because the free trial's leads are spent: go and pay in full. */
+    onTrialLimit?: () => void;
 }
 
 interface SourceOption {
@@ -163,7 +166,7 @@ function formatFollowers(n: number): string {
 
 const FIELD = 'w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors';
 
-export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped }) => {
+export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped, onTrialLimit }) => {
     const [tab, setTab] = useState<'find' | 'import'>('find');
     const [campaignName, setCampaignName] = useState('');
 
@@ -248,6 +251,9 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
             const extra = [...outcome.notes];
             if (outcome.halted) extra.unshift(`Search stopped early: ${outcome.halted} Everything found before that is below.`);
+            if (outcome.trialLimit) {
+                extra.unshift(`That's the ${TRIAL_ALLOWANCE.leads} leads your free trial includes. Add these to your queue — to search for more, start your plan.`);
+            }
             if (outcome.unenriched > 0) {
                 const n = `${outcome.unenriched} profile${outcome.unenriched !== 1 ? 's' : ''}`;
                 extra.push(outcome.stopped || outcome.halted
@@ -267,6 +273,8 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Scrape failed. Check your connection and try again.');
             setProgress(null);
+            // Nothing found and nothing lost: the trial's leads were already spent.
+            if (isTrialLimit(err)) onTrialLimit?.();
         } finally {
             controlRef.current = null;
             setIsScraping(false);
@@ -274,7 +282,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         }
     // resetRun and source are derived from the deps below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [kind, raw, perQuery, enrich]);
+    }, [kind, raw, perQuery, enrich, onTrialLimit]);
 
     const handlePause = () => {
         controlRef.current?.pause();

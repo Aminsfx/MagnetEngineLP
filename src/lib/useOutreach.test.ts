@@ -84,10 +84,10 @@ function fakeStore(kind: WorkspaceStore['kind'] = 'supabase') {
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 
-function setup(kind: WorkspaceStore['kind'] = 'supabase') {
+function setup(kind: WorkspaceStore['kind'] = 'supabase', onTrialLimit?: () => void) {
   const { store, saved, removed } = fakeStore(kind);
   const view = renderHook(() =>
-    useOutreach({ store, config, limits: PLAN_LIMITS, toast }),
+    useOutreach({ store, config, limits: PLAN_LIMITS, toast, onTrialLimit }),
   );
   return { ...view, saved, removed };
 }
@@ -319,6 +319,33 @@ describe('generateDMs', () => {
 
     expect(vi.mocked(aiAPI.generateDM)).toHaveBeenCalledTimes(2);
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('then stopped'));
+  });
+
+  it('saves the batch, then sends the Operator to pay once the trial DMs are spent', async () => {
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'first', used: 1, limit: 500 })
+      .mockRejectedValueOnce(new FunctionError('Your free trial includes 500 DMs', { code: 'trial_limit' }));
+    const onTrialLimit = vi.fn();
+
+    const { result, saved } = setup('supabase', onTrialLimit);
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(vi.mocked(aiAPI.generateDM)).toHaveBeenCalledTimes(2);
+    expect(saved.flat().map(l => l.dmContent)).toEqual(['first']);   // the DM written before the refusal is kept
+    expect(onTrialLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send the Operator to pay for any other failure', async () => {
+    vi.mocked(aiAPI.generateDM).mockRejectedValueOnce(new FunctionError('No AI provider configured'));
+    const onTrialLimit = vi.fn();
+
+    const { result } = setup('supabase', onTrialLimit);
+    act(() => result.current.hydrate([lead('a')], 0));
+    await act(() => result.current.generateDMs());
+
+    expect(onTrialLimit).not.toHaveBeenCalled();
   });
 
   it('keeps the "click again" hint when part of the batch went wrong', async () => {

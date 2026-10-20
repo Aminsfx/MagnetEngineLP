@@ -6,6 +6,7 @@ import type { WorkspaceStore } from './store';
 import type { DueFollowUp } from './followups';
 import { db } from './db';
 import { aiAPI, isEmptyCompletion } from './api';
+import { isTrialLimit } from './trial';
 import { filterUtils } from './filters';
 import { canonicalHandle, dropKnownHandles } from './intake';
 import { stampFollowUp } from './followups';
@@ -100,9 +101,14 @@ export interface OutreachDeps {
     error(message: string): void;
     info(message: string): void;
   };
+  /**
+   * generate-dm refused because the free trial's DMs are spent. Called after
+   * the batch's finished DMs are saved, so leaving the page loses none of them.
+   */
+  onTrialLimit?: () => void;
 }
 
-export function useOutreach({ store, config, limits, toast }: OutreachDeps): OutreachEngine {
+export function useOutreach({ store, config, limits, toast, onTrialLimit }: OutreachDeps): OutreachEngine {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [dmUsed, setDmUsed] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -312,6 +318,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     /** Handles the provider answered for, but with no message in the answer. */
     const blank: string[] = [];
     let failure: string | null = null;
+    let trialLimited = false;
     let usedAfter: number | null = null;
 
     for (const lead of pending.slice(0, GENERATION_BATCH)) {
@@ -341,6 +348,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
         // Stop the batch but keep what succeeded. Returning here used to discard
         // up to nine finished DMs that had already been paid for.
         failure = error instanceof Error ? error.message : 'Unknown error';
+        trialLimited = isTrialLimit(error);
         break;
       }
     }
@@ -384,6 +392,8 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
       toast.error(landed.length > 0
         ? `Generated ${count(landed.length)}, then stopped: ${failure}`
         : `DM generation failed: ${failure}`);
+      // The batch is saved above, so the Operator can go and pay in full.
+      if (trialLimited) onTrialLimit?.();
       return;
     }
 
@@ -409,7 +419,7 @@ export function useOutreach({ store, config, limits, toast }: OutreachDeps): Out
     toast.success(stillPending > 0
       ? `Generated ${count(landed.length)} —${nextBatch}`
       : `Generated ${count(landed.length)} — review them in the Approval Queue.`);
-  }, [config, filteredLeads, limits, dmUsed, toast, store]);
+  }, [config, filteredLeads, limits, dmUsed, toast, store, onTrialLimit]);
 
   /** Hand due follow-ups to the extension and stamp the step. The extension
    *  enforces the daily cap on actual sends. */

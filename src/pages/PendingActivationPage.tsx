@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LogOut, RefreshCw, Mail, Check, Loader2, Lock } from 'lucide-react';
 import { loadWhop, type Appearance } from '@whop/elements';
 import { WhopElements, Checkout, CheckoutElement } from '@whop/elements-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { WHOP_PLAN_IDS, PRICES, UPGRADE_CONTACT, PLAN_LIMITS } from '../lib/plans';
+import { WHOP_PLAN_IDS, WHOP_PAY_NOW_PLAN_IDS, PRICES, UPGRADE_CONTACT, PLAN_LIMITS } from '../lib/plans';
+import { TRIAL_ALLOWANCE, inTrial } from '../lib/trial';
 import type { BillingCycle } from '../lib/plans';
 import { SURFACE, POSITIVE } from '../lib/theme';
 import Logo from '../components/Logo';
@@ -37,15 +38,32 @@ const CHECKOUT_APPEARANCE: Appearance = {
     },
 };
 
+/*
+ * A pay-in-full checkout finished in this tab. Whop's after-purchase redirect
+ * lands on /activate without our `?upgrade=trial`, and this is what tells the
+ * page to wait for the trial to end rather than just for access.
+ */
+const PAYING_IN_FULL = 'magnet:paying-in-full';
+function readPayingInFull(): boolean {
+    try { return sessionStorage.getItem(PAYING_IN_FULL) === '1'; } catch { return false; }
+}
+function writePayingInFull(on: boolean): void {
+    try {
+        if (on) sessionStorage.setItem(PAYING_IN_FULL, '1');
+        else sessionStorage.removeItem(PAYING_IN_FULL);
+    } catch { /* storage blocked: the page still polls from onComplete */ }
+}
+
 /**
- * Shown to signed-in users whose subscription is not yet activated.
+ * Shown to signed-in users whose subscription is not yet activated, and to a
+ * free trial that has spent its allowance and is here to pay in full.
  * Flow: user pays via the embedded Whop checkout (email locked to their signup
  * email) → the whop-webhook (or the owner via /admin) activates the account →
  * this page polls status and lands them in the dashboard.
  */
 const PendingActivationPage: React.FC = () => {
     const { user, signOut } = useAuth();
-    const { refresh, status, loading } = usePlan();
+    const { reload, status, loading, trialEndsAt } = usePlan();
     const navigate = useNavigate();
 
     const [checking, setChecking] = useState(false);
@@ -56,6 +74,13 @@ const PendingActivationPage: React.FC = () => {
     // or abandoned step lands here too, so only `succeeded` waits for access.
     const [searchParams] = useSearchParams();
     const [returnedStatus] = useState(() => searchParams.get('status'));
+    // A trial that has spent its 500 leads or 500 DMs is sent here to pay in
+    // full (TRIAL_UPGRADE_PATH). Whop's after-purchase redirect drops that query,
+    // so a finished pay-now checkout is also remembered for this tab.
+    const [upgradeAsked] = useState(() => searchParams.get('upgrade') === 'trial');
+    const [payingInFull, setPayingInFull] = useState(readPayingInFull);
+    const trialing = inTrial(trialEndsAt);
+    const upgrade = status === 'active' && trialing && (upgradeAsked || payingInFull);
     const [awaitingActivation, setAwaitingActivation] = useState(returnedStatus === 'succeeded');
     const [paymentFailed, setPaymentFailed] = useState(returnedStatus !== null && returnedStatus !== 'succeeded');
     const [checkoutLoadFailed, setCheckoutLoadFailed] = useState(false);
@@ -65,12 +90,14 @@ const PendingActivationPage: React.FC = () => {
     const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const handledReturn = useRef(false);
 
-    // If the subscription is (or becomes) active, this page shouldn't be shown
+    // If the subscription is (or becomes) active, this page shouldn't be shown —
+    // unless it is here to take a trial's payment in full.
     useEffect(() => {
-        if (!loading && status === 'active') {
+        if (!loading && status === 'active' && !upgrade) {
+            writePayingInFull(false);
             navigate('/dashboard', { replace: true });
         }
-    }, [loading, status, navigate]);
+    }, [loading, status, upgrade, navigate]);
 
     // Clear any pending poll timer on unmount
     useEffect(() => () => {
@@ -78,14 +105,17 @@ const PendingActivationPage: React.FC = () => {
     }, []);
 
     // After Whop reports the checkout complete, poll until the webhook has
-    // flipped the subscription to active (usually a few seconds).
-    const pollForActivation = useCallback(() => {
+    // flipped the subscription to active (usually a few seconds). Paying in
+    // full during a trial waits for the trial to end on our side as well, or
+    // the dashboard would bounce the Operator straight back here to pay again.
+    const pollForActivation = useCallback((untilTrialEnds: boolean) => {
         if (pollTimer.current) clearTimeout(pollTimer.current);
         let attempts = 0;
         const poll = async () => {
             attempts += 1;
-            const s = await refresh();
-            if (s === 'active') {
+            const sub = await reload();
+            if (sub.status === 'active' && !(untilTrialEnds && inTrial(sub.trialEndsAt))) {
+                writePayingInFull(false);
                 navigate('/dashboard', { replace: true });
                 return;
             }
@@ -97,17 +127,23 @@ const PendingActivationPage: React.FC = () => {
             pollTimer.current = setTimeout(poll, 3000);
         };
         poll();
-    }, [refresh, navigate]);
+    }, [reload, navigate]);
 
     const handleCheckoutComplete = useCallback(() => {
         // The browser's view of payment; `subscription_started` (whop-webhook)
         // is the confirmed one.
-        posthogCapture('checkout_completed', { billing_cycle: billing, price: PRICES[billing].amount, currency: 'USD' });
+        posthogCapture('checkout_completed', {
+            billing_cycle: billing, price: PRICES[billing].amount, currency: 'USD', paid_in_full_early: upgrade,
+        });
+        if (upgrade) {
+            writePayingInFull(true);
+            setPayingInFull(true);
+        }
         setAwaitingActivation(true);
         setStillPending(false);
         setPaymentFailed(false);
-        pollForActivation();
-    }, [billing, pollForActivation]);
+        pollForActivation(upgrade);
+    }, [billing, upgrade, pollForActivation]);
 
     // Back from Whop: drop its query string so a reload doesn't replay it, and
     // wait for the webhook if the payment went through. Once per visit.
@@ -115,15 +151,16 @@ const PendingActivationPage: React.FC = () => {
         if (!returnedStatus || handledReturn.current) return;
         handledReturn.current = true;
         navigate('/activate', { replace: true });
-        if (returnedStatus === 'succeeded') pollForActivation();
-    }, [returnedStatus, navigate, pollForActivation]);
+        if (returnedStatus === 'succeeded') pollForActivation(payingInFull);
+    }, [returnedStatus, payingInFull, navigate, pollForActivation]);
 
     const handleCheck = async () => {
         setChecking(true);
         setStillPending(false);
-        const status = await refresh();
+        const sub = await reload();
         setChecking(false);
-        if (status === 'active') {
+        if (sub.status === 'active' && !(upgrade && inTrial(sub.trialEndsAt))) {
+            writePayingInFull(false);
             navigate('/dashboard');
         } else {
             setStillPending(true);
@@ -135,7 +172,12 @@ const PendingActivationPage: React.FC = () => {
         navigate('/login');
     };
 
-    const planId = WHOP_PLAN_IDS[billing];
+    // Paying in full early uses the same plan with no trial. Unset, the page
+    // says when the trial converts on its own instead of offering a checkout.
+    const planId = upgrade ? WHOP_PAY_NOW_PLAN_IDS[billing] : WHOP_PLAN_IDS[billing];
+    const trialEndDay = trialEndsAt
+        ? new Date(trialEndsAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+        : null;
 
     /*
      * A checkout, laid out like one: what you're buying and when you'll be
@@ -170,10 +212,12 @@ const PendingActivationPage: React.FC = () => {
                 {/* ── What you're buying ───────────────────────────────────── */}
                 <section aria-labelledby="summary-title">
                     <h1 id="summary-title" className="font-semibold text-white tracking-[-0.035em] leading-[1.02] text-balance" style={{ fontSize: 'clamp(2rem, 3.6vw, 2.9rem)' }}>
-                        Start your 3-day trial
+                        {upgrade ? 'Start your plan now' : 'Start your 3-day trial'}
                     </h1>
                     <p className="mt-4 text-body text-neutral-400 max-w-[46ch]">
-                        Your account is ready. Add a card to open the dashboard — nothing is charged until the trial ends.
+                        {upgrade
+                            ? `Your free trial includes ${TRIAL_ALLOWANCE.leads.toLocaleString('en-US')} leads and ${TRIAL_ALLOWANCE.dms.toLocaleString('en-US')} DMs, and you've used one of them up. Pay in full now to keep going. Every lead, DM and conversation you have is saved.`
+                            : 'Your account is ready. Add a card to open the dashboard — nothing is charged until the trial ends.'}
                     </p>
 
                     {/* Billing */}
@@ -207,7 +251,15 @@ const PendingActivationPage: React.FC = () => {
 
                     {/* When things happen */}
                     <div className="py-8 border-b border-white/8">
-                        <TrialTimeline at={1} billing={billing} />
+                        {upgrade ? (
+                            <p className="text-meta text-neutral-300 max-w-[52ch]">
+                                <span className="font-semibold text-white">{PRICES[billing].label} today.</span>{' '}
+                                Your trial ends now instead of {trialEndDay ? `on ${trialEndDay}` : 'in a few days'}, and your plan renews
+                                {billing === 'monthly' ? ' monthly' : ' yearly'} from today. You won't be charged twice.
+                            </p>
+                        ) : (
+                            <TrialTimeline at={1} billing={billing} />
+                        )}
                     </div>
 
                     {/* What's included */}
@@ -239,7 +291,9 @@ const PendingActivationPage: React.FC = () => {
                         {awaitingActivation ? (
                             <div role="status" className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
                                 <Loader2 className="w-6 h-6 text-positive-400 animate-spin" aria-hidden />
-                                <p className="text-body-sm text-white font-medium">Payment received — opening your dashboard…</p>
+                                <p className="text-body-sm text-white font-medium">
+                                    {upgrade ? 'Payment received — unlocking your plan…' : 'Payment received — opening your dashboard…'}
+                                </p>
                                 <p className="text-meta text-neutral-400">This usually takes a few seconds.</p>
                             </div>
                         ) : planId && checkoutLoadFailed ? (
@@ -282,6 +336,20 @@ const PendingActivationPage: React.FC = () => {
                                     />
                                 </Checkout>
                             </WhopElements>
+                        ) : upgrade ? (
+                            // No pay-now plan configured: the trial converts on its own.
+                            <div className="p-6">
+                                <p className="text-body-sm text-neutral-300 mb-4">
+                                    Your plan starts automatically {trialEndDay ? `on ${trialEndDay}` : 'when your trial ends'}, and
+                                    the limits lift then. Everything you've found and written is saved — you can keep working with it until then.
+                                </p>
+                                <Link
+                                    to="/dashboard"
+                                    className="w-full flex items-center justify-center gap-2 h-12 rounded-full font-semibold text-body-sm transition-colors bg-white hover:bg-neutral-200 text-surface"
+                                >
+                                    Back to the dashboard
+                                </Link>
+                            </div>
                         ) : (
                             <div className="p-6">
                                 <p className="text-body-sm text-neutral-300 mb-4">
@@ -306,7 +374,11 @@ const PendingActivationPage: React.FC = () => {
                     {/* Already paid */}
                     <div className="mt-5 flex flex-wrap items-center justify-between gap-3 px-1">
                         <p className="text-meta text-neutral-400 max-w-[34ch]">
-                            Already paid? Access opens within a minute of payment.
+                            {upgrade ? (
+                                <>Not now? <Link to="/dashboard" className="text-white underline underline-offset-2 hover:text-neutral-200">Back to the dashboard</Link> — your leads and DMs are still there.</>
+                            ) : (
+                                'Already paid? Access opens within a minute of payment.'
+                            )}
                         </p>
                         <button
                             type="button"

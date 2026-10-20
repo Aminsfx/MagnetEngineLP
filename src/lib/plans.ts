@@ -11,6 +11,11 @@ export type SubscriptionStatus = 'pending' | 'active' | 'cancelled';
 export interface Subscription {
     tier: PlanTier;
     status: SubscriptionStatus;
+    /**
+     * When the free trial ends, while the account is in one (ISO). Null for paid
+     * accounts and for every account activated before the trial allowance.
+     */
+    trialEndsAt?: string | null;
 }
 
 /**
@@ -24,6 +29,16 @@ export type BillingCycle = 'monthly' | 'annual';
 export const WHOP_PLAN_IDS: Record<BillingCycle, string> = {
     monthly: (import.meta.env.VITE_WHOP_PLAN_ID_MONTHLY as string) ?? '',
     annual: (import.meta.env.VITE_WHOP_PLAN_ID_ANNUAL as string) ?? '',
+};
+
+/**
+ * The same plan with no trial, for a trial account that has spent its 500
+ * leads or 500 DMs and pays in full now (/activate?upgrade=trial). Unset, the
+ * page tells the Operator their plan starts when the trial ends instead.
+ */
+export const WHOP_PAY_NOW_PLAN_IDS: Record<BillingCycle, string> = {
+    monthly: (import.meta.env.VITE_WHOP_PLAN_ID_MONTHLY_NOW as string) ?? '',
+    annual: (import.meta.env.VITE_WHOP_PLAN_ID_ANNUAL_NOW as string) ?? '',
 };
 
 /** Single source of truth for displayed prices (landing page + /activate). */

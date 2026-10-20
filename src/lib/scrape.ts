@@ -1,5 +1,6 @@
 import { Lead } from './types';
 import { FunctionError, invokeFunction } from './functions';
+import { isTrialLimit } from './trial';
 import { intake } from './intake';
 import {
     ENRICH_BATCH,
@@ -143,6 +144,11 @@ export interface ScrapeOutcome {
     unenriched: number;
     /** This month's remaining lookups, as of the last call. */
     lookupsLeft?: number;
+    /**
+     * The run ended at the free trial's lead allowance. `leads` is everything
+     * found up to it, details included; the next search is refused.
+     */
+    trialLimit?: boolean;
 }
 
 interface PageResponse {
@@ -157,6 +163,8 @@ interface PageResponse {
     items?: number;
     used: number;
     limit: number;
+    /** During a free trial: leads the trial may still find. Absent otherwise. */
+    trialLeft?: number;
 }
 
 interface EnrichResponse {
@@ -236,6 +244,7 @@ export async function runScrape(
     let lookupsLeft: number | undefined;
     let stopped = false;
     let halted: string | undefined;
+    let trialLimit = false;
 
     // Time spent waiting on calls, not on the Operator: a pause must not make
     // the run look slower than it is.
@@ -356,6 +365,12 @@ export async function runScrape(
                     notes.push(e.message);
                     break;
                 }
+                // The trial's leads are spent. Not a failure: what was found
+                // still gets its details, as if the Operator pressed Finish.
+                if (isTrialLimit(e) && rows.size > 0) {
+                    trialLimit = true;
+                    break collect;
+                }
                 halt(e);
                 break;
             }
@@ -388,6 +403,10 @@ export async function runScrape(
                 ? ` — ${Math.min(q.read, q.total)} of ${q.total} comments read`
                 : '';
             report('collecting', `Found ${rows.size} profile${rows.size !== 1 ? 's' : ''}${where}${read}${of}…`);
+            if (page.trialLeft === 0) {
+                trialLimit = true;
+                break collect;
+            }
         } while (cursor && (isList || q.found < limit) && pages < MAX_PAGES_PER_QUERY && dry < MAX_DRY_PAGES);
 
         q.done = true;
@@ -434,7 +453,7 @@ export async function runScrape(
         percent: 100,
         etaSeconds: 0,
     });
-    return { leads, received: rows.size, skipped, notes, stopped, halted, unenriched, lookupsLeft };
+    return { leads, received: rows.size, skipped, notes, stopped, halted, unenriched, lookupsLeft, ...(trialLimit ? { trialLimit } : {}) };
 }
 
 /**

@@ -12,8 +12,12 @@
 //   502 { error, code: "empty_completion" } when the model returns nothing
 //   usable even after a retry — no quota is spent, and the code tells the
 //   client this is about one Lead rather than the whole workspace.
+//   402 { error, code: "trial_limit" } when a free-trial account has written
+//   its 500 DMs (_shared/trial.ts) — the app sends it to pay in full.
 
 import { json, servePost } from "../_shared/http.ts";
+import { readTrial, spendTrial, trialLimitResponse } from "../_shared/allowance.ts";
+import { trialLeft } from "../_shared/trial.ts";
 import {
   complete,
   createAiSessionId,
@@ -123,6 +127,11 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
     });
   }
 
+  // A free trial writes at most 500 DMs. Every first DM is written here, so
+  // this is also what caps the DMs a trial can send.
+  const trial = await readTrial(sb, user.id);
+  if (trial.active && trialLeft("dms", trial.dms) === 0) return trialLimitResponse("dms");
+
   const resolved = resolveProvider(provider);
   if (!resolved) return json(500, { error: NO_PROVIDER_ERROR });
 
@@ -194,6 +203,7 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
     p_month: month,
     p_count: 1,
   });
+  if (trial.active) await spendTrial(sb, user.id, { dms: 1 });
 
   // Report which provider actually ran — the requested one is only a preference
   // when the Owner hasn't configured its key.

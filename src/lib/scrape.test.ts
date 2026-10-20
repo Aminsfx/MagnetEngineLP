@@ -93,6 +93,48 @@ describe('runScrape', () => {
         expect(calls('enrich')).toHaveLength(0);            // a halted run spends nothing more
     });
 
+    it('stops at the trial allowance the server reports, and still loads the details', async () => {
+        // The page that reaches the allowance comes back cut to it, with nothing left.
+        let firstPage = 0;
+        invoke.mockImplementation(async (_name, body) => {
+            const res = await demoScrape(body, { delayMs: 0 }) as Record<string, unknown>;
+            if (body.op !== 'page') return res;
+            if (calls('page').length === 1) {
+                firstPage = (res.rows as unknown[]).length;
+                return { ...res, trialLeft: 10 };
+            }
+            return { ...res, rows: (res.rows as unknown[]).slice(0, 10), cursor: null, trialLeft: 0 };
+        });
+        const out = await runScrape({ kind: 'keyword', queries: ['coach', 'agency'], limit: 250, enrich: true });
+
+        expect(out.trialLimit).toBe(true);
+        expect(out.halted).toBeUndefined();
+        expect(out.leads).toHaveLength(firstPage + 10);     // the first page + the 10 the trial had left
+        expect(calls('page')).toHaveLength(2);              // the second query is never asked
+        expect(calls('enrich').length).toBeGreaterThan(0);  // what was found still loads in full
+    });
+
+    it('keeps what was found when the server refuses for the trial mid-run', async () => {
+        invoke.mockImplementation(async (_name, body) => {
+            if (body.op === 'page' && calls('page').length > 1) {
+                throw new FunctionError('trial spent', { code: 'trial_limit' });
+            }
+            return demoScrape(body, { delayMs: 0 });
+        });
+        const out = await runScrape({ kind: 'keyword', queries: ['coach', 'agency'], limit: 60, enrich: true });
+
+        expect(out.trialLimit).toBe(true);
+        expect(out.halted).toBeUndefined();
+        expect(out.leads.length).toBeGreaterThan(0);
+        expect(calls('enrich').length).toBeGreaterThan(0);
+    });
+
+    it('throws the trial refusal when nothing was found, so the app can send the Operator to pay', async () => {
+        invoke.mockRejectedValue(new FunctionError('trial spent', { code: 'trial_limit' }));
+        await expect(runScrape({ kind: 'keyword', queries: ['coach'], limit: 10, enrich: true }))
+            .rejects.toMatchObject({ code: 'trial_limit' });
+    });
+
     it('Finish while collecting stops paging and still loads details for what was found', async () => {
         const control = new ScrapeControl();
         invoke.mockImplementation(async (_name, body) => {

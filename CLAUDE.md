@@ -183,6 +183,19 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
 - Sign-up creates the Supabase user, then routes to `/activate` — **not** the dashboard.
 - `PlanContext` reads the `subscriptions` table: no row (or `status != 'active'`) → `pending` → `ProtectedRoute` redirects to `/activate`.
 - Payment is an **embedded Whop checkout** on `/activate` (single plan: $147/mo or $1,470/yr via `WHOP_PLAN_IDS`/`PRICES` in `src/lib/plans.ts`, fed by `VITE_WHOP_PLAN_ID_MONTHLY|ANNUAL`); the signup email is prefilled + locked. Fallback is the `UPGRADE_CONTACT` mailto until plan IDs are set.
+- **The free trial has an allowance: 500 leads found + 500 DMs written** (owner, 2026-10-20;
+  `supabase/functions/_shared/trial.ts`, migration `0003_trial_allowance.sql`). `whop-webhook`
+  records `subscriptions.trial_ends_at` only on a *first* activation of a trialing membership, so
+  accounts activated before it shipped have none and no allowance. `scrape` and `generate-dm`
+  spend it (`trial_usage`) and answer `402 trial_limit` once it's gone; `scrape` also cuts the
+  page that reaches it and returns `trialLeft`, so a run stops at 500 without losing rows. The app
+  sends a capped Operator to `/activate?upgrade=trial` (`TRIAL_UPGRADE_PATH`) — only *after* the
+  scrape run or DM batch has kept what it made. There they pay in full on the no-trial plans
+  (`VITE_WHOP_PLAN_ID_*_NOW` / `WHOP_PLAN_ID_*_NOW`); the webhook then clears the trial and cancels
+  the old trialing membership with `WHOP_API_KEY` (or tells the Owner to), and ignores that
+  membership's deactivation via `whop_membership_id`. Without the pay-now plans the page says the
+  plan starts when the trial ends. Every first DM is written by generate-dm, so 500 written caps
+  500 sent.
 - The embed is **Whop Elements** (`@whop/elements` + `@whop/elements-react`). The old `@whop/checkout` embed was retired by Whop and refused cards with "This product is not available through this checkout" — don't bring it back. Whop returns the buyer to `/activate?status=…` after 3-D Secure; only `succeeded` waits for activation.
 - Activation is automatic: the `whop-webhook` Edge Function (Standard Webhooks signature check) matches the payment email to the user and flips `subscriptions` to active; `membership.deactivated` revokes. Manual activate/revoke lives in the owner console at `/admin` (client gate `VITE_ADMIN_EMAILS` + server enforcement via the `admin-api` function's `ADMIN_EMAILS` secret). No client-side write path to `subscriptions` exists on purpose.
 - Without Supabase env vars (local dev): subscription is treated as `active` starter so the app runs standalone.
@@ -273,6 +286,7 @@ APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_<key>   # anon/publishable key — safe in browser (RLS protects data)
 VITE_WHOP_PLAN_ID_MONTHLY / _ANNUAL          # public Whop plan IDs for /activate ($147/mo · $1,470/yr)
+VITE_WHOP_PLAN_ID_MONTHLY_NOW / _ANNUAL_NOW  # the same plans with no trial — a capped trial pays in full now (optional)
 VITE_ADMIN_EMAILS                            # owner emails — cosmetic /admin gate (admin-api enforces server-side)
 VITE_POSTHOG_KEY / VITE_POSTHOG_HOST         # PostHog project key (phc_, public) + ingestion host
 VITE_EXTENSION_URL                           # Chrome Web Store listing (onboarding, Inbox, extension notice)
@@ -283,6 +297,7 @@ CLAUDE_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY   # generate-dm / generate-repl
 MONTHLY_DM_LIMIT                                   # generate-dm quota (default 1500)
 HIKERAPI_KEY / MONTHLY_SCRAPE_LIMIT                # scrape
 WHOP_WEBHOOK_SECRET / WHOP_PLAN_ID_MONTHLY|ANNUAL  # whop-webhook
+WHOP_PLAN_ID_MONTHLY_NOW|ANNUAL_NOW / WHOP_API_KEY  # whop-webhook: pay-in-full plans + ending the old trial (optional)
 ADMIN_EMAILS                                       # admin-api
 POSTHOG_PROJECT_TOKEN / POSTHOG_HOST               # whop-webhook payment event; also AI-generation tracking in _shared/ai.ts (optional)
 RESEND_API_KEY / EMAIL_FROM / APP_URL              # all transactional emails

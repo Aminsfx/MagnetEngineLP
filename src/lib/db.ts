@@ -386,11 +386,19 @@ export const db = {
   async getSubscription(userId: string): Promise<Subscription> {
     if (!isSupabaseReady()) return { tier: 'starter', status: 'active' };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('subscriptions')
-      .select('plan, status')
+      .select('plan, status, trial_ends_at')
       .eq('user_id', userId)
       .maybeSingle();
+    if (error && error.message.includes('trial_ends_at')) {
+      // Migration 0003 not applied yet: read access without the trial.
+      ({ data, error } = await supabase
+        .from('subscriptions')
+        .select('plan, status')
+        .eq('user_id', userId)
+        .maybeSingle());
+    }
 
     if (error) {
       console.error('[db] getSubscription error:', error.message);
@@ -404,6 +412,7 @@ export const db = {
     return {
       tier: (data.plan as PlanTier) ?? 'starter',
       status: (data.status as Subscription['status']) ?? 'active',
+      trialEndsAt: (data as { trial_ends_at?: string | null }).trial_ends_at ?? null,
     };
   },
 
