@@ -82,6 +82,9 @@
  *   for all using (auth.uid() = user_id);
  * create index if not exists messages_conv_idx on messages (conversation_id, created_at);
  *
+ * -- Then supabase/migrations/0004_inbox_keys_per_operator.sql: both inbox
+ * -- tables are keyed by (user_id, id), since Instagram's ids are global.
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -101,6 +104,28 @@ function monthKey(): string {
 function isSupabaseReady(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL as string;
   return Boolean(url && url !== 'https://placeholder.supabase.co');
+}
+
+/**
+ * Upsert inbox rows in batches of 200, keyed by (user_id, id).
+ *
+ * A Conversation's id is Instagram's thread_id and a Message's is its item_id —
+ * global ids, so two Operators reading the same Instagram account hold the same
+ * ones. Keyed on `id` alone, whoever saved a thread first owned it, and every
+ * other Operator's upsert of it was refused by RLS along with the rest of its
+ * batch: their Inbox reloaded empty. Migration 0004 moves both keys to
+ * (user_id, id); until it is applied there is no such constraint (42P10), so
+ * the write falls back to the old key rather than failing outright.
+ */
+async function upsertInboxRows(table: 'conversations' | 'messages', rows: Record<string, unknown>[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200);
+    let { error } = await supabase.from(table).upsert(batch, { onConflict: 'user_id,id' });
+    if (error?.code === '42P10') {
+      ({ error } = await supabase.from(table).upsert(batch, { onConflict: 'id' }));
+    }
+    if (error) console.error(`[db] upsert ${table} error:`, error.message);
+  }
 }
 
 export const db = {
@@ -303,13 +328,7 @@ export const db = {
       updated_at: new Date().toISOString(),
     }));
 
-    for (let i = 0; i < payload.length; i += 200) {
-      const batch = payload.slice(i, i + 200);
-      const { error } = await supabase
-        .from('conversations')
-        .upsert(batch, { onConflict: 'id' });
-      if (error) console.error('[db] upsertConversations error:', error.message);
-    }
+    await upsertInboxRows('conversations', payload);
   },
 
   async getMessages(userId: string, conversationId?: string): Promise<Message[]> {
@@ -351,13 +370,7 @@ export const db = {
       created_at: m.createdAt,
     }));
 
-    for (let i = 0; i < payload.length; i += 200) {
-      const batch = payload.slice(i, i + 200);
-      const { error } = await supabase
-        .from('messages')
-        .upsert(batch, { onConflict: 'id' });
-      if (error) console.error('[db] upsertMessages error:', error.message);
-    }
+    await upsertInboxRows('messages', payload);
   },
 
   // ─── Subscriptions ────────────────────────────────────────────────────────

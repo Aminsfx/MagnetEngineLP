@@ -412,6 +412,13 @@ lives in `supabase/migrations/0001_usage.sql` — run that file too. The DM quot
 is metered by the `generate-dm` function against `dm_usage` using the service
 role; users can read their own count but never write it.
 
+The inbox tables above are then re-keyed by `supabase/migrations/0004_inbox_keys_per_operator.sql`:
+`conversations` and `messages` have primary key `(user_id, id)`, and a Message references
+`(user_id, conversation_id)`. Instagram's thread/item ids are global, so keyed on `id` alone
+the first Operator to save a thread owned it and every other Operator connected to the same
+Instagram account had their saves refused by RLS — their Inbox reloaded empty. `db.ts` upserts
+on `user_id,id`; `DashboardShell.persistInbox` writes Conversations before their Messages.
+
 ## AI SDR Inbox (extension inbox poller → generate-reply Edge Function)
 - Instagram retired the web REST inbox (`/api/v1/direct_v2/`, 404 since Aug 2026) and moved DMs to GraphQL. `extension/igpage.js` runs in instagram.com's MAIN world at `document_start`, hooks the page's own XHR/fetch, and passes the inbox responses it sees (`PolarisDirectInboxQuery`, `IGDThreadListOffMsysPaginationQuery`, `IGDThreadDetailQuery`, `IGDMessageListOffMsysQuery`) to `content.js` by `postMessage`; it polls by replaying the page's last `PolarisDirectInboxQuery` every ~100 s, so a rotated `doc_id` heals on the next page load. `extension/igparse.js` (pure, tested by `src/lib/igparse.test.ts`) turns a response into threads by finding every `as_ig_direct_thread`. `content.js` forwards only for a signed-in Operator (`INBOX_SYNC`, `partial`); `background.js` merges into the stored snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab. Threads appear once the Instagram tab has loaded the inbox page at least once.
 - `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).

@@ -152,6 +152,17 @@ const DashboardShell: React.FC = () => {
     return () => window.removeEventListener('avatar-updated', handler);
   }, []);
 
+  // Conversations first, then their Messages. A Message references its
+  // Conversation, and the two used to be written at once — so a new thread's
+  // Messages could reach Postgres before the thread did, be refused by the
+  // foreign key, and never be retried: the inbox log already counts them as
+  // known. On the next load they were simply gone.
+  const persistInbox = useCallback((rows: Conversation[], msgs: Message[]) => {
+    store.saveConversations(rows)
+      .then(() => store.saveMessages(msgs))
+      .catch(console.error);
+  }, [store]);
+
   // Load data from Supabase (or localStorage fallback) on mount.
   // Keyed on the user ID (not the user object) so token refreshes on tab
   // refocus don't re-trigger a full reload of the pipeline.
@@ -196,17 +207,14 @@ const DashboardShell: React.FC = () => {
       const replayed = inbox.hydrate(history);
       setConversations(replayed?.conversations ?? history.conversations);
       setMessages(replayed?.messages ?? history.messages);
-      if (replayed) {
-        store.saveConversations(replayed.changedConversations).catch(console.error);
-        store.saveMessages(replayed.newMessages).catch(console.error);
-      }
+      if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
     });
 
     return () => {
       cancelled = true;
       inbox.reset();
     };
-  }, [userId, store, inbox]);
+  }, [userId, store, inbox, persistInbox]);
 
   // Merge a fresh inbox snapshot from the extension into state + persist the
   // changed rows. Reads live refs so it can stay a stable callback. Returns the
@@ -217,8 +225,7 @@ const DashboardShell: React.FC = () => {
 
     setConversations(result.conversations);
     setMessages(result.messages);
-    store.saveConversations(result.changedConversations).catch(console.error);
-    store.saveMessages(result.newMessages).catch(console.error);
+    persistInbox(result.changedConversations, result.newMessages);
 
     // Carry what each Conversation revealed back to the Lead behind it, so a
     // reply in the Inbox shows up in reply rate, the conversion chart and the
@@ -230,7 +237,7 @@ const DashboardShell: React.FC = () => {
       result.changedConversations.map((c) => readOutcome(c, result.messages)),
     );
     return result.newInbound;
-  }, [store, inbox]);
+  }, [inbox, persistInbox]);
 
   // Ref so the bridge effect can call the latest autopilot handler without
   // re-subscribing (defined further down).
@@ -428,11 +435,10 @@ const DashboardShell: React.FC = () => {
     // a genuinely repeated "ok" later still comes through.
     setMessages(inbox.recordOutbound(msg).messages);
     setConversations(inbox.recordConversation(updatedConv).conversations);
-    store.saveMessages([msg]).catch(console.error);
-    store.saveConversations([updatedConv]).catch(console.error);
+    persistInbox([updatedConv], [msg]);
 
     toast.success(`Reply queued to @${conv.handle}`);
-  }, [toast, store, inbox]);
+  }, [toast, inbox, persistInbox]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
