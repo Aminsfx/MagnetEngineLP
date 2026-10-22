@@ -105,9 +105,12 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
   // route. It also closes the arithmetic: `replied` below can only be true on a
   // thread that holds an outbound Message, so `replied` implies `dmSent` and
   // filters.ts's replyRate (replied/dmsSent) can no longer exceed 100%.
+  // `sentAt` is Instagram's own timestamp on that first outbound Message — the
+  // send, observed. `dmDate` stays when the DM was written.
   if (outcome.sent && !lead.dmSent) {
     next.dmSent = true;
     next.dmDate = lead.dmDate ?? outcome.sentAt;
+    next.sentAt = lead.sentAt ?? outcome.sentAt;
     changed = true;
   }
 

@@ -207,7 +207,10 @@ Lead {
   profilePicUrl, verified, businessAccount, businessCategory, city, bio,
   isPrivate, status ('cold'|'warm'|'won'),
   dmSent, replied, positiveReply, booked, followedUp,
-  approved, rejected, dmContent, dmDate, replyDate,
+  approved, rejected, dmContent,
+  dmDate,             // when the DM was WRITTEN — not when it was sent
+  sentAt,             // when the extension confirmed the send; read via sentDate() (src/lib/sent.ts)
+  replyDate,
   followUp1Date, followUp2Date, followUp3Date, dealValue,
   optedOut            // asked not to be contacted — suppression only, never a metric
 }

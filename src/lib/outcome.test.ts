@@ -143,14 +143,23 @@ describe('applyOutcome', () => {
       outcome({ sent: true, sentAt: '2026-09-01T09:00:00.000Z' }),
     );
 
-    expect(next).toMatchObject({ dmSent: true, dmDate: '2026-09-01T09:00:00.000Z' });
+    expect(next).toMatchObject({
+      dmSent: true,
+      dmDate: '2026-09-01T09:00:00.000Z',
+      sentAt: '2026-09-01T09:00:00.000Z',
+    });
   });
 
-  it('keeps the send date the Lead already had', () => {
+  it('dates the send from Instagram and keeps when the DM was written', () => {
+    // Written on the 30th, sent on the 1st. The reports count the send.
     const early = lead({ dmSent: false, dmDate: '2026-08-30T07:00:00.000Z' });
 
     expect(applyOutcome(early, outcome({ sent: true, sentAt: '2026-09-01T09:00:00.000Z' })))
-      .toMatchObject({ dmSent: true, dmDate: '2026-08-30T07:00:00.000Z' });
+      .toMatchObject({
+        dmSent: true,
+        dmDate: '2026-08-30T07:00:00.000Z',
+        sentAt: '2026-09-01T09:00:00.000Z',
+      });
   });
 
   it('never lets a reply outrun the send it answered', () => {

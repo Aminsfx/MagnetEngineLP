@@ -27,6 +27,7 @@ import {
   EXT_TO_APP,
   onExtensionMessage,
   pushSendSettings,
+  receiptsFromStats,
   requestExtensionSync,
   sendCampaign,
   watchExtension,
@@ -262,14 +263,13 @@ const DashboardShell: React.FC = () => {
         setExtStats((prev) => (prev && prev.count === next.count && prev.cap === next.cap ? prev : next));
         // Reconcile against both: `sentLog` resets at midnight, `sentHandles`
         // never does, so a dashboard opened the next morning still learns what
-        // went out yesterday instead of offering to send it again.
-        outreachRef.current.markSentByHandles([
-          ...(d.sentLog ?? []).map((x) => x.handle ?? ''),
-          ...(d.sentHandles ?? []),
-        ]);
+        // went out yesterday instead of offering to send it again. Only
+        // `sentLog` says when each send happened.
+        outreachRef.current.markSent(receiptsFromStats(d));
       } else if (d.type === EXT_TO_APP.SENT) {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
-        if (d.handle) outreachRef.current.markSentByHandles([d.handle]);
+        // Broadcast the moment the send finished, so now is when it was sent.
+        if (d.handle) outreachRef.current.markSent([{ handle: d.handle, sentAt: new Date().toISOString() }]);
       } else if (d.type === EXT_TO_APP.INBOX) {
         const viewer = d.viewer?.id ? d.viewer : null;
         if (viewer) {

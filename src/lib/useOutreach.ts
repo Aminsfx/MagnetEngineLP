@@ -12,7 +12,7 @@ import { canonicalHandle, dropKnownHandles } from './intake';
 import { stampFollowUp } from './followups';
 import { applyOutcome, type Outcome } from './outcome';
 import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
-import { sendCampaign } from './extensionProtocol';
+import { sendCampaign, type SendReceipt } from './extensionProtocol';
 import { storage } from './storage';
 import { posthogCapture, posthogLogs } from './posthog';
 
@@ -79,8 +79,11 @@ export interface OutreachEngine {
   generateDMs(target?: Lead[]): Promise<void>;
   sendFollowUps(due: DueFollowUp[]): Promise<number>;
 
-  /** Flip Leads to Sent from the handles the extension confirms it sent. */
-  markSentByHandles(handles: string[]): void;
+  /**
+   * Flip Leads to Sent from the sends the extension confirms, stamping
+   * `sentAt` from the receipt when it carries a time.
+   */
+  markSent(receipts: SendReceipt[]): void;
   /**
    * Reflect what Conversations revealed on the Leads behind them — the Inbox's
    * one way into the Lead lifecycle. Fires the same webhooks an Operator's own
@@ -460,19 +463,32 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     return due.length;
   }, [config.dailySendCap, metered, toast, store]);
 
-  const markSentByHandles = useCallback((handles: string[]) => {
-    const wanted = new Set(
-      handles.map((h) => String(h).toLowerCase().replace(/^@/, '')).filter(Boolean),
-    );
+  const markSent = useCallback((receipts: SendReceipt[]) => {
+    // One handle can arrive in several receipts — today's log and the all-time
+    // list both name it, and only the log says when. Keep the earliest time:
+    // the first confirmed send to a Lead not yet Sent is its opener.
+    const wanted = new Map<string, string | undefined>();
+    for (const r of receipts) {
+      const handle = String(r.handle).toLowerCase().replace(/^@/, '');
+      if (!handle) continue;
+      const times = [wanted.get(handle), r.sentAt].filter((t): t is string => !!t).sort();
+      wanted.set(handle, times[0]);
+    }
     if (wanted.size === 0) return;
 
+    // Only a Lead becoming Sent is stamped. A later receipt for a Lead already
+    // Sent is a follow-up or an Inbox reply going out the same way, and dating
+    // the opener from it would move the opener to the wrong day.
     const changed = leadsRef.current.filter(
       (l) => !l.dmSent && wanted.has(l.handle.toLowerCase()),
     );
     if (changed.length === 0) return;
 
     const now = new Date().toISOString();
-    const updated = changed.map((l) => ({ ...l, dmSent: true, dmDate: l.dmDate ?? now }));
+    const updated = changed.map((l) => {
+      const sentAt = wanted.get(l.handle.toLowerCase());
+      return { ...l, dmSent: true, dmDate: l.dmDate ?? now, ...(sentAt ? { sentAt } : {}) };
+    });
     const byId = new Map(updated.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
     store.saveLeads(updated).catch(console.error);
@@ -533,7 +549,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     removeMany,
     generateDMs,
     sendFollowUps,
-    markSentByHandles,
+    markSent,
     recordOutcomes,
   };
 }

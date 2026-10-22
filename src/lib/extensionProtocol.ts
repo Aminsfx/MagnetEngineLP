@@ -101,8 +101,8 @@ export interface SendSettings {
 export interface ExtensionStats {
   dailySentCount: number;
   dailyCap: number;
-  /** Handles sent today, with timestamps. Resets at midnight. */
-  sentLog: { handle?: string }[];
+  /** Handles sent today, with timestamps (ms since epoch). Resets at midnight. */
+  sentLog: { handle?: string; at?: number }[];
   /** Every handle ever sent. Never resets — see background.js. */
   sentHandles: string[];
 }
@@ -111,6 +111,27 @@ export interface SentNotice {
   handle: string;
   dailySentCount: number;
   dailyCap: number;
+}
+
+/** One send the extension confirmed. `sentAt` only when it said when. */
+export interface SendReceipt {
+  handle: string;
+  /** ISO time of the send. */
+  sentAt?: string;
+}
+
+/**
+ * The sends a STATS message confirms. Today's `sentLog` carries each send's
+ * time; `sentHandles` reaches back across days but carries none, so a send
+ * known only from it gets no `sentAt` rather than an invented one.
+ */
+export function receiptsFromStats(stats: Partial<ExtensionStats>): SendReceipt[] {
+  const iso = (ms: unknown) =>
+    typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+  return [
+    ...(stats.sentLog ?? []).map((x) => ({ handle: x.handle ?? '', sentAt: iso(x.at) })),
+    ...(stats.sentHandles ?? []).map((handle) => ({ handle })),
+  ];
 }
 
 /** What the extension says about itself when it answers HELLO. */

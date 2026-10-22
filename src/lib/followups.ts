@@ -1,5 +1,6 @@
 import type { FollowUpCondition, FollowUpSequence, Lead } from './types';
 import type { OfferLedger } from './prompt';
+import { sentDate } from './sent';
 
 export interface DueFollowUp {
     lead: Lead;
@@ -164,11 +165,15 @@ const ELIGIBLE: Record<FollowUpCondition, (lead: Lead) => boolean> = {
  *
  * A rescue step measures from the last thing that actually happened, which is
  * their reply — not from the opener, which may be weeks older. Anchoring a
- * stall on `dmDate` would make every already-replied Lead instantly overdue on
- * the day the rescue ladder was switched on.
+ * stall on the opener would make every already-replied Lead instantly overdue
+ * on the day the rescue ladder was switched on.
+ *
+ * A cold step counts from the send (`sentDate()`), not from when the DM was
+ * written. It used to read `dmDate`, so a DM written ten days before it went
+ * out had its first follow-up due the minute it was sent.
  */
 function anchorFor(lead: Lead, rescue: boolean, index: number): string | undefined {
-    if (index === 0) return rescue ? (lead.replyDate ?? lead.dmDate) : lead.dmDate;
+    if (index === 0) return rescue ? (lead.replyDate ?? sentDate(lead)) : sentDate(lead);
     const slots = rescue ? RESCUE_SLOTS : COLD_SLOTS;
     return lead[slots[index - 1]];
 }
@@ -178,8 +183,8 @@ function anchorFor(lead: Lead, rescue: boolean, index: number): string | undefin
  *
  * Rules:
  *  - never a Lead who opted out, whatever the condition says
- *  - only leads with dmSent + dmDate
- *  - step i anchors on `anchorFor` — dmDate (or replyDate, for a rescue step),
+ *  - only leads that are Sent and have a send date (`sentDate()`)
+ *  - step i anchors on `anchorFor` — the send (or replyDate, for a rescue step),
  *    then followUp1Date, then followUp2Date
  *  - due when the anchor exists, the step's own date is empty, anchor +
  *    delayDays has elapsed, and the condition allows it
@@ -205,7 +210,7 @@ export function computeDueFollowUps(
         // They asked to be left alone. Messaging them anyway is how an Instagram
         // account gets actioned, and no apology takes it back.
         if (lead.optedOut) continue;
-        if (!lead.dmSent || !lead.dmDate) continue;
+        if (!lead.dmSent || !sentDate(lead)) continue;
 
         for (let i = 0; i < Math.min(sequence.steps.length, 3); i++) {
             const step = sequence.steps[i];

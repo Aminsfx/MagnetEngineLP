@@ -38,7 +38,16 @@ export interface Lead {
      * Handoff, and never read as evidence of a send.
      */
     handedOffAt?: string;
+    /** When the DM was written (generated). Not when it was sent — see `sentAt`. */
     dmDate?: string; // ISO date string
+    /**
+     * When the extension confirmed the DM reached Instagram: its send receipt,
+     * or the first outbound Message it read back from the inbox. Stamped once,
+     * as the Lead becomes Sent, and only from a time something observed — a
+     * Lead Sent without one (a Booking, a receipt that carried no time) has
+     * none. Read it through `sentDate()` in sent.ts.
+     */
+    sentAt?: string;
     replyDate?: string; // ISO date string
     followUp1Date?: string; // ISO date string
     followUp2Date?: string; // ISO date string

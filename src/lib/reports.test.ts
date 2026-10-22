@@ -99,4 +99,35 @@ describe('weeklyReport', () => {
             openers: 2, openersReplied: 1, replyRate: 50, followUps: 2, messagesSent: 4, replies: 1,
         });
     });
+
+    // The regression: openers were dated by `dmDate`, when the DM was WRITTEN.
+    // A batch written one week and sent the next showed zero openers in the
+    // week it actually went out.
+    it('counts an opener in the week it was sent, not the week it was written', () => {
+        const writtenLastWeek = iso(2026, 9, 6);
+        const leads = [
+            lead({ dmSent: true, dmDate: writtenLastWeek, sentAt: iso(2026, 9, 13) }),
+            lead({ dmSent: true, dmDate: writtenLastWeek, sentAt: iso(2026, 9, 14) }),
+        ];
+        expect(weeklyReport(leads, weekPeriod(0, NOW)).openers).toBe(2);
+        expect(weeklyReport(leads, weekPeriod(-1, NOW)).openers).toBe(0);
+    });
+});
+
+describe('send date', () => {
+    const october = monthPeriod(0, NOW);
+
+    it('puts In contact in the month of the send', () => {
+        const septemberDraft = lead({ dmSent: true, dmDate: iso(2026, 8, 28), sentAt: iso(2026, 9, 2) });
+        expect(funnel([septemberDraft], october).find(s => s.key === 'contact')!.n).toBe(1);
+        expect(funnel([septemberDraft], monthPeriod(-1, NOW)).find(s => s.key === 'contact')!.n).toBe(0);
+    });
+
+    it('falls back to when the DM was written for a Lead Sent before the stamp existed', () => {
+        // Every Lead Sent until now has no `sentAt`; it must not vanish from the
+        // period it was counted in before.
+        const legacy = lead({ dmSent: true, dmDate: iso(2026, 9, 13) });
+        expect(weeklyReport([legacy], weekPeriod(0, NOW)).openers).toBe(1);
+        expect(funnel([legacy], october).find(s => s.key === 'contact')!.n).toBe(1);
+    });
 });

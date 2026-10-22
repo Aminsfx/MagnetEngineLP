@@ -377,7 +377,7 @@ describe('generateDMs', () => {
   });
 });
 
-describe('markSentByHandles', () => {
+describe('markSent', () => {
   it('flips matching Leads to sent, once', async () => {
     const { result, saved } = setup();
     act(() => result.current.hydrate([
@@ -385,7 +385,7 @@ describe('markSentByHandles', () => {
       lead('b', { handle: 'founder_two', dmSent: true }),
     ], 0));
 
-    act(() => result.current.markSentByHandles(['@Founder_One', 'founder_two']));
+    act(() => result.current.markSent([{ handle: '@Founder_One' }, { handle: 'founder_two' }]));
 
     await waitFor(() => expect(result.current.leads[0].dmSent).toBe(true));
     // Only the one that changed is written.
@@ -396,7 +396,61 @@ describe('markSentByHandles', () => {
     const { result, saved } = setup();
     act(() => result.current.hydrate([lead('a', { handle: 'founder_one' })], 0));
 
-    act(() => result.current.markSentByHandles(['someone_else']));
+    act(() => result.current.markSent([{ handle: 'someone_else' }]));
+
+    expect(saved).toEqual([]);
+  });
+
+  it('stamps the send time the receipt carries, and keeps when the DM was written', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([
+      lead('a', { handle: 'founder_one', dmDate: '2026-10-12T09:00:00.000Z' }),
+    ], 0));
+
+    act(() => result.current.markSent([{ handle: 'founder_one', sentAt: '2026-10-22T15:30:00.000Z' }]));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0][0]).toMatchObject({
+      dmSent: true,
+      dmDate: '2026-10-12T09:00:00.000Z',
+      sentAt: '2026-10-22T15:30:00.000Z',
+    });
+  });
+
+  it('takes the earliest time when a handle arrives in several receipts', async () => {
+    // Today's log carries a time; the all-time list names the same handle
+    // without one. The time must survive, whichever comes first.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one' })], 0));
+
+    act(() => result.current.markSent([
+      { handle: 'founder_one' },
+      { handle: 'founder_one', sentAt: '2026-10-22T16:00:00.000Z' },
+      { handle: 'founder_one', sentAt: '2026-10-22T15:00:00.000Z' },
+    ]));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0][0].sentAt).toBe('2026-10-22T15:00:00.000Z');
+  });
+
+  it('invents no send time when the receipt has none', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one' })], 0));
+
+    act(() => result.current.markSent([{ handle: 'founder_one' }]));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0][0].dmSent).toBe(true);
+    expect(saved[0][0].sentAt).toBeUndefined();
+  });
+
+  it('never re-dates a Lead already Sent', () => {
+    // A later receipt for the same handle is a follow-up or a reply going out
+    // the same way, not the opener.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', dmSent: true })], 0));
+
+    act(() => result.current.markSent([{ handle: 'founder_one', sentAt: '2026-10-22T15:00:00.000Z' }]));
 
     expect(saved).toEqual([]);
   });

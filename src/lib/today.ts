@@ -1,4 +1,5 @@
 import type { Conversation, Lead } from './types';
+import { sentDate } from './sent';
 
 /**
  * What is waiting on the Operator right now — the dashboard's "Today" panel
@@ -24,13 +25,14 @@ export function isAwaitingHandoff(l: Lead): boolean {
 
 /**
  * Sent more than three days ago, silent, and never followed up. The same
- * three-day line the old health card drew. `dmDate` is only a proxy for the
- * send (it is stamped at generation and kept on send), which is why this says
- * "due a follow-up" and not "sent N days ago".
+ * three-day line the old health card drew, counted from `sentDate()` — the
+ * confirmed send where one was observed, else when the DM was written, which
+ * is why this says "due a follow-up" and not "sent N days ago".
  */
 export function isDueFollowUp(l: Lead, nowMs: number): boolean {
-    if (!l.dmSent || l.replied || l.followedUp || l.optedOut || !l.dmDate) return false;
-    const t = new Date(l.dmDate).getTime();
+    const sent = sentDate(l);
+    if (!l.dmSent || l.replied || l.followedUp || l.optedOut || !sent) return false;
+    const t = new Date(sent).getTime();
     return Number.isFinite(t) && t < nowMs - 3 * DAY_MS;
 }
 

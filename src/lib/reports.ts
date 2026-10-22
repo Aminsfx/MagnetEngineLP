@@ -1,4 +1,5 @@
 import type { Lead } from './types';
+import { sentDate } from './sent';
 
 /**
  * The dashboard's period views — revenue, the funnel and the weekly report —
@@ -7,10 +8,10 @@ import type { Lead } from './types';
  *
  * A stage is counted inside a period by the date stamped when it happened
  * (`createdAt`, `qualifiedAt`, `bookedAt`, `closedAt`; see Lead). A Lead from
- * before its stamp existed counts in "All time" only. Two stages lean on older
- * fields, and say so where they do: In contact reads `dmDate`, which is
- * stamped when the DM is written and kept on send (CONTEXT.md — Sent carries
- * no date of its own), and Replies read `replyDate`.
+ * before its stamp existed counts in "All time" only. Two stages say how they
+ * differ: In contact (and the week's openers) reads `sentDate()` — the moment
+ * the extension confirmed the send, or `dmDate` for a Lead Sent before that
+ * stamp existed — and Replies read `replyDate`.
  */
 
 export interface Period {
@@ -116,7 +117,7 @@ export function funnel(leads: Lead[], p: Period | null): FunnelStage[] {
     return [
         // All time is every Lead; a period needs the stamp.
         { key: 'new', label: 'New leads', n: n(l => p === null || within(l.createdAt, p)) },
-        { key: 'contact', label: 'In contact', n: n(l => counts(l.dmSent, l.dmDate, p)) },
+        { key: 'contact', label: 'In contact', n: n(l => counts(l.dmSent, sentDate(l), p)) },
         { key: 'qualified', label: 'Qualified', n: n(l => counts(!!l.positiveReply, l.qualifiedAt, p)) },
         { key: 'booked', label: 'Booked calls', n: n(l => counts(!!l.booked, l.bookedAt, p)) },
         { key: 'won', label: 'Won', n: n(l => counts(isWon(l), l.closedAt, p)) },
@@ -135,7 +136,7 @@ export interface WeeklyReport {
     qualified: number;
     booked: number;
     won: number;
-    /** First DMs whose `dmDate` is in the week. */
+    /** First DMs sent in the week (`sentDate()`). */
     openers: number;
     /** Of those openers, how many have been answered (at any time since). */
     openersReplied: number;
@@ -156,7 +157,7 @@ export function weeklyReport(leads: Lead[], week: Period): WeeklyReport {
     const stages = funnel(leads, week);
     const by = (k: FunnelKey) => stages.find(s => s.key === k)!.n;
 
-    const openerLeads = leads.filter(l => l.dmSent && within(l.dmDate, week));
+    const openerLeads = leads.filter(l => l.dmSent && within(sentDate(l), week));
     const openersReplied = openerLeads.filter(l => l.replied).length;
     const followUps = leads.reduce(
         (sum, l) => sum + FOLLOW_UP_DATES.filter(k => within(l[k], week)).length,

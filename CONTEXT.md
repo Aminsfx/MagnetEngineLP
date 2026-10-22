@@ -63,6 +63,12 @@ The extension confirms by two routes: the receipt it returns after sending, and
 an outbound Message it later reads back out of Instagram's own inbox. Both are
 the same observer reporting the same fact, so both make a Lead Sent.
 
+A Lead's **send date** (`sentAt`) is the time that confirmation observed: the
+receipt's moment, or Instagram's timestamp on the first outbound Message. It is
+not when the DM was written (`dmDate`), which can be days earlier. A Lead Sent
+before the send date existed, or Sent with no observed time, is dated by
+`dmDate` instead (`sentDate()` in `src/lib/sent.ts`).
+
 A Booked Lead is also Sent. That is not a third confirmation route but the
 funnel being ordered: a booking cannot precede the message that caused it, and
 Booked is a confirmed event either way — the Operator clicked it, or the AI read

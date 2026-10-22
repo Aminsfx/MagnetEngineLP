@@ -10,6 +10,7 @@ import {
   getExtensionStatus,
   onExtensionMessage,
   pushSendSettings,
+  receiptsFromStats,
   requestExtensionSync,
   sendCampaign,
   shareSession,
@@ -378,5 +379,25 @@ describe('session', () => {
     const posted = vi.spyOn(window, 'postMessage');
     shareSession(null)();
     expect(posted).toHaveBeenCalledWith({ type: APP_TO_EXT.SESSION, payload: null }, '*');
+  });
+});
+
+describe('receiptsFromStats', () => {
+  it('dates a send from today\'s log, and invents nothing for the all-time list', () => {
+    // background.js logs `at` as ms since epoch; `sentHandles` carries names only.
+    const at = Date.UTC(2026, 9, 22, 15, 30);
+    expect(receiptsFromStats({
+      sentLog: [{ handle: 'founder_one', at }, { handle: 'no_time' }],
+      sentHandles: ['founder_one', 'from_last_week'],
+    })).toEqual([
+      { handle: 'founder_one', sentAt: '2026-10-22T15:30:00.000Z' },
+      { handle: 'no_time', sentAt: undefined },
+      { handle: 'founder_one' },
+      { handle: 'from_last_week' },
+    ]);
+  });
+
+  it('reads a stats message missing both lists as no sends', () => {
+    expect(receiptsFromStats({})).toEqual([]);
   });
 });

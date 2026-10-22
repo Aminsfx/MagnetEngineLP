@@ -105,6 +105,16 @@ describe('computeDueFollowUps', () => {
     expect(due([lead({ dmDate: daysAgo(4) })], sequence([step({ delayDays: 3 })]))).toHaveLength(1);
   });
 
+  it('counts the first step from the send, not from when the DM was written', () => {
+    // Written a month ago, sent yesterday. Counting from the draft made the
+    // first follow-up due the minute the opener went out.
+    const justSent = lead({ dmDate: daysAgo(30), sentAt: daysAgo(1) });
+    expect(due([justSent], sequence([step({ delayDays: 3 })]))).toEqual([]);
+
+    const sentLastWeek = lead({ dmDate: daysAgo(30), sentAt: daysAgo(7) });
+    expect(due([sentLastWeek], sequence([step({ delayDays: 3 })]))).toHaveLength(1);
+  });
+
   /**
    * The bug this whole condition set was built to fix. The engine held one line
    * — `if (condition === 'no_reply' && lead.replied) continue` — so a Lead who
