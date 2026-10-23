@@ -34,67 +34,82 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
   // first. 'checking' counts as not yet — it settles within a few seconds.
   const extensionInstalled = extension.state === 'ready' || extension.state === 'legacy';
 
+  // Plain words, in the order the work actually happens: each step says what
+  // it is for and where to do it. The old copy spoke in our terms ("ICP",
+  // "push approved DMs") rather than the Operator's.
   const allSteps: Step[] = [
     {
       id: 'extension',
-      label: 'Install the Chrome extension',
-      description: 'It sends your approved DMs and reads replies back. Reload this page after adding it',
+      label: 'Add the Chrome extension',
+      description: 'It sends your DMs from your own Instagram and brings the replies back here. Reload this page after adding it.',
       path: EXTENSION_INSTALL_URL,
       external: true,
-      linkText: 'Add to Chrome →',
+      linkText: 'Add to Chrome',
       complete: extensionInstalled,
     },
     {
       id: 'instagram',
       label: 'Connect your Instagram',
-      description: 'Open Instagram in this browser and confirm the account you DM from',
+      description: 'Log in to Instagram in this browser, then confirm the account you send DMs from.',
       path: '/inbox',
-      linkText: 'Connect Instagram →',
+      linkText: 'Connect Instagram',
       complete: Boolean(config.instagramAccount),
     },
     {
       id: 'wizard',
-      label: 'Set up your AI prompt',
-      description: 'Tell the AI your niche, audience, and tone',
+      label: 'Tell the AI about your business',
+      description: 'What you sell, who you sell to and how you talk. Every DM is written from this.',
       path: '/settings',
-      linkText: 'Open Settings →',
+      linkText: 'Open Settings',
       complete: Boolean(config.onboardingComplete || config.businessName),
     },
     {
       id: 'filters',
-      label: 'Configure lead filters',
-      description: 'Set follower range and bio keywords for your ICP',
+      label: 'Choose who to reach',
+      description: 'Set the follower range and the words a good lead has in their bio.',
       path: '/settings',
-      linkText: 'Open Settings →',
+      linkText: 'Open Settings',
       complete: config.includeKeywords.length > 0 || config.minFollowers > 0 || config.maxFollowers < 100_000_000,
     },
     {
       id: 'search',
-      label: 'Run your first search',
-      description: 'Find Instagram prospects matching your ICP',
+      label: 'Find your first leads',
+      description: 'Search Instagram by keyword, hashtag, or the followers of an account like yours.',
       path: '/campaign',
-      linkText: 'Campaign Builder →',
+      linkText: 'Find leads',
       complete: leads.length > 0,
     },
     {
       id: 'dms',
-      label: 'Generate AI DMs',
-      description: 'Let the AI write personalised openers for each lead',
+      label: 'Let the AI write your DMs',
+      description: 'One personal first message per lead. You read and approve each one; nothing sends on its own.',
       path: '/queue',
-      linkText: 'Approval Queue →',
+      linkText: 'Open Approval Queue',
       complete: leads.some((l) => Boolean(l.dmContent)),
     },
     {
       id: 'send',
-      label: 'Send your first batch',
-      description: 'Push approved DMs to the Chrome extension',
+      label: 'Send your approved DMs',
+      description: 'Press Send in the Approval Queue. The extension sends them one at a time, a few minutes apart.',
       path: '/queue',
-      linkText: 'Approval Queue →',
+      linkText: 'Open Approval Queue',
       complete: leads.some((l) => l.dmSent),
     },
+    {
+      id: 'deals',
+      label: 'Track your deals',
+      description: 'In the Inbox, type the price you’re pitching. Press Booked when they book a call and Mark as won when they pay. Your revenue fills in by itself.',
+      path: '/inbox',
+      linkText: 'Open Inbox',
+      complete: leads.some((l) => (l.dealValue ?? 0) > 0),
+    },
   ];
-  // Connecting Instagram leads to the Inbox, which is hidden while paused.
-  const steps = INBOX_PAUSED ? allSteps.filter((s) => s.id !== 'instagram') : allSteps;
+  // Connecting Instagram and tracking deals both happen in the Inbox, which is
+  // hidden while paused.
+  const steps = INBOX_PAUSED ? allSteps.filter((s) => s.id !== 'instagram' && s.id !== 'deals') : allSteps;
+  // The one to do now is the one that stands out. The others keep their links,
+  // quieter, for an Operator who'd rather go out of order.
+  const nextId = steps.find((s) => !s.complete)?.id;
 
   const completedCount = steps.filter((s) => s.complete).length;
   const allComplete = completedCount === steps.length;
@@ -128,8 +143,11 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
             </div>
             <div>
               <h3 className="text-sm font-semibold text-white tracking-tight leading-none">
-                Quick start<span className="text-neutral-400 font-normal"> · {completedCount} of {steps.length} steps done</span>
+                Get set up<span className="text-neutral-400 font-normal"> · {completedCount} of {steps.length} done</span>
               </h3>
+              <p className="text-label text-neutral-400 mt-1.5">
+                Go in order. Each step takes a few minutes and ticks itself off when it’s done.
+              </p>
             </div>
           </div>
           <button
@@ -152,51 +170,54 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ leads,
 
         {/* Steps grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 relative z-10">
-          {steps.map((step, i) => (
-            <div
-              key={step.id}
-              className={`rounded-xl p-3 border transition-colors duration-300 ${
-                step.complete
-                  ? 'bg-positive-500/6 border-positive-500/15'
-                  : 'bg-white/3 border-white/7 hover:border-white/12'
-              }`}
-            >
-              <div className="flex items-start gap-2 mb-2">
-                <span className="flex-shrink-0 mt-0.5">
-                  {step.complete ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-positive-400" />
-                  ) : (
-                    <Circle className="w-3.5 h-3.5 text-neutral-400" />
+          {steps.map((step, i) => {
+            const isNext = step.id === nextId;
+            const linkCls = `inline-flex items-center gap-1 text-label font-semibold transition-colors pl-5 ${
+              isNext ? 'text-white' : 'text-neutral-400 hover:text-white'
+            }`;
+            return (
+              <div
+                key={step.id}
+                className={`rounded-xl p-3 border transition-colors duration-300 ${
+                  step.complete
+                    ? 'bg-positive-500/6 border-positive-500/15'
+                    : isNext
+                      ? 'bg-white/[0.06] border-white/30'
+                      : 'bg-white/3 border-white/7 hover:border-white/12'
+                }`}
+              >
+                <div className="flex items-start gap-2 mb-2">
+                  <span className="flex-shrink-0 mt-0.5">
+                    {step.complete ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-positive-400" />
+                    ) : (
+                      <Circle className={`w-3.5 h-3.5 ${isNext ? 'text-white' : 'text-neutral-400'}`} />
+                    )}
+                  </span>
+                  <span className={`text-label font-medium leading-snug ${step.complete ? 'text-positive-400 line-through opacity-60' : 'text-white'}`}>
+                    {i + 1}. {step.label}
+                  </span>
+                  {isNext && (
+                    <span className="ml-auto flex-none text-label px-1.5 py-0.5 rounded-full bg-white text-surface font-semibold leading-none">
+                      Next
+                    </span>
                   )}
-                </span>
-                <span className={`text-label font-medium leading-snug ${step.complete ? 'text-positive-400 line-through opacity-60' : 'text-white'}`}>
-                  {i + 1}. {step.label}
-                </span>
+                </div>
+                <p className="text-label text-neutral-400 leading-relaxed mb-2 pl-5">{step.description}</p>
+                {!step.complete && (step.external ? (
+                  <a href={step.path} target="_blank" rel="noreferrer" id={`onboarding-step-${step.id}`} className={linkCls}>
+                    {step.linkText}
+                    <ChevronRight className="w-2.5 h-2.5" aria-hidden />
+                  </a>
+                ) : (
+                  <Link to={step.path} id={`onboarding-step-${step.id}`} className={linkCls}>
+                    {step.linkText}
+                    <ChevronRight className="w-2.5 h-2.5" aria-hidden />
+                  </Link>
+                ))}
               </div>
-              <p className="text-label text-neutral-400 leading-relaxed mb-2 pl-5">{step.description}</p>
-              {!step.complete && (step.external ? (
-                <a
-                  href={step.path}
-                  target="_blank"
-                  rel="noreferrer"
-                  id={`onboarding-step-${step.id}`}
-                  className="inline-flex items-center gap-1 text-label font-semibold text-white hover:text-white transition-colors pl-5"
-                >
-                  {step.linkText}
-                  <ChevronRight className="w-2.5 h-2.5" />
-                </a>
-              ) : (
-                <Link
-                  to={step.path}
-                  id={`onboarding-step-${step.id}`}
-                  className="inline-flex items-center gap-1 text-label font-semibold text-white hover:text-white transition-colors pl-5"
-                >
-                  {step.linkText}
-                  <ChevronRight className="w-2.5 h-2.5" />
-                </Link>
-              ))}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

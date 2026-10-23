@@ -114,6 +114,26 @@ a reason the Operator can read, rather than posted into silence. Needed because
 the two halves stop updating together once the extension ships from the store.
 _Avoid_: version check, ping, capability negotiation
 
+### Deals
+
+**Deal value**:
+What a deal with a Lead is worth (`dealValue`), typed by the Operator — in the
+Inbox while selling, or when recording the win. Before the Lead is Won it is the
+price being pitched and counts as no money; after, it is the price agreed.
+_Avoid_: price (reserved for the Offer Ledger's price, which the prompts quote)
+
+**Pipeline**:
+The Deal values of Booked Leads not yet Won: money on the table, never revenue.
+A snapshot of now, not a period.
+_Avoid_: forecast, expected revenue
+
+**Won**:
+The Operator recorded the deal as made (`closedAt`, with what has been paid so
+far). The only thing that counts as revenue, in the month it was recorded.
+_Avoid_: closed — in the Inbox a closed Conversation is one the Operator ended,
+which suppresses the Lead (Opted Out); calling a sale that would silence the
+person who just bought
+
 ### Inbox
 
 **Conversation**:

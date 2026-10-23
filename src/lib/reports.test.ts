@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Lead } from './types';
-import { monthPeriod, weekPeriod, previousPeriod, within, revenue, funnel, weeklyReport, stepRate } from './reports';
+import { monthPeriod, weekPeriod, previousPeriod, within, revenue, funnel, weeklyReport, stepRate, pipeline, parseMoney } from './reports';
 
 const lead = (over: Partial<Lead>): Lead => ({
     id: Math.random().toString(36).slice(2),
@@ -129,5 +129,30 @@ describe('send date', () => {
         const legacy = lead({ dmSent: true, dmDate: iso(2026, 9, 13) });
         expect(weeklyReport([legacy], weekPeriod(0, NOW)).openers).toBe(1);
         expect(funnel([legacy], october).find(s => s.key === 'contact')!.n).toBe(1);
+    });
+});
+
+describe('pipeline', () => {
+    it('sums the prices on booked calls not yet won, and nothing else', () => {
+        expect(pipeline([
+            lead({ booked: true, dealValue: 3000 }),
+            lead({ booked: true, dealValue: 4000 }),
+            lead({ booked: true, dealValue: 5000, closedAt: iso(2026, 9, 3) }), // won: revenue, not pipeline
+            lead({ dealValue: 9000 }),                                          // pitched, not booked
+            lead({ booked: true }),                                             // booked, no price
+        ])).toEqual({ value: 7000, deals: 2 });
+    });
+
+    it('never counts a price as revenue until it is won', () => {
+        expect(revenue([lead({ booked: true, dealValue: 3000 })], null).total).toBe(0);
+    });
+});
+
+describe('parseMoney', () => {
+    it('reads what people type', () => {
+        expect(parseMoney('$3,000')).toBe(3000);
+        expect(parseMoney('3000.505')).toBe(3000.51);
+        expect(parseMoney('')).toBe(0);
+        expect(parseMoney('free')).toBe(0);
     });
 });

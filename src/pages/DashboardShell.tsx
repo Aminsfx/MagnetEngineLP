@@ -36,7 +36,7 @@ import {
   type InstagramViewer,
 } from '../lib/extensionProtocol';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompts } from '../lib/prompt';
-import { AppConfig, Conversation, Message } from '../lib/types';
+import { AppConfig, Conversation, Lead, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { sendCapOf } from '../lib/plans';
@@ -373,6 +373,18 @@ const DashboardShell: React.FC = () => {
     outreach.recordOutcomes([readOutcome(conv, next.messages)]);
   }, [outreach, store, inbox]);
 
+  /** The deal with the person in a Conversation. Carries what the thread
+   *  already shows, in case they become a Lead only now. */
+  const handleSaveDeal = useCallback((conv: Conversation, change: (lead: Lead) => Lead) => {
+    outreach
+      .recordDeal(
+        { handle: conv.handle, name: conv.name, avatarUrl: conv.avatarUrl },
+        change,
+        readOutcome(conv, inbox.snapshot().messages),
+      )
+      .catch(console.error);
+  }, [outreach, inbox]);
+
   /** Ask the backend for an AI reply draft + intent for a conversation. */
   const handleGenerateReply = useCallback(async (conv: Conversation, instruction?: string): Promise<ReplyResult> => {
     const history = inbox.snapshot().messages
@@ -553,6 +565,8 @@ const DashboardShell: React.FC = () => {
         <InboxView
           conversations={igConversations}
           messages={igMessages}
+          leads={outreach.leads}
+          onSaveDeal={handleSaveDeal}
           config={config}
           detected={igViewer}
           onDisconnectInstagram={handleDisconnectInstagram}

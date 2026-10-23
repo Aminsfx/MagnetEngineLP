@@ -8,7 +8,7 @@ import { db } from './db';
 import { aiAPI, isEmptyCompletion } from './api';
 import { isTrialLimit } from './trial';
 import { filterUtils } from './filters';
-import { canonicalHandle, dropKnownHandles } from './intake';
+import { canonicalHandle, dropKnownHandles, intake } from './intake';
 import { stampFollowUp } from './followups';
 import { applyOutcome, type Outcome } from './outcome';
 import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
@@ -93,7 +93,24 @@ export interface OutreachEngine {
    * because two threads can share one handle.
    */
   recordOutcomes(outcomes: Outcome[]): void;
+  /**
+   * Change the deal on the Lead behind an Inbox Conversation: its price, or
+   * recording it won. Someone who isn't a Lead yet becomes one, carrying what
+   * their Conversation already shows — a call booked before anyone typed a
+   * price happened while there was no Lead to stamp it on.
+   */
+  recordDeal(person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome): Promise<void>;
 }
+
+/** Who a deal is with, as the Inbox knows them. */
+export interface DealPerson {
+  handle: string;
+  name?: string;
+  avatarUrl?: string;
+}
+
+/** The campaign a Lead created from the Inbox belongs to. */
+export const INBOX_CAMPAIGN = { id: 'inbox', name: 'From the Inbox' };
 
 export interface OutreachDeps {
   store: WorkspaceStore;
@@ -530,6 +547,37 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     for (const [event, lead] of events) fireWebhook(config, event, lead);
   }, [config, store]);
 
+  const recordDeal = useCallback(async (person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome) => {
+    const handle = canonicalHandle(person.handle);
+    if (!handle) return;
+
+    const existing = leadsRef.current.find((l) => l.handle.toLowerCase() === handle);
+    let before = existing;
+    let base = existing;
+    if (!before) {
+      // Not metered against the monthly Lead allowance: it bounds scraping,
+      // and this is someone already talking to the Operator.
+      const [created] = intake({
+        source: 'inbox',
+        rows: [{ handle, name: person.name, profilePicUrl: person.avatarUrl }],
+        campaignId: INBOX_CAMPAIGN.id,
+      }).leads;
+      if (!created) return;
+      before = { ...created, campaignName: INBOX_CAMPAIGN.name };
+      base = (outcome && applyOutcome(before, outcome)) ?? before;
+    }
+
+    const updated = change(base!);
+    setLeads((prev) => (existing
+      ? prev.map((l) => (l.id === updated.id ? updated : l))
+      : [...prev, updated]));
+    // Diffed against the Lead as it stood before this call — for a new Lead,
+    // before its Conversation was applied — so a carried-over booking fires
+    // `booked` once, like any other.
+    for (const event of detectTransitions(before, updated)) fireWebhook(config, event, updated);
+    await store.saveLeads([updated]);
+  }, [config, store]);
+
   return {
     leads,
     filteredLeads,
@@ -551,5 +599,6 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     sendFollowUps,
     markSent,
     recordOutcomes,
+    recordDeal,
   };
 }

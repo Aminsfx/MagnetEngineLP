@@ -102,6 +102,32 @@ export function revenue(leads: Lead[], p: Period | null): Revenue {
     return { ...now, outstanding: Math.max(now.total - now.collected, 0), change };
 }
 
+// ─── Pipeline ────────────────────────────────────────────────────────────────
+
+export interface Pipeline {
+    /** Sum of the prices on Booked Leads not yet won. */
+    value: number;
+    deals: number;
+}
+
+/**
+ * Money on the table: Booked, priced, not yet won. Kept apart from revenue on
+ * purpose — a booked call is not money yet, and counting it as revenue would
+ * overstate every month by the calls that never show or never buy. It is a
+ * snapshot of now, not a period: a call booked last month and still open is
+ * still on the table today.
+ */
+export function pipeline(leads: Lead[]): Pipeline {
+    let value = 0;
+    let deals = 0;
+    for (const l of leads) {
+        if (!l.booked || l.closedAt || !((l.dealValue ?? 0) > 0)) continue;
+        value += l.dealValue!;
+        deals++;
+    }
+    return { value, deals };
+}
+
 // ─── Funnel ──────────────────────────────────────────────────────────────────
 
 export type FunnelKey = 'new' | 'contact' | 'qualified' | 'booked' | 'won';
@@ -183,6 +209,12 @@ export function weeklyReport(leads: Lead[], week: Period): WeeklyReport {
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 export const formatMoney = (n: number) => money.format(n);
+
+/** "$3,000", "3000", "3 000.50" → 3000.5; anything not a positive amount → 0. */
+export function parseMoney(raw: string): number {
+    const n = Number(raw.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
 
 /** "Mon, 3 Aug – Sun, 9 Aug" — the inclusive range a week card prints. */
 export function formatRange(p: Period): string {

@@ -78,7 +78,12 @@ export interface Lead {
     qualifiedAt?: string;
     bookedAt?: string;
     closedAt?: string;
-    /** The won deal's value, entered by the Operator. Set together with `closedAt`. */
+    /**
+     * What the deal is worth, entered by the Operator. Before `closedAt` it is
+     * the price they are pitching (a Booked Lead with one counts toward
+     * Pipeline); once won, the price agreed. Only a Lead with `closedAt` counts
+     * as revenue, so a price typed mid-conversation is never counted as money.
+     */
     dealValue?: number;
     /** How much of `dealValue` has been paid so far. The rest is still to collect. */
     cashCollected?: number;

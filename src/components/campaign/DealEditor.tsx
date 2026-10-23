@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import type { Lead } from '../../lib/types';
+import { parseMoney } from '../../lib/reports';
 
 /**
  * Record a booked Lead as a won deal: what it is worth and how much has been
- * paid. This is the only place `closedAt`, `dealValue` and `cashCollected` are
- * written, so the dashboard's revenue is exactly what the Operator entered
- * here — never an estimate.
+ * paid. This is the only place `closedAt` and `cashCollected` are written, so
+ * the dashboard's revenue is exactly what the Operator entered here — never an
+ * estimate. A price set earlier in the Inbox (`dealValue`) fills the value in.
  */
 export const DealEditor: React.FC<{
     lead: Lead;
@@ -15,12 +16,8 @@ export const DealEditor: React.FC<{
     const [value, setValue] = useState(lead.dealValue ? String(lead.dealValue) : '');
     const [collected, setCollected] = useState(lead.cashCollected ? String(lead.cashCollected) : '');
 
-    const amount = (raw: string) => {
-        const n = Number(raw.replace(/[^0-9.]/g, ''));
-        return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
-    };
-    const dealValue = amount(value);
-    const cashCollected = Math.min(amount(collected), dealValue);
+    const dealValue = parseMoney(value);
+    const cashCollected = Math.min(parseMoney(collected), dealValue);
 
     const save = () => {
         if (dealValue <= 0) return;

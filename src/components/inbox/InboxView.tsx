@@ -3,7 +3,7 @@ import {
   Inbox as InboxIcon, Send, Search, Tag, X,
   Bot, Calendar, MessageSquare, ChevronLeft, ArrowRight,
 } from 'lucide-react';
-import type { Conversation, Message, AppConfig, ConversationIntent } from '../../lib/types';
+import type { Conversation, Message, AppConfig, ConversationIntent, Lead } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
 import { useToast } from '../common/Toast';
 import { posthogCapture } from '../../lib/posthog';
@@ -12,10 +12,16 @@ import { igName } from './ConnectInstagram';
 import { Copilot } from './Copilot';
 import type { Suggestion } from '../../lib/copilot';
 import { triage, byPriority, PRIORITY_LABEL, QUALIFICATION_LABEL, type Priority, type Triage } from '../../lib/triage';
+import { canonicalHandle } from '../../lib/intake';
+import { DealPanel } from './DealPanel';
 
 interface InboxViewProps {
   conversations: Conversation[];
   messages: Message[];
+  /** Every Lead, so each Conversation can show the deal on the Lead behind it. */
+  leads: Lead[];
+  /** Change the deal with the person in `conv`, making them a Lead if they aren't one. */
+  onSaveDeal: (conv: Conversation, change: (lead: Lead) => Lead) => void;
   config: AppConfig;
   /** `instruction` steers one copilot suggestion; without it, the reply prompt as written. */
   onGenerateReply: (conv: Conversation, instruction?: string) => Promise<ReplyResult>;
@@ -81,7 +87,7 @@ function timeAgo(iso?: string): string {
 }
 
 export const InboxView: React.FC<InboxViewProps> = ({
-  conversations, messages, config, onGenerateReply, onSendReply, onUpdateConversation, onUpdateConfig,
+  conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation, onUpdateConfig,
   detected, onDisconnectInstagram,
 }) => {
   const account = config.instagramAccount!;
@@ -140,6 +146,13 @@ export const InboxView: React.FC<InboxViewProps> = ({
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [messages, selectedId],
   );
+
+  // A Lead's Handle is canonical by construction (intake); a Conversation's is
+  // whatever Instagram sent, so it is put in the same form to match.
+  const selectedLead = useMemo(() => {
+    const handle = selected ? canonicalHandle(selected.handle) : '';
+    return handle ? leads.find((l) => l.handle === handle) : undefined;
+  }, [leads, selected]);
 
   const openConversation = (c: Conversation) => {
     setSelectedId(c.id);
@@ -403,6 +416,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
                   <button key={q} onClick={() => addLabel(q)} className="text-label px-1.5 py-0.5 rounded-full text-neutral-400 border border-dashed border-white/10 hover:text-white hover:border-white/30">+ {q}</button>
                 ))}
               </div>
+
+              <DealPanel
+                conversation={selected}
+                lead={selectedLead}
+                onSave={(change) => onSaveDeal(selected, change)}
+              />
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-2.5">

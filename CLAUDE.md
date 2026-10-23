@@ -9,7 +9,8 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 - **Tailwind CSS v3 (build-time)** — `tailwind.config.js` + `postcss.config.js`, directives in `index.css`. Dark theme on untinted black grounds. Every surface — dashboard, auth, legal, the extension popup — is black and white, with `positive` (emerald) and `danger` (red) as its only two hues; orange (`brand`) survives only in the unrouted, retired `src/pages/LandingPage.tsx`. Colours come from the tokens in `docs/DESIGN-TOKENS.md` — never type a hex. Do NOT re-add the CDN `<script>`.
 - **React Router v7** — public: `/` (landing A), `/lp/b` and `/lp/c` (A/B-test variants, `noindex`; `/preview/a|b|c` redirect to them), `/lp/dfy` (done-for-you service page, `noindex`), `/login`, `/reset-password`, `/privacy`, `/terms`; signed-in: `/activate` (payment pending); paid: dashboard shell (`/dashboard`, `/campaign`, `/queue`, `/inbox`, `/follow-ups`, `/settings`, `/profile`)
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
-- **Dashboard reports** — `src/lib/reports.ts`: revenue, the outcome funnel and the weekly report, computed from Lead milestone dates (no chart library)
+- **Dashboard reports** — `src/lib/reports.ts`: revenue, pipeline, the outcome funnel and the weekly report, computed from Lead milestone dates (no chart library)
+- **Deals** — tracked in the Inbox (`components/inbox/DealPanel.tsx`, through `outreach.recordDeal`): a price (`dealValue`) any time, Booked → Pipeline, Mark as won (`DealEditor`: `closedAt` + `cashCollected`) → revenue. A person in the Inbox who isn't a Lead becomes one (`intake` source `'inbox'`, campaign "From the Inbox"), carrying their Conversation's Outcome. Call it **Won**, never "closed" — a closed Conversation opts the Lead out (CONTEXT.md)
 - **Lucide React** — icons
 - **HikerAPI** — Instagram REST API for lead scraping (nine sources; see below)
 

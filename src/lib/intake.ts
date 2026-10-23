@@ -3,8 +3,9 @@ import type { Lead, ColumnMapping } from './types';
 /**
  * Lead intake — the only way a Lead enters the product.
  *
- * Two kinds of source feed it — an Instagram scrape (search, hashtag,
- * followers, post engagement, place… see src/lib/scrape.ts) and a CSV upload.
+ * Three kinds of source feed it — an Instagram scrape (search, hashtag,
+ * followers, post engagement, place… see src/lib/scrape.ts), a CSV upload, and
+ * a person in the Inbox the Operator starts tracking a deal with.
  * Before this module each source built Leads its own way: two alias tables in
  * the old Apify client that disagreed about follower-count field names, a
  * third parser in CsvImport, three
@@ -28,7 +29,13 @@ export interface IntakeResult {
 
 export type IntakeRequest =
   | { source: 'scrape'; rows: RawRow[]; campaignId: string }
-  | { source: 'csv'; rows: RawRow[]; campaignId: string; mapping: ColumnMapping };
+  | { source: 'csv'; rows: RawRow[]; campaignId: string; mapping: ColumnMapping }
+  /**
+   * Someone in the Inbox who isn't a Lead yet — they wrote first, or were never
+   * scraped — when the Operator starts tracking a deal with them. A deal lives
+   * on a Lead, so it needs one. Same row shape as a scrape.
+   */
+  | { source: 'inbox'; rows: RawRow[]; campaignId: string };
 
 // ─── Canonical forms ─────────────────────────────────────────────────────────
 

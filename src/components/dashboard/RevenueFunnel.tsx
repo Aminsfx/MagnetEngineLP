@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { UserPlus, MessagesSquare, Star, Phone, Trophy, ArrowRight, ChevronDown, type LucideIcon } from 'lucide-react';
 import type { Lead } from '../../lib/types';
 import { CARD_BEZEL } from '../../lib/theme';
-import { formatMoney, funnel, monthPeriod, revenue, stepRate, type FunnelKey, type Period } from '../../lib/reports';
+import { formatMoney, funnel, monthPeriod, pipeline, revenue, stepRate, type FunnelKey, type Period } from '../../lib/reports';
+import { INBOX_PAUSED } from '../../lib/routes';
 
 /**
  * Money and the outcome funnel for one period: what was won, what has been
@@ -83,6 +84,8 @@ export const RevenueFunnel: React.FC<{ leads: Lead[] }> = ({ leads }) => {
     const money = useMemo(() => revenue(leads, period), [leads, period]);
     const stages = useMemo(() => funnel(leads, period), [leads, period]);
     const everWon = useMemo(() => leads.some(l => l.closedAt), [leads]);
+    // Not per period: a call booked last month and still open is on the table now.
+    const onTable = useMemo(() => pipeline(leads), [leads]);
 
     const max = Math.max(...stages.map(s => s.n), 1);
     const heights = stages.map(s => (s.n > 0 ? Math.max((s.n / max) * BAND_H, 3) : 0));
@@ -127,10 +130,27 @@ export const RevenueFunnel: React.FC<{ leads: Lead[] }> = ({ leads }) => {
                     )}
                 </div>
             </div>
+            {onTable.deals > 0 && (
+                <p className="text-meta text-neutral-400">
+                    <span className="text-white font-medium tabular-nums">{formatMoney(onTable.value)}</span> in your pipeline:{' '}
+                    {onTable.deals} booked {onTable.deals === 1 ? 'call' : 'calls'} with a price, not won yet. It moves into
+                    revenue when you mark the deal won.
+                </p>
+            )}
             {!everWon && (
                 <p className="text-meta text-neutral-400">
-                    Revenue counts the deals you record as won. In the Approval Queue, press{' '}
-                    <span className="text-white font-medium">$</span> on a booked lead to enter what they paid.
+                    {INBOX_PAUSED ? (
+                        <>
+                            Revenue counts the deals you record as won. In the Approval Queue, press{' '}
+                            <span className="text-white font-medium">$</span> on a booked lead to enter what they paid.
+                        </>
+                    ) : (
+                        <>
+                            Revenue counts the deals you mark as won. In the Inbox, type the price you’re pitching on a
+                            conversation, press <span className="text-white font-medium">Booked</span> when they book a call,
+                            then <span className="text-white font-medium">Mark as won</span> when they pay.
+                        </>
+                    )}
                 </p>
             )}
 

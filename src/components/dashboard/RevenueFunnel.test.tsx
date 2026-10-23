@@ -44,7 +44,16 @@ describe('RevenueFunnel', () => {
 
     it('explains where revenue comes from before any deal is recorded', () => {
         render(<RevenueFunnel leads={[lead({})]} />);
-        expect(screen.getByText(/Revenue counts the deals you record as won/)).toBeInTheDocument();
+        expect(screen.getByText(/Revenue counts the deals you mark as won/)).toHaveTextContent(/In the Inbox/);
+    });
+});
+
+describe('RevenueFunnel pipeline', () => {
+    it('shows booked calls with a price as pipeline, apart from revenue', () => {
+        render(<RevenueFunnel leads={[...leads, lead({ booked: true, dealValue: 4000 })]} />);
+        expect(screen.getByText('$4,000').closest('p')).toHaveTextContent(/in your pipeline: 1 booked call/);
+        // Revenue is still only the won deal.
+        expect(screen.getAllByText('$3,000')).toHaveLength(1);
     });
 });
 

@@ -625,3 +625,47 @@ describe('recordOutcomes', () => {
     await waitFor(() => expect(saved).toEqual([]));
   });
 });
+
+describe('recordDeal', () => {
+  it('sets the price on the Lead behind the conversation', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one' })], 0));
+
+    await act(() => result.current.recordDeal({ handle: '@Founder_One' }, (l) => ({ ...l, dealValue: 3000 })));
+
+    expect(result.current.leads).toHaveLength(1);
+    expect(result.current.leads[0].dealValue).toBe(3000);
+    expect(saved[0].map((l) => l.id)).toEqual(['a']);
+  });
+
+  it('makes someone in the Inbox a Lead, carrying the booking their thread already shows', async () => {
+    // They booked before anyone typed a price: recordOutcomes had no Lead to
+    // stamp then, so the booking has to come along now — once.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([], 0));
+
+    await act(() => result.current.recordDeal(
+      { handle: 'inbound_one', name: 'Inbound One' },
+      (l) => ({ ...l, dealValue: 4000 }),
+      { handle: 'inbound_one', sent: true, sentAt: '2026-10-20T09:00:00.000Z', replied: false, booked: true, optedOut: false },
+    ));
+
+    const created = result.current.leads[0];
+    expect(created).toMatchObject({
+      handle: 'inbound_one', name: 'Inbound One', campaignId: 'inbox', campaignName: 'From the Inbox',
+      dealValue: 4000, booked: true, dmSent: true, sentAt: '2026-10-20T09:00:00.000Z',
+    });
+    expect(created.createdAt).toEqual(expect.any(String));
+    expect(saved[0]).toEqual([created]);
+    expect(vi.mocked(fireWebhook).mock.calls.map((c) => c[1])).toContain('booked');
+  });
+
+  it('fires nothing when only the price changes', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', booked: true })], 0));
+
+    await act(() => result.current.recordDeal({ handle: 'founder_one' }, (l) => ({ ...l, dealValue: 3000 })));
+
+    expect(fireWebhook).not.toHaveBeenCalled();
+  });
+});

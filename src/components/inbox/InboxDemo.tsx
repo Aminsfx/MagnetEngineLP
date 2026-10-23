@@ -4,7 +4,8 @@ import { demoInbox } from '../../lib/inboxDemo';
 import { aiAPI, withInstruction, type ReplyResult } from '../../lib/api';
 import { DEFAULT_REPLY_SYSTEM_PROMPT } from '../../lib/prompt';
 import { useToast } from '../common/Toast';
-import type { AppConfig, Conversation, Message } from '../../lib/types';
+import { intake } from '../../lib/intake';
+import type { AppConfig, Conversation, Lead, Message } from '../../lib/types';
 
 /**
  * The Inbox over sample conversations, for `npm run demo` only. The copilot
@@ -44,6 +45,20 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
         return result;
     }, [config, messages, update]);
 
+    // Deals stay in memory too: a sample handle can never become a real Lead.
+    const [leads, setLeads] = useState<Lead[]>([]);
+    const saveDeal = useCallback((c: Conversation, change: (lead: Lead) => Lead) => {
+        setLeads(prev => {
+            const existing = prev.find(l => l.handle === c.handle);
+            const base = existing ?? intake({
+                source: 'inbox', rows: [{ handle: c.handle, name: c.name }], campaignId: 'inbox-demo',
+            }).leads[0];
+            if (!base) return prev;
+            const next = change(base);
+            return existing ? prev.map(l => (l.id === next.id ? next : l)) : [...prev, next];
+        });
+    }, []);
+
     const send = useCallback((c: Conversation, text: string) => {
         const now = new Date().toISOString();
         setMessages(prev => [...prev, { id: `${c.id}-sent-${Date.now()}`, conversationId: c.id, direction: 'out', text, createdAt: now }]);
@@ -61,6 +76,8 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
                 <InboxView
                     conversations={conversations}
                     messages={messages}
+                    leads={leads}
+                    onSaveDeal={saveDeal}
                     config={demoConfig}
                     detected={null}
                     onGenerateReply={generate}
