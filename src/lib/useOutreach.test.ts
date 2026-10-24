@@ -669,3 +669,69 @@ describe('recordDeal', () => {
     expect(fireWebhook).not.toHaveBeenCalled();
   });
 });
+
+describe('generateDMs, a whole batch', () => {
+  it('writes batch after batch with `all`, saving each batch as it lands', async () => {
+    vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: 'hi', used: 1, limit: 500 });
+    const { result, saved } = setup();
+    const leads = Array.from({ length: 25 }, (_, i) => lead(`l${i}`));
+    act(() => result.current.hydrate(leads, 0));
+
+    await act(() => result.current.generateDMs(leads, { all: true }));
+
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(25);
+    // Saved per batch of ten, so a run cut short keeps what it wrote.
+    expect(saved.map((batch) => batch.length)).toEqual([10, 10, 5]);
+    expect(result.current.leads.every((l) => l.dmContent === 'hi')).toBe(true);
+    expect(result.current.generation).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Generated 25 DMs'));
+  });
+
+  it('stops after the DM in flight, and says how many are left', async () => {
+    const { result } = setup();
+    const leads = Array.from({ length: 25 }, (_, i) => lead(`l${i}`));
+    act(() => result.current.hydrate(leads, 0));
+    vi.mocked(aiAPI.generateDM).mockImplementation(async () => {
+      // The Operator presses Stop while the third DM is being written.
+      if (vi.mocked(aiAPI.generateDM).mock.calls.length === 3) result.current.stopGenerating();
+      return { dm: 'hi', used: 1, limit: 500 };
+    });
+
+    await act(() => result.current.generateDMs(leads, { all: true }));
+
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(3);
+    expect(toast.info).toHaveBeenCalledWith('Stopped after 3 DMs. 22 still to write.');
+  });
+
+  it('does not pay to write a Lead skipped while the run was going', async () => {
+    vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: 'hi', used: 1, limit: 500 });
+    const { result } = setup();
+    const leads = [lead('a'), lead('b', { rejected: true })];
+    act(() => result.current.hydrate(leads, 0));
+
+    await act(() => result.current.generateDMs([lead('a'), lead('b')], { all: true }));
+
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(1);
+    const skipped = result.current.leads.find((l) => l.id === 'b')!;
+    expect(skipped.rejected).toBe(true);
+    expect(skipped.dmContent).toBeUndefined();
+  });
+});
+
+describe('rejectMany / restoreMany', () => {
+  it('skips in bulk, leaves a Sent Lead alone, and restores', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([
+      lead('a', { dmContent: 'x', approved: true }),
+      lead('b', { dmContent: 'y', dmSent: true, approved: true }),
+    ], 0));
+
+    await act(() => result.current.rejectMany(['a', 'b']));
+    expect(result.current.leads[0]).toMatchObject({ rejected: true, approved: false });
+    expect(result.current.leads[1]).toMatchObject({ dmSent: true, approved: true });
+    expect(result.current.leads[1].rejected).toBeFalsy();
+
+    await act(() => result.current.restoreMany(['a']));
+    expect(result.current.leads[0].rejected).toBe(false);
+  });
+});

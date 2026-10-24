@@ -4,8 +4,14 @@ import {
   isLegacyGeneratedPrompt,
   migrateStoredPrompts,
   buildReplySystemPrompt,
+  clearSeedIdentity,
+  identityOf,
+  replyFollowsIdentity,
+  withIdentity,
   DEFAULT_IDENTITY,
+  DEFAULT_REPLY_SYSTEM_PROMPT,
   DEFAULT_SYSTEM_PROMPT,
+  LEGACY_SEED_IDENTITY,
   PROMPT_VERSION,
   TONE_LIBRARY,
   TONE_OPTIONS,
@@ -77,8 +83,10 @@ describe('buildSystemPrompt', () => {
   it('substitutes placeholders for every blank field', () => {
     const prompt = buildSystemPrompt({});
     expect(prompt).toContain('You are the founder of our business.');
-    expect(prompt).toContain('You help potential clients achieve grow their business.');
-    expect(prompt).toContain('their space');
+    // Each fallback reads as a sentence where it lands — a new Operator's
+    // prompts are built from an empty identity until they fill the wizard.
+    expect(prompt).toContain('You help potential clients achieve real growth in their business.');
+    expect(prompt).toContain("I noticed you're in this space");
     expect(prompt).not.toContain('undefined');
   });
 
@@ -195,9 +203,93 @@ describe('defaults', () => {
     expect(DEFAULT_SYSTEM_PROMPT).toBe(buildSystemPrompt(DEFAULT_IDENTITY));
   });
 
-  it('read as MagnetEngine speaking to its own audience', () => {
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('You are the founder of MagnetEngine.');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('agency owners, coaches, and consultants');
+  it("name no business and no offer — never MagnetEngine's", () => {
+    // A new Operator used to start as MagnetEngine, so their replies pitched
+    // MagnetEngine's offer until they replaced every field.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain('MagnetEngine');
+    expect(DEFAULT_REPLY_SYSTEM_PROMPT).not.toContain('MagnetEngine');
+    expect(DEFAULT_REPLY_SYSTEM_PROMPT).toContain('You help potential clients achieve real growth in their business.');
+  });
+});
+
+describe('withIdentity', () => {
+  const seeded = {
+    ...LEGACY_SEED_IDENTITY,
+    systemPrompt: buildSystemPrompt(LEGACY_SEED_IDENTITY),
+    replySystemPrompt: buildReplySystemPrompt(LEGACY_SEED_IDENTITY),
+  };
+
+  it("rewrites both prompts in the Operator's words once they say who they are", () => {
+    const next = withIdentity(seeded, marcus);
+
+    expect(next.replySystemPrompt).toBe(buildReplySystemPrompt(marcus));
+    expect(next.replySystemPrompt).toContain('You are Marcus, founder at Apex Growth.');
+    expect(next.replySystemPrompt).not.toContain('MagnetEngine');
+    expect(next.systemPrompt).toBe(buildSystemPrompt(marcus));
+    expect(next.businessName).toBe('Apex Growth');
+  });
+
+  it('follows each change, field by field, as the wizard is typed into', () => {
+    const typed = withIdentity(withIdentity(seeded, marcus), { ...marcus, price: '$197/mo' });
+    expect(typed.replySystemPrompt).toBe(buildReplySystemPrompt({ ...marcus, price: '$197/mo' }));
+    expect(typed.replySystemPrompt).toContain('- PRICE: $197/mo');
+  });
+
+  it('keeps a reply script the Operator wrote, until they ask for it to be rebuilt', () => {
+    const mine = { ...withIdentity(seeded, marcus), replySystemPrompt: 'reply like a pirate' };
+    expect(replyFollowsIdentity(mine)).toBe(false);
+
+    const renamed = withIdentity(mine, { ...marcus, businessName: 'Apex Two' });
+    expect(renamed.replySystemPrompt).toBe('reply like a pirate');
+    expect(renamed.systemPrompt).toContain('Apex Two');
+
+    const rebuilt = withIdentity(renamed, identityOf(renamed), { reply: true });
+    expect(rebuilt.replySystemPrompt).toBe(buildReplySystemPrompt({ ...marcus, businessName: 'Apex Two' }));
+    expect(replyFollowsIdentity(rebuilt)).toBe(true);
+  });
+
+  it('treats an empty script, the default and the old seed as built, not written', () => {
+    expect(replyFollowsIdentity({ ...marcus, replySystemPrompt: '' })).toBe(true);
+    expect(replyFollowsIdentity({ ...marcus, replySystemPrompt: DEFAULT_REPLY_SYSTEM_PROMPT })).toBe(true);
+    expect(replyFollowsIdentity({ ...marcus, replySystemPrompt: buildReplySystemPrompt(LEGACY_SEED_IDENTITY) })).toBe(true);
+  });
+});
+
+describe('clearSeedIdentity', () => {
+  const seededConfig = (over: Partial<PromptIdentity> = {}) => {
+    const identity = { ...LEGACY_SEED_IDENTITY, ...over };
+    return { ...identity, systemPrompt: buildSystemPrompt(identity), replySystemPrompt: buildReplySystemPrompt(identity) };
+  };
+
+  it("empties the seed's fields and rewrites the prompts built from them", () => {
+    const cleared = clearSeedIdentity(seededConfig());
+
+    expect(cleared.businessName).toBe('');
+    expect(cleared.valueProposition).toBe('');
+    expect(cleared.replySystemPrompt).not.toContain('MagnetEngine');
+    expect(cleared.replySystemPrompt).not.toContain('a calendar that fills with booked calls');
+    expect(cleared.replySystemPrompt).toBe(DEFAULT_REPLY_SYSTEM_PROMPT);
+  });
+
+  it('keeps what the Operator typed and clears only what the seed left behind', () => {
+    // A preset never touched the name, so "MagnetEngine" stayed beside a coach's niche.
+    const cleared = clearSeedIdentity(seededConfig({ businessNiche: 'mindset coaching', founderName: 'Dana' }));
+
+    expect(cleared.businessName).toBe('');
+    expect(cleared.businessNiche).toBe('mindset coaching');
+    expect(cleared.replySystemPrompt).toContain('You are Dana, founder at our business.');
+    expect(cleared.replySystemPrompt).not.toContain('MagnetEngine');
+  });
+
+  it('leaves a hand-written reply script alone', () => {
+    const cleared = clearSeedIdentity({ ...seededConfig(), replySystemPrompt: 'reply like a pirate' });
+    expect(cleared.replySystemPrompt).toBe('reply like a pirate');
+    expect(cleared.businessName).toBe('');
+  });
+
+  it('returns the same object when there is no seed, so nothing is saved', () => {
+    const own = { ...marcus, systemPrompt: buildSystemPrompt(marcus), replySystemPrompt: buildReplySystemPrompt(marcus) };
+    expect(clearSeedIdentity(own)).toBe(own);
   });
 });
 

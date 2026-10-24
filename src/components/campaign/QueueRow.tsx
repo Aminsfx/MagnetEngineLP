@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import {
-    Sparkles, Trash2, Check, X, Edit3, Users, MessageSquare, MapPin,
-    CheckCircle, XCircle, Clock, MessageCircle, ThumbsUp, MessagesSquare, CalendarCheck, Send, Hourglass, DollarSign,
+    Sparkles, Trash2, Check, X, Edit3, MapPin, CornerUpLeft, RotateCcw, Hourglass,
+    MessageCircle, ThumbsUp, MessagesSquare, CalendarCheck, DollarSign,
 } from 'lucide-react';
-import { Lead } from '../../lib/types';
+import type { Lead } from '../../lib/types';
+import type { QueueView } from '../../lib/queue';
+import { sentDate } from '../../lib/sent';
+import { formatMoney } from '../../lib/reports';
 import { ReplyBattlecards } from './ReplyBattlecards';
 import { DealEditor } from './DealEditor';
 import type { TemplateContext } from '../../lib/followups';
@@ -24,44 +27,79 @@ function ago(iso: string): string {
     return `${Math.round(hours / 24)}d ago`;
 }
 
+const DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+
+/** The columns each view shows, in order. The header and every row read this one list. */
+export const COLUMNS: Record<QueueView, Array<{ key: string; label: string; className: string }>> = {
+    write: [
+        { key: 'lead', label: 'Lead', className: 'w-[32%]' },
+        { key: 'bio', label: 'Bio', className: '' },
+        { key: 'actions', label: '', className: 'w-px' },
+    ],
+    // The DM is what gets judged, so it takes the width; the bio is context.
+    review: [
+        { key: 'lead', label: 'Lead', className: 'w-[20%]' },
+        { key: 'bio', label: 'Bio', className: 'w-[20%]' },
+        { key: 'dm', label: 'DM', className: '' },
+        { key: 'actions', label: '', className: 'w-px' },
+    ],
+    send: [
+        { key: 'lead', label: 'Lead', className: 'w-[24%]' },
+        { key: 'dm', label: 'DM', className: '' },
+        { key: 'status', label: 'Status', className: 'w-[15%]' },
+        { key: 'actions', label: '', className: 'w-px' },
+    ],
+    sent: [
+        { key: 'lead', label: 'Lead', className: 'w-[24%]' },
+        { key: 'dm', label: 'DM', className: '' },
+        { key: 'outcome', label: 'Outcome', className: 'w-[16%]' },
+        { key: 'actions', label: '', className: 'w-px' },
+    ],
+    skipped: [
+        { key: 'lead', label: 'Lead', className: 'w-[24%]' },
+        { key: 'dm', label: 'DM', className: '' },
+        { key: 'actions', label: '', className: 'w-px' },
+    ],
+};
+
+/** What a row that changed state while its view was open now says, in place. */
+const CHANGED_LABEL: Record<QueueView, string> = {
+    write: 'Back to write',
+    review: 'In To review',
+    send: 'Approved',
+    sent: 'Sent',
+    skipped: 'Skipped',
+};
+
 /**
- * The Actions cell's icon buttons, one entry per role.
- *
- * Written out rather than built from a role name because Tailwind's content
- * scanner only sees literal class strings — an interpolated
- * `hover:text-${role}-400` compiles to nothing. Each button also carries an
- * `aria-label`: `title` alone is a hover tooltip, which is no name at all to
- * a screen reader or a keyboard user.
+ * Small square icon buttons, one class per role. Written out rather than built
+ * from a role name because Tailwind's content scanner only sees literal class
+ * strings. Each carries an `aria-label`: `title` alone is no name to a screen
+ * reader or a keyboard user.
  */
-const ICON_BTN = {
-    neutral: 'p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors',
-    positive: 'p-1.5 rounded-lg text-neutral-300 hover:text-positive-300 hover:bg-positive-500/10 transition-colors',
+const ICON = {
+    neutral: 'p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40 disabled:pointer-events-none',
     danger: 'p-1.5 rounded-lg text-neutral-400 hover:text-danger-400 hover:bg-danger-500/10 transition-colors',
-    /** Delete only: it rests one step dimmer than Reject, since it is the
-        irreversible one and should not be what the eye lands on first. */
-    dangerQuiet: 'p-1.5 rounded-lg text-neutral-400 hover:text-danger-400 hover:bg-danger-500/10 transition-colors',
 } as const;
 
-/** One status pill. The icon is decoration; the word carries the state. */
-const Pill: React.FC<{ tone: 'positive' | 'danger' | 'ready' | 'muted'; icon: React.ReactNode; children: React.ReactNode }> = ({
-    tone, icon, children,
-}) => {
-    const cls = {
-        positive: 'bg-positive-500/10 text-positive-300 border-positive-500/25',
-        danger: 'bg-danger-500/10 text-danger-300 border-danger-500/25',
-        ready: 'bg-white/10 text-white border-white/20',
-        muted: 'bg-white/5 text-neutral-300 border-white/10',
-    }[tone];
-    return (
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label font-medium border whitespace-nowrap ${cls}`}>
-            <span aria-hidden>{icon}</span>
-            {children}
-        </span>
-    );
-};
+/** The one labelled button a row offers — the stage's own next step. */
+const ROW_PRIMARY = 'inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full border border-white/12 text-meta font-medium text-neutral-200 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap';
+
+const CELL = 'px-4 py-3.5 align-top max-md:block max-md:px-4 max-md:py-1.5';
 
 export interface QueueRowProps {
     lead: Lead;
+    /** The view this row is shown in — it decides the cells and the actions. */
+    view: QueueView;
+    /**
+     * Where the Lead went, when it changed state while this view was open. It
+     * stays in its place, muted, with an undo, instead of vanishing from under
+     * the pointer — the next row sliding up into a just-clicked Approve is how a
+     * skim approves the wrong person.
+     */
+    changedTo: QueueView | null;
+    /** The campaign's name, shown on the row only when every campaign is listed together. */
+    campaignLabelText: string | null;
     isSelected: boolean;
     isEditing: boolean;
     /** The in-progress edit text — only meaningful (and only passed) while editing. */
@@ -76,323 +114,288 @@ export interface QueueRowProps {
     onSaveEdit: (id: string) => void;
     onCancelEdit: () => void;
     onEditDraftChange: (value: string) => void;
-    onApprove: (id: string) => void;
-    onReject: (id: string) => void;
+    onApprove: (lead: Lead) => void;
+    onSkip: (lead: Lead) => void;
+    onUnapprove: (lead: Lead) => void;
+    onRestore: (lead: Lead) => void;
+    /** Reverses whatever `changedTo` records. */
+    onUndo: (lead: Lead) => void;
     onUpdateLead: (lead: Lead) => void;
     onToggleBattlecards: (id: string) => void;
     onGenerateDM: (lead: Lead) => void;
     onDelete: (lead: Lead) => void;
 }
 
+const LeadCell: React.FC<{ lead: Lead; campaignLabelText: string | null }> = ({ lead, campaignLabelText }) => (
+    <div className="flex items-start gap-3 min-w-0">
+        {/* A page is a screenful of Instagram CDN avatars, so the img is lazy:
+            eager loading fired every cross-origin request the moment the queue
+            mounted, and the scraped URLs are signed and expire. */}
+        {lead.profilePicUrl ? (
+            <img
+                src={lead.profilePicUrl} alt="" loading="lazy" decoding="async" width={36} height={36}
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 flex-none"
+                onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+            />
+        ) : (
+            <div aria-hidden className="w-9 h-9 rounded-full bg-neutral-800 ring-1 ring-white/10 flex items-center justify-center text-white text-meta font-semibold flex-none">
+                {(lead.name || lead.handle)[0]?.toUpperCase()}
+            </div>
+        )}
+        <div className="min-w-0">
+            <div className="text-body-sm font-medium text-white leading-snug truncate">{lead.name}</div>
+            <div className="font-mono text-label text-neutral-400 truncate">@{lead.handle}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-label text-neutral-400">
+                <span><span className="font-mono tabular-nums text-neutral-300">{formatFollowers(lead.followers)}</span> followers</span>
+                {lead.businessAccount && <span>Business</span>}
+                {lead.city && (
+                    <span className="inline-flex items-center gap-0.5"><MapPin className="w-3 h-3" aria-hidden />{lead.city}</span>
+                )}
+            </div>
+            {campaignLabelText && <div className="mt-1 text-label text-neutral-400 truncate">{campaignLabelText}</div>}
+        </div>
+    </div>
+);
+
+/** A long bio folds to three lines; the DM is what gets judged, the bio is its context. */
+const BioCell: React.FC<{ bio?: string }> = ({ bio }) => {
+    const [open, setOpen] = useState(false);
+    if (!bio) return <span className="text-meta text-neutral-400">No bio</span>;
+    const long = bio.length > 140;
+    return (
+        <div>
+            <p className={`text-meta text-neutral-400 leading-relaxed whitespace-pre-line ${long && !open ? 'line-clamp-3' : ''}`}>{bio}</p>
+            {long && (
+                <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                    className="mt-1 text-label font-medium text-neutral-400 hover:text-white transition-colors">
+                    {open ? 'Less' : 'More'}
+                </button>
+            )}
+        </div>
+    );
+};
+
 /**
  * One row of the Approval Queue.
  *
- * Memoized on purpose: the queue renders up to 250 of these, and each carries a
- * controlled checkbox. React re-applies `name`/`type` on every controlled input
- * it re-renders, so an unmemoized row cost ~3 DOM attribute writes per row on
- * every commit — approving a single lead rewrote ~770 DOM nodes. With the memo,
- * only the row whose `lead` object actually changed re-renders.
- *
- * Every callback prop must have a stable identity (see `useStable`) or this
- * memo does nothing.
+ * Memoized on purpose: a page renders up to 100 of these, each with a
+ * controlled checkbox, and without the memo approving one lead re-rendered
+ * every row. Every callback prop must keep a stable identity (see `useStable`)
+ * or the memo does nothing.
  */
 const QueueRowBase: React.FC<QueueRowProps> = ({
-    lead,
-    isSelected,
-    isEditing,
-    editDraft,
-    showBattlecards,
-    isGenerating,
-    ledger,
-    canDelete,
-    onToggleSelect,
-    onStartEdit,
-    onSaveEdit,
-    onCancelEdit,
-    onEditDraftChange,
-    onApprove,
-    onReject,
-    onUpdateLead,
-    onToggleBattlecards,
-    onGenerateDM,
-    onDelete,
+    lead, view, changedTo, campaignLabelText, isSelected, isEditing, editDraft, showBattlecards,
+    isGenerating, ledger, canDelete, onToggleSelect, onStartEdit, onSaveEdit, onCancelEdit,
+    onEditDraftChange, onApprove, onSkip, onUnapprove, onRestore, onUndo, onUpdateLead,
+    onToggleBattlecards, onGenerateDM, onDelete,
 }) => {
-    const rowClass = lead.dmSent
-        ? ''
-        : lead.approved
-        ? 'bg-positive-500/[0.03]'
-        : lead.rejected
-        ? 'bg-danger-500/[0.03]'
-        : '';
     const who = `@${lead.handle}`;
     const [dealOpen, setDealOpen] = useState(false);
+    const muted = changedTo !== null;
+    const columns = COLUMNS[view];
+    const sentOn = sentDate(lead);
 
-    return (
-        <>
-            <tr className={`transition-colors hover:bg-white/[0.02] ${isSelected ? 'bg-white/[0.06]' : rowClass}`}>
-                {/* Select */}
-                <td className="pl-5 pr-2 py-4 align-top">
-                    <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => onToggleSelect(lead.id)}
-                        aria-label={`Select ${who}`}
-                        className="w-4 h-4 mt-1 rounded border-white/20 bg-transparent accent-white cursor-pointer"
-                    />
-                </td>
-                {/* Lead */}
-                <td className="px-5 py-4 align-top">
-                    <div className="flex items-center gap-3">
-                        {/* A page is a screenful of Instagram CDN avatars — up to 100 — so the
-                            img is lazy: eager loading fired every cross-origin request the
-                            moment the queue mounted, and the scraped URLs are signed and
-                            expire, so most of them are 403s. */}
-                        {lead.profilePicUrl ? (
-                            <img src={lead.profilePicUrl} alt=""
-                                loading="lazy"
-                                decoding="async"
-                                width={36}
-                                height={36}
-                                className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 flex-shrink-0"
-                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                        ) : (
-                            // Was white text on a white-to-grey gradient, i.e. invisible.
-                            <div aria-hidden className="w-9 h-9 rounded-full bg-neutral-800 ring-1 ring-white/10 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                {(lead.name || lead.handle)[0]?.toUpperCase()}
-                            </div>
-                        )}
-                        <div className="min-w-0">
-                            <div className="font-medium text-white text-sm leading-tight">{lead.name}</div>
-                            <div className="text-neutral-400 text-xs mt-0.5">{who}</div>
-                            <div className="flex items-center gap-1.5 mt-1 text-label text-neutral-400 tabular-nums">
-                                <Users className="w-3 h-3" aria-hidden />
-                                <span>{formatFollowers(lead.followers)}<span className="sr-only"> followers</span></span>
-                                {lead.businessAccount && (
-                                    <span className="bg-white/10 text-white px-1 py-0.5 rounded">Business</span>
-                                )}
-                            </div>
-                            {/* `neutral`, not an accent: which campaign a Lead came
-                                from is a label, not a state. See docs/DESIGN-TOKENS.md. */}
-                            {lead.campaignName && (
-                                <div className="mt-1 inline-flex items-center gap-1 text-label text-neutral-300 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-full max-w-[140px] truncate">
-                                    {lead.campaignName}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </td>
+    const dmCell = isEditing ? (
+        <div className="space-y-2">
+            <textarea
+                value={editDraft ?? ''}
+                onChange={e => onEditDraftChange(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSaveEdit(lead.id); }
+                }}
+                rows={5}
+                autoFocus
+                aria-label={`Edit the DM to ${who}`}
+                className="w-full bg-surface border border-white/30 rounded-xl px-3 py-2 text-body-sm leading-relaxed text-white focus:outline-none focus:ring-2 focus:ring-white/10 resize-y"
+            />
+            <div className="flex items-center gap-2">
+                <button type="button" onClick={() => onSaveEdit(lead.id)}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white text-surface text-meta font-semibold hover:bg-neutral-100 transition-colors">
+                    <Check className="w-3.5 h-3.5" aria-hidden /> Save
+                </button>
+                <button type="button" onClick={onCancelEdit}
+                    className="px-3 py-1 rounded-full text-meta text-neutral-300 hover:text-white hover:bg-white/5 transition-colors">
+                    Cancel
+                </button>
+                <span className="ml-auto text-label text-neutral-400 max-sm:hidden">Ctrl+Enter saves · Esc cancels</span>
+            </div>
+        </div>
+    ) : lead.dmContent ? (
+        // Shown in full: approval is the product's one human judgement, and it
+        // used to be made on four clamped lines.
+        <p className="text-body-sm text-neutral-200 leading-relaxed whitespace-pre-line">{lead.dmContent}</p>
+    ) : (
+        <span className="text-meta text-neutral-400">No DM written</span>
+    );
 
-                {/* Bio */}
-                <td className="px-5 py-4 align-top">
-                    <p className="text-xs text-neutral-400 leading-relaxed">
-                        {lead.bio || <span className="text-neutral-400 italic">No bio</span>}
-                    </p>
-                    {lead.city && (
-                        <p className="flex items-center gap-1 text-label text-neutral-400 mt-1.5">
-                            <MapPin className="w-3 h-3" aria-hidden /> {lead.city}
-                        </p>
-                    )}
-                </td>
-
-                {/* DM — shown in full. Approval is the product's one human
-                    judgement, and it used to be made on four clamped lines
-                    with the rest behind a hover no keyboard can reach. */}
-                <td className="px-5 py-4 align-top">
-                    {isEditing ? (
-                        <div className="space-y-2">
-                            <textarea
-                                value={editDraft ?? ''}
-                                onChange={e => onEditDraftChange(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
-                                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSaveEdit(lead.id); }
-                                }}
-                                rows={6}
-                                autoFocus
-                                aria-label={`Edit the DM to ${who}`}
-                                className="w-full bg-surface border border-white/30 rounded-xl px-3 py-2 text-sm leading-relaxed text-white focus:outline-none focus:ring-1 focus:ring-white/50 resize-y"
-                            />
-                            <div className="flex items-center gap-2">
-                                <button type="button" onClick={() => onSaveEdit(lead.id)}
-                                    className="flex items-center gap-1 px-3 py-1 bg-white/20 text-white rounded-lg text-xs hover:bg-white/30 transition-colors">
-                                    <Check className="w-3 h-3" aria-hidden /> Save
-                                </button>
-                                <button type="button" onClick={onCancelEdit}
-                                    className="flex items-center gap-1 px-3 py-1 bg-white/5 text-neutral-300 rounded-lg text-xs hover:bg-white/10 transition-colors">
-                                    <X className="w-3 h-3" aria-hidden /> Cancel
-                                </button>
-                                <span className="ml-auto text-label text-neutral-400">Ctrl+Enter saves · Esc cancels</span>
-                            </div>
-                        </div>
-                    ) : lead.dmContent ? (
-                        <p className="text-sm text-neutral-200 leading-relaxed whitespace-pre-line">
-                            {lead.dmContent}
-                        </p>
-                    ) : (
-                        <span className="text-xs text-neutral-400 italic">Not written yet</span>
-                    )}
-                </td>
-
-                {/* Status — the furthest the Lead has got. Sent is the extension's
-                    word (CONTEXT.md); Handed off only means it accepted the work. */}
-                <td className="px-5 py-4 align-top">
-                    {lead.dmSent ? (
-                        <Pill tone="positive" icon={<Send className="w-3 h-3" />}>Sent</Pill>
-                    ) : lead.approved && lead.handedOffAt ? (
-                        <span title="The extension has this DM and will send it on its pace and Send Cap. It shows Sent once the extension confirms it.">
-                            <Pill tone="muted" icon={<Hourglass className="w-3 h-3" />}>Handed off</Pill>
-                            <span className="block mt-1 text-label text-neutral-400">{ago(lead.handedOffAt)}</span>
-                        </span>
-                    ) : lead.approved ? (
-                        <Pill tone="positive" icon={<CheckCircle className="w-3 h-3" />}>Approved</Pill>
-                    ) : lead.rejected ? (
-                        <Pill tone="danger" icon={<XCircle className="w-3 h-3" />}>Rejected</Pill>
-                    ) : lead.dmContent ? (
-                        <Pill tone="ready" icon={<MessageSquare className="w-3 h-3" />}>Ready</Pill>
-                    ) : (
-                        <Pill tone="muted" icon={<Clock className="w-3 h-3" />}>Pending</Pill>
-                    )}
-                    {lead.closedAt && lead.dealValue ? (
-                        <span className="block mt-1.5 text-label font-medium text-positive-400 tabular-nums">
-                            Won · ${lead.dealValue.toLocaleString('en-US')}
-                        </span>
-                    ) : lead.booked ? (
-                        <span className="block mt-1.5 text-label font-medium text-positive-400">Booked</span>
-                    ) : lead.replied ? (
-                        <span className="block mt-1.5 text-label font-medium text-neutral-300">
-                            {lead.positiveReply ? 'Replied · interested' : 'Replied'}
-                        </span>
-                    ) : null}
-                </td>
-
-                {/* Actions */}
-                <td className="px-5 py-4 align-top">
-                    <div className="flex items-center gap-1">
-                        {/* Edit — only before it has gone out. */}
-                        {lead.dmContent && !isEditing && !lead.dmSent && (
-                            <button type="button" onClick={() => onStartEdit(lead)}
-                                title="Edit DM" aria-label={`Edit the DM to ${who}`} className={ICON_BTN.neutral}>
-                                <Edit3 className="w-4 h-4" aria-hidden />
-                            </button>
-                        )}
-
-                        {/* Approve */}
-                        {lead.dmContent && !lead.approved && !lead.dmSent && (
-                            <button type="button" onClick={() => onApprove(lead.id)}
-                                title="Approve" aria-label={`Approve the DM to ${who}`} className={ICON_BTN.positive}>
-                                <Check className="w-4 h-4" aria-hidden />
-                            </button>
-                        )}
-
-                        {/* Reject — pointless once Sent. */}
-                        {!lead.rejected && !lead.dmSent && (
-                            <button type="button" onClick={() => onReject(lead.id)}
-                                title="Reject" aria-label={`Reject the DM to ${who}`} className={ICON_BTN.danger}>
-                                <X className="w-4 h-4" aria-hidden />
-                            </button>
-                        )}
-
-                        {/* Mark replied */}
-                        {lead.dmSent && !lead.replied && (
-                            <button
-                                type="button"
+    const cells: Record<string, React.ReactNode> = {
+        lead: <LeadCell lead={lead} campaignLabelText={campaignLabelText} />,
+        bio: <BioCell bio={lead.bio} />,
+        dm: dmCell,
+        // Handed off only means the extension accepted the work; Sent is its
+        // word alone (CONTEXT.md), and Sent Leads are not in this view.
+        status: lead.handedOffAt ? (
+            <span className="inline-flex flex-col gap-0.5" title="The extension has this DM and sends it at its pace and Send Cap. It moves to Sent once the extension confirms it.">
+                <span className="inline-flex items-center gap-1 text-meta text-neutral-300"><Hourglass className="w-3.5 h-3.5" aria-hidden /> With the extension</span>
+                <span className="text-label text-neutral-400">{ago(lead.handedOffAt)}</span>
+            </span>
+        ) : (
+            <span className="text-meta text-neutral-300">Ready to send</span>
+        ),
+        outcome: (
+            <span className="inline-flex flex-col gap-1">
+                {lead.closedAt && lead.dealValue ? (
+                    <span className="text-meta font-medium text-positive-300 tabular-nums">Won · {formatMoney(lead.dealValue)}</span>
+                ) : lead.booked ? (
+                    <span className="text-meta font-medium text-positive-300">Booked</span>
+                ) : lead.replied ? (
+                    <span className="text-meta text-white">{lead.positiveReply ? 'Replied · interested' : 'Replied'}</span>
+                ) : (
+                    <span className="text-meta text-neutral-400">No reply yet</span>
+                )}
+                {sentOn && <span className="text-label text-neutral-400">Sent {DAY.format(new Date(sentOn))}</span>}
+            </span>
+        ),
+        actions: muted ? (
+            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                <span className={`queue-settle text-meta font-medium ${changedTo === 'send' ? 'text-positive-300' : 'text-neutral-300'}`}>
+                    {lead.dmContent && changedTo === 'review' && view === 'write' ? 'DM written' : CHANGED_LABEL[changedTo!]}
+                </span>
+                {!(view === 'write' && changedTo === 'review') && (
+                    <button type="button" onClick={() => onUndo(lead)}
+                        className="px-2 py-1 rounded-full text-meta font-medium text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors">
+                        Undo
+                    </button>
+                )}
+            </div>
+        ) : (
+            <div className="flex items-center justify-end gap-1">
+                {view === 'write' && (
+                    <button type="button" onClick={() => onGenerateDM(lead)} disabled={isGenerating}
+                        aria-label={`Write a DM for ${who}`} className={ROW_PRIMARY}>
+                        <Sparkles className="w-3.5 h-3.5" aria-hidden /> Write
+                    </button>
+                )}
+                {view === 'review' && !isEditing && (
+                    <button type="button" onClick={() => onApprove(lead)} title="Approve"
+                        aria-label={`Approve the DM to ${who}`}
+                        className={`${ROW_PRIMARY} hover:!text-positive-300 hover:!border-positive-500/40 hover:!bg-positive-500/10`}>
+                        <Check className="w-3.5 h-3.5" aria-hidden /> Approve
+                    </button>
+                )}
+                {view === 'skipped' && (
+                    <button type="button" onClick={() => onRestore(lead)} aria-label={`Restore ${who}`} className={ROW_PRIMARY}>
+                        <RotateCcw className="w-3.5 h-3.5" aria-hidden /> Restore
+                    </button>
+                )}
+                {(view === 'review' || view === 'send') && lead.dmContent && !isEditing && (
+                    <button type="button" onClick={() => onStartEdit(lead)} title="Edit DM"
+                        aria-label={`Edit the DM to ${who}`} className={ICON.neutral}>
+                        <Edit3 className="w-4 h-4" aria-hidden />
+                    </button>
+                )}
+                {view === 'send' && (
+                    <button type="button" onClick={() => onUnapprove(lead)} title="Back to review"
+                        aria-label={`Move ${who} back to review`} className={ICON.neutral}>
+                        <CornerUpLeft className="w-4 h-4" aria-hidden />
+                    </button>
+                )}
+                {(view === 'write' || view === 'review') && (
+                    <button type="button" onClick={() => onSkip(lead)} title="Skip"
+                        aria-label={`Skip ${who}`} className={ICON.neutral}>
+                        <X className="w-4 h-4" aria-hidden />
+                    </button>
+                )}
+                {view === 'sent' && (
+                    <>
+                        {/* The one next mark this Lead can take, named — the
+                            funnel's order: replied, interested, booked, won. */}
+                        {!lead.replied ? (
+                            <button type="button"
                                 onClick={() => {
-                                    onUpdateLead({ ...lead, replied: true });
-                                    // Open (never close) — matches the pre-extraction behaviour,
-                                    // which set the id outright rather than toggling.
+                                    onUpdateLead({ ...lead, replied: true, replyDate: lead.replyDate ?? new Date().toISOString() });
                                     if (!showBattlecards) onToggleBattlecards(lead.id);
                                 }}
-                                title="Mark as replied"
-                                aria-label={`Mark ${who} as replied`}
-                                className={ICON_BTN.neutral}
-                            >
-                                <MessageCircle className="w-4 h-4" aria-hidden />
+                                aria-label={`Mark ${who} as replied`} className={ROW_PRIMARY}>
+                                <MessageCircle className="w-3.5 h-3.5" aria-hidden /> Mark replied
                             </button>
-                        )}
-                        {/* Mark positive reply — its own icon; it used to share
-                            "Mark replied"'s speech bubble. */}
-                        {lead.replied && !lead.positiveReply && (
+                        ) : !lead.positiveReply ? (
                             <button type="button" onClick={() => onUpdateLead({ ...lead, positiveReply: true, qualifiedAt: lead.qualifiedAt ?? new Date().toISOString() })}
-                                title="Mark as interested" aria-label={`Mark ${who}'s reply as interested`} className={ICON_BTN.positive}>
-                                <ThumbsUp className="w-4 h-4" aria-hidden />
+                                aria-label={`Mark ${who}'s reply as interested`} className={ROW_PRIMARY}>
+                                <ThumbsUp className="w-3.5 h-3.5" aria-hidden /> Mark interested
                             </button>
-                        )}
-                        {/* Mark booked */}
-                        {lead.positiveReply && !lead.booked && (
+                        ) : !lead.booked ? (
                             <button type="button" onClick={() => onUpdateLead({ ...lead, booked: true, bookedAt: lead.bookedAt ?? new Date().toISOString() })}
-                                title="Mark as booked" aria-label={`Mark ${who} as booked`} className={ICON_BTN.positive}>
-                                <CalendarCheck className="w-4 h-4" aria-hidden />
+                                aria-label={`Mark ${who} as booked`} className={ROW_PRIMARY}>
+                                <CalendarCheck className="w-3.5 h-3.5" aria-hidden /> Mark booked
                             </button>
-                        )}
-                        {/* Record the won deal — feeds the dashboard's revenue */}
-                        {lead.booked && (
-                            <button
-                                type="button"
-                                onClick={() => setDealOpen(o => !o)}
-                                title={lead.closedAt ? 'Edit deal' : 'Mark as won'}
+                        ) : (
+                            <button type="button" onClick={() => setDealOpen(o => !o)}
                                 aria-label={lead.closedAt ? `Edit the deal with ${who}` : `Record a won deal with ${who}`}
                                 aria-expanded={dealOpen}
-                                className={dealOpen ? 'p-1.5 rounded-lg transition-colors text-white bg-white/10' : ICON_BTN.positive}
-                            >
-                                <DollarSign className="w-4 h-4" aria-hidden />
+                                className={`${ROW_PRIMARY} ${dealOpen ? 'border-white/30 bg-white/[0.06] text-white' : ''}`}>
+                                <DollarSign className="w-3.5 h-3.5" aria-hidden /> {lead.closedAt ? 'Edit deal' : 'Add deal'}
                             </button>
                         )}
-                        {/* Reply battlecards */}
                         {lead.replied && (
-                            <button
-                                type="button"
-                                onClick={() => onToggleBattlecards(lead.id)}
-                                title="Suggested replies"
-                                aria-label={`Suggested replies for ${who}`}
+                            <button type="button" onClick={() => onToggleBattlecards(lead.id)}
+                                title="Suggested replies" aria-label={`Suggested replies for ${who}`}
                                 aria-expanded={showBattlecards}
-                                className={showBattlecards
-                                    ? 'p-1.5 rounded-lg transition-colors text-white bg-white/10'
-                                    : ICON_BTN.neutral}
-                            >
+                                className={showBattlecards ? 'p-1.5 rounded-lg text-white bg-white/10' : ICON.neutral}>
                                 <MessagesSquare className="w-4 h-4" aria-hidden />
                             </button>
                         )}
+                    </>
+                )}
+                {/* Delete lives where clean-up does: Skipped, and the bulk bar.
+                    Beside a stage's Skip (undoable) it was the same-size icon for
+                    the one action nothing can take back. */}
+                {canDelete && view === 'skipped' && (
+                    <button type="button" onClick={() => onDelete(lead)} title="Delete"
+                        aria-label={`Delete ${who} from the queue`} className={ICON.danger}>
+                        <Trash2 className="w-4 h-4" aria-hidden />
+                    </button>
+                )}
+            </div>
+        ),
+    };
 
-                        {/* Generate DM for this lead */}
-                        {!lead.dmContent && (
-                            <button
-                                type="button"
-                                onClick={() => onGenerateDM(lead)}
-                                disabled={isGenerating}
-                                title="Write DM"
-                                aria-label={`Write a DM for ${who}`}
-                                className={`${ICON_BTN.neutral} disabled:opacity-40`}
-                            >
-                                <Sparkles className="w-4 h-4" aria-hidden />
-                            </button>
-                        )}
-
-                        {/* Delete */}
-                        {canDelete && (
-                            <button type="button" onClick={() => onDelete(lead)}
-                                title="Delete" aria-label={`Delete ${who} from the queue`} className={ICON_BTN.dangerQuiet}>
-                                <Trash2 className="w-4 h-4" aria-hidden />
-                            </button>
-                        )}
-                    </div>
+    return (
+        <>
+            <tr className={`border-t border-white/[0.06] transition-colors duration-150 max-md:block max-md:py-2 ${
+                isSelected ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'
+            }`}>
+                <td className={`${CELL} w-10 pl-5 pr-1 max-md:float-left max-md:pt-3 max-md:pl-4`}>
+                    <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={muted}
+                        onChange={() => onToggleSelect(lead.id)}
+                        aria-label={`Select ${who}`}
+                        className="w-4 h-4 mt-2.5 rounded border-white/20 bg-transparent accent-white cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                    />
                 </td>
+                {columns.map(col => (
+                    <td key={col.key} className={`${CELL} ${col.key === 'actions' ? 'pr-5 max-md:pt-1' : ''} ${
+                        muted && col.key !== 'actions' ? 'opacity-50' : ''
+                    } transition-opacity duration-200`}>
+                        {cells[col.key]}
+                    </td>
+                ))}
             </tr>
             {dealOpen && lead.booked && (
-                <tr>
-                    <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
+                <tr className="max-md:block">
+                    <td colSpan={columns.length + 1} className="px-5 py-4 bg-white/[0.015] border-t border-white/5 max-md:block">
                         <DealEditor lead={lead} onSave={onUpdateLead} onClose={() => setDealOpen(false)} />
                     </td>
                 </tr>
             )}
             {showBattlecards && lead.replied && (
-                <tr>
-                    <td colSpan={6} className="px-5 py-4 bg-white/[0.015] border-t border-white/5">
-                        <ReplyBattlecards
-                            lead={lead}
-                            ledger={ledger}
-                            onUpdateLead={onUpdateLead}
-                        />
+                <tr className="max-md:block">
+                    <td colSpan={columns.length + 1} className="px-5 py-4 bg-white/[0.015] border-t border-white/5 max-md:block">
+                        <ReplyBattlecards lead={lead} ledger={ledger} onUpdateLead={onUpdateLead} />
                     </td>
                 </tr>
             )}

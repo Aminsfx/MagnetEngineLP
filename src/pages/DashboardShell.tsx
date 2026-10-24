@@ -35,11 +35,11 @@ import {
   type ExtensionStatus,
   type InstagramViewer,
 } from '../lib/extensionProtocol';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompts } from '../lib/prompt';
+import { DEFAULT_IDENTITY, DEFAULT_SYSTEM_PROMPT, DEFAULT_REPLY_SYSTEM_PROMPT, migrateStoredPrompts, clearSeedIdentity, buildReplySystemPrompt, identityOf } from '../lib/prompt';
 import { AppConfig, Conversation, Lead, Message } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
-import { sendCapOf } from '../lib/plans';
+import { sendCapOf, isAdminEmail } from '../lib/plans';
 import { useToast } from '../components/common/Toast';
 import { posthogCapture } from '../lib/posthog';
 import { Loader2, Sparkles, Menu, Send } from 'lucide-react';
@@ -86,13 +86,10 @@ const DEFAULT_CONFIG: AppConfig = {
   accountType: 'all',
   selectedAIProvider: 'claude',
   dailySendCap: 40,
-  founderName: '',
-  founderRole: 'founder',
-  businessName: 'MagnetEngine',
-  businessNiche: 'AI-powered Instagram lead generation and outreach automation',
-  targetAudience: 'agency owners, coaches, and consultants who do cold Instagram outreach',
-  valueProposition: 'a calendar that fills with booked calls without manual prospecting',
-  dmTone: 'casual',
+  // Empty until the Operator says who they are. It used to be MagnetEngine's
+  // own name, niche, audience and offer, so every client's DMs and replies
+  // spoke for MagnetEngine until they replaced all four.
+  ...DEFAULT_IDENTITY,
 };
 
 // ─── Main dashboard shell ─────────────────────────────────────────────────────
@@ -184,8 +181,12 @@ const DashboardShell: React.FC = () => {
       // at send time — so improving the recipe reaches new sign-ups and nobody
       // else unless stored copies are brought forward. Only prompts the wizard
       // generated are rewritten; a hand-edited one is the Operator's own.
+      // A client's config still holding the old MagnetEngine seed has it
+      // taken out (clearSeedIdentity); the Owner's own workspace keeps it,
+      // because there it is the truth.
       const loaded = savedConfig ?? DEFAULT_CONFIG;
-      const migrated = migrateStoredPrompts(loaded);
+      const current = migrateStoredPrompts(loaded);
+      const migrated = isAdminEmail(user?.email) ? current : clearSeedIdentity(current);
       setConfig(migrated);
       if (migrated !== loaded) store.saveConfig(migrated).catch(console.error);
       setDataLoading(false);
@@ -395,7 +396,7 @@ const DashboardShell: React.FC = () => {
     const result = await aiAPI.generateReply(cfg.selectedAIProvider, {
       messages: history,
       contact: { handle: conv.handle, name: conv.name },
-      systemPrompt: withInstruction(cfg.replySystemPrompt || DEFAULT_REPLY_SYSTEM_PROMPT, instruction),
+      systemPrompt: withInstruction(cfg.replySystemPrompt || buildReplySystemPrompt(identityOf(cfg)), instruction),
       calendarLink: cfg.calendarLink,
     });
     posthogCapture('reply_generated', { classified_intent: result.intent, steered: !!instruction });
@@ -411,9 +412,10 @@ const DashboardShell: React.FC = () => {
 
   /** Send a reply: optimistic append + hand off to the extension via the same
    *  send path as opening DMs (DMing the handle appends to the IG thread). */
-  const handleSendReply = useCallback(async (conv: Conversation, text: string) => {
+  /** Hands a reply to the extension. False when nothing is going out, so the Inbox keeps the draft. */
+  const handleSendReply = useCallback(async (conv: Conversation, text: string): Promise<boolean> => {
     const body = text.trim();
-    if (!body) return;
+    if (!body) return false;
     const now = new Date().toISOString();
     const msg: Message = {
       id: `${LOCAL_MESSAGE_PREFIX}${conv.id}_${Date.now()}`,
@@ -438,7 +440,7 @@ const DashboardShell: React.FC = () => {
     });
     if (!handoff.delivered) {
       toast.error(handoff.reason!);
-      return;
+      return false;
     }
     posthogCapture('reply_handed_to_extension');
 
@@ -450,6 +452,7 @@ const DashboardShell: React.FC = () => {
     persistInbox([updatedConv], [msg]);
 
     toast.success(`Reply queued to @${conv.handle}`);
+    return true;
   }, [toast, inbox, persistInbox]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
@@ -535,13 +538,15 @@ const DashboardShell: React.FC = () => {
       <div className={PAGE}>
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Approval Queue</h1>
-          <p className="text-neutral-400 text-sm mt-1.5">Read each DM, edit it if it needs it, then approve or reject it. Nothing sends until you press Send.</p>
+          <p className="text-neutral-400 text-sm mt-1.5">Every search lands here as its own campaign. Write the DMs, read them, approve the good ones, then send. Nothing sends until you press Send.</p>
         </div>
         <ApprovalQueue
           leads={outreach.leads}
           config={config}
           onGenerateDMs={outreach.generateDMs}
           isGenerating={outreach.isGenerating}
+          generation={outreach.generation}
+          onStopGenerating={outreach.stopGenerating}
           onDeleteLead={outreach.remove}
           onDeleteLeads={outreach.removeMany}
           onApproveLead={outreach.approve}
@@ -549,6 +554,8 @@ const DashboardShell: React.FC = () => {
           onUnapproveLeads={outreach.unapproveMany}
           onMarkHandedOff={outreach.markHandedOff}
           onRejectLead={outreach.reject}
+          onRejectLeads={outreach.rejectMany}
+          onRestoreLeads={outreach.restoreMany}
           onUpdateDM={outreach.updateDM}
           onUpdateLead={outreach.update}
         />
@@ -556,7 +563,7 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/inbox': (
-      <div className="p-4 sm:p-5 lg:p-6 max-w-[1600px] mx-auto w-full h-[calc(100dvh-3.5rem)]">
+      <div className={PAGE}>
         {INBOX_DEMO ? (
           <InboxDemo config={config} />
         ) : INBOX_HIDDEN ? (

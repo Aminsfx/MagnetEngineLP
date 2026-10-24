@@ -11,6 +11,7 @@ MagnetEngine is a React SaaS app that helps users find Instagram leads, generate
 - **Code splitting** — all pages are `React.lazy` in `App.tsx`; heavy vendors split via `manualChunks` in `vite.config.ts`
 - **Dashboard reports** — `src/lib/reports.ts`: revenue, pipeline, the outcome funnel and the weekly report, computed from Lead milestone dates (no chart library)
 - **Deals** — tracked in the Inbox (`components/inbox/DealPanel.tsx`, through `outreach.recordDeal`): a price (`dealValue`) any time, Booked → Pipeline, Mark as won (`DealEditor`: `closedAt` + `cashCollected`) → revenue. A person in the Inbox who isn't a Lead becomes one (`intake` source `'inbox'`, campaign "From the Inbox"), carrying their Conversation's Outcome. Call it **Won**, never "closed" — a closed Conversation opts the Lead out (CONTEXT.md)
+- **Approval Queue** — three stages (`viewOf` in `src/lib/queue.ts`: write → review → send) and one chip per Campaign, opening on the newest Campaign at its first stage with work, so a fresh scrape never mixes with Leads already written or sent. Sent and Skipped (`rejected`) are views, not stages. A row changed one at a time stays in place, muted, with Undo — the next row sliding under the pointer is how a skim approves the wrong person. **Send always hands the extension every approved DM**, whatever Campaign is on screen: the extension replaces its queue on each Handoff, so a per-Campaign send would drop the others. Write DMs runs `generateDMs(leads, { all: true })` (batches of 10 until done, with progress and Stop). Delete lives in Skipped and the bulk bar, behind an inline confirmation.
 - **Lucide React** — icons
 - **HikerAPI** — Instagram REST API for lead scraping (nine sources; see below)
 
@@ -32,7 +33,7 @@ src/
   components/
     campaign/
       CampaignBuilder.tsx        # Source picker + scrape UI (nine sources, Stop, results → queue)
-      ApprovalQueue.tsx          # Review / edit / approve / reject DMs
+      ApprovalQueue.tsx          # Stages To write / To review / To send, one chip per Campaign; Sent + Skipped views
       FollowUpSequencer.tsx      # Multi-touch sequences (Pro+)
     dashboard/
       RevenueFunnel.tsx          # Revenue / cash collected / to collect + New → Contact → Qualified → Booked → Won funnel, per period
@@ -59,6 +60,7 @@ src/
     db.ts                        # Supabase adapter (row mapping, batching, subscriptions)
     storage.ts                   # Browser-local bits only (dev fallback, DM delay, queue page size)
     today.ts                     # todayCounts(): drafts to review, DMs to hand off, replies owed, follow-ups due
+    queue.ts                     # viewOf() + campaignsOf(): a Lead's stage in the queue, each scrape as its own Campaign
     intake.ts                    # Lead intake — the only way a Lead is constructed
     prompt.ts                    # DM + reply prompts, follow-up ladders, Offer Ledger
     followups.ts                 # Which Leads are due a touch + the template renderer
@@ -139,6 +141,15 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   Never hand a figure to a prompt by any other route, and never list the
   identity fields by hand at a call site — spread the whole `PromptIdentity`,
   or the next field added is silently not persisted.
+- **The prompts speak for the Operator** — change an Operator's identity only
+  through `withIdentity` (`prompt.ts`): it rebuilds the DM prompt and the reply
+  persona that were still built from the old identity, and keeps any the
+  Operator edited by hand. The Settings wizard saves through it as they type,
+  so the reply assistant shows their own offer without pressing Generate. A new
+  Operator starts with an empty `DEFAULT_IDENTITY`; until 2026-10-24 everyone
+  was seeded with MagnetEngine's own (`LEGACY_SEED_IDENTITY`), and
+  `clearSeedIdentity` strips it from a client's config on load. The Owner's
+  workspace (`isAdminEmail`) keeps it, because there it is true.
 - **Follow-ups are a Ladder, not a reminder** — every touch steps the ask DOWN
   and brings a new reason to write. `buildFollowUpLadder` / `buildRescueLadder`
   own the copy, and they pick which copy to use from what the Ledger actually
@@ -267,9 +278,12 @@ APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
   `users` array) — never "anything user-shaped", or a hashtag scrape collects everyone tagged.
 - **`ProfileRow` uses HikerAPI's own field names** (`follower_count`, `media_count`,
   `is_business`, `city_name`); `intake()`'s alias table knows them. No translation step.
-- **"Everything" by default** — `MAX_PER_QUERY` (2,000) is a safety ceiling, not a target; the
-  monthly lookup quota is the real brake. The landing pages still say "up to 250 profiles per
-  search", which stays true but undersells it.
+- **"Everything" by default, up to 500** — `MAX_PER_QUERY` (500, owner 2026-10-24; it was
+  2,000) is the most one search term, account, post or place brings in; the menu offers 50 /
+  100 / 250 / "Everything (up to 500)". A run with three terms can still bring 1,500. The
+  progress estimate counts toward the ceiling, not toward the source's full size. Handle lists
+  (`profiles`) ignore it — every handle typed is looked up. The landing pages' "up to 250
+  profiles per search" stays true.
 - **Metered.** Every billed upstream request (`x-hiker-info: reqs=N`) is counted in
   `scrape_usage`; `MONTHLY_SCRAPE_LIMIT` (default 5000) → `429 scrape_quota`.
 - **Errors carry a code.** `not_found` / `private_target` / `bad_source` are about one query —
@@ -426,6 +440,7 @@ on `user_id,id`; `DashboardShell.persistInbox` writes Conversations before their
 ## AI SDR Inbox (extension inbox poller → generate-reply Edge Function)
 - Instagram retired the web REST inbox (`/api/v1/direct_v2/`, 404 since Aug 2026) and moved DMs to GraphQL. `extension/igpage.js` runs in instagram.com's MAIN world at `document_start`, hooks the page's own XHR/fetch, and passes the inbox responses it sees (`PolarisDirectInboxQuery`, `IGDThreadListOffMsysPaginationQuery`, `IGDThreadDetailQuery`, `IGDMessageListOffMsysQuery`) to `content.js` by `postMessage`; it polls by replaying the page's last `PolarisDirectInboxQuery` every ~100 s, so a rotated `doc_id` heals on the next page load. `extension/igparse.js` (pure, tested by `src/lib/igparse.test.ts`) turns a response into threads by finding every `as_ig_direct_thread`. `content.js` forwards only for a signed-in Operator (`INBOX_SYNC`, `partial`); `background.js` merges into the stored snapshot and `broadcastToApp`s `MAGNET_ENGINE_INBOX` to any open dashboard tab. Threads appear once the Instagram tab has loaded the inbox page at least once.
 - `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).
+- **The Inbox is one list, not two panes** (owner, 2026-10-24; brief at `.impeccable/surfaces/src-components-inbox-inboxview-tsx.md`). Conversations sit in `triage.ts` priority groups; a row (`ConversationRow`) unfolds in place into `OpenConversation`: the thread, the copilot's three replies in full (`Copilot`), the composer, and a bar for Mark booked, the deal and labels. The open row is pinned where it unfolded until it folds, so a send never moves it under the Operator; an unread row stays lit until opened. `onSendReply` returns whether the extension accepted the reply: on `false` the draft stays, on `true` the composer offers "Next: @handle" (the first conversation down the list that still needs the Operator) as its one white pill, with focus on it.
 - AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
 - Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
 - **Inbox → funnel:** every changed Conversation is read as an `Outcome` (`src/lib/outcome.ts`) and the batch handed to `outreach.recordOutcomes`, which stamps the Leads behind the handles. An inbound Message sets `replied` + `replyDate`; booking — the Operator's "Booked" click or the AI's `booked` intent — sets `booked`/`positiveReply`/`replied`/`status: 'won'`. The AI's `interested` intent deliberately does **not** move the funnel: it colours the Inbox only, so a misread never inflates metrics or fires a webhook the Operator can't unsend. Reply rate, the conversion chart, AI Analyst, Health Score and the `replied`/`positive_reply`/`booked` webhooks all depend on this path.
@@ -480,4 +495,4 @@ hex/rgba, for SVG props and inline styles, which no utility can reach).
 2. **localStorage as fallback persistence** — Supabase when configured; leads/config survive refresh either way
 3. **AI DM generation is template-based** in the wizard step; live AI calls use the selected provider key from localStorage
 4. **CampaignBuilder fallback**: if user scrapes results but selects none, clicking "Add to Queue" adds all results (prevents silent no-op)
-5. **Scrape "everything"**: the UI defaults to every profile a source has, up to `MAX_PER_QUERY` (2,000) in `_shared/hiker.ts`; the Operator pauses or finishes when they have enough
+5. **Scrape "everything"**: the UI defaults to every profile a source has, up to `MAX_PER_QUERY` (500) in `_shared/hiker.ts`; the Operator pauses or finishes when they have enough

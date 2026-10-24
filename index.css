@@ -219,11 +219,24 @@
   to   { transform: scaleY(1); }
 }
 
+/* ── Approval Queue: a state change settles in place. The band's next step
+   and a row's new state ("Approved", "Skipped") arrive from a hair above at
+   most of their strength, so nothing is ever invisible while it lands. */
+@keyframes queue-settle {
+  from { opacity: 0.45; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.queue-settle {
+  animation: queue-settle 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .is-playing .trace-mark,
   .is-playing .trace-line,
   .is-playing .trace-approve,
-  .rail-fill {
+  .rail-fill,
+  .queue-settle {
     animation: none !important;
   }
 

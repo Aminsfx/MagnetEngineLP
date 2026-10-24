@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { InboxView } from './InboxView';
 import { demoInbox } from '../../lib/inboxDemo';
 import { aiAPI, withInstruction, type ReplyResult } from '../../lib/api';
-import { DEFAULT_REPLY_SYSTEM_PROMPT } from '../../lib/prompt';
+import { buildReplySystemPrompt, identityOf } from '../../lib/prompt';
 import { useToast } from '../common/Toast';
 import { intake } from '../../lib/intake';
 import type { AppConfig, Conversation, Lead, Message } from '../../lib/types';
@@ -38,7 +38,7 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
         const result = await aiAPI.generateReply(config.selectedAIProvider, {
             messages: history,
             contact: { handle: c.handle, name: c.name },
-            systemPrompt: withInstruction(config.replySystemPrompt || DEFAULT_REPLY_SYSTEM_PROMPT, instruction),
+            systemPrompt: withInstruction(config.replySystemPrompt || buildReplySystemPrompt(identityOf(config)), instruction),
             calendarLink: config.calendarLink,
         });
         if (!instruction) update({ ...c, intent: result.intent, status: result.intent === 'booked' ? 'booked' : c.status });
@@ -64,15 +64,16 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
         setMessages(prev => [...prev, { id: `${c.id}-sent-${Date.now()}`, conversationId: c.id, direction: 'out', text, createdAt: now }]);
         update({ ...c, lastMessageAt: now, lastMessageText: text, needsReply: false, unread: false });
         toast.info('Preview: added to the sample thread. Nothing was sent.');
+        return true;
     }, [toast, update]);
 
     return (
-        <div className="flex flex-col h-full gap-3">
-            <p role="status" className="flex-none px-3.5 py-2 rounded-xl border border-white/15 bg-white/[0.05] text-meta text-neutral-300">
+        <div className="space-y-4">
+            <p role="status" className="px-4 py-2.5 rounded-2xl border border-white/15 bg-white/[0.05] text-meta text-neutral-300">
                 <span className="text-white font-medium">Preview with sample conversations.</span> The copilot's drafts are
                 real AI replies; nothing you send here leaves this page.
             </p>
-            <div className="flex-1 min-h-0">
+            <div>
                 <InboxView
                     conversations={conversations}
                     messages={messages}

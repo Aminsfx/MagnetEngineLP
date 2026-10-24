@@ -59,6 +59,10 @@ export const CsvImport: React.FC<CsvImportProps> = ({ onLeadsReady, maxLeads }) 
     const handleAdd = async () => {
         let { leads } = buildLeads();
         if (leads.length === 0) return;
+        // Named like a scrape's default, so the import is its own recognisable
+        // campaign in the Approval Queue rather than a UUID.
+        const day = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        leads = leads.map((l) => ({ ...l, campaignName: `CSV import · ${day}` }));
 
         const sourceRowCount = rows.length;
 

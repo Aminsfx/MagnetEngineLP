@@ -60,6 +60,8 @@ export interface OutreachEngine {
   /** DM generations spent this month, as reported by the server. */
   dmUsed: number;
   isGenerating: boolean;
+  /** How far a running generation has got, or `null` when none is running. */
+  generation: GenerationProgress | null;
 
   /** Seed from storage once the cold load resolves. */
   hydrate(leads: Lead[], dmUsed: number): void;
@@ -72,11 +74,23 @@ export interface OutreachEngine {
   /** Stamps `handedOffAt` — only for Leads a DELIVERED Handoff carried. */
   markHandedOff(ids: string[]): Promise<void>;
   reject(id: string): Promise<void>;
+  /** Bulk skip: out of the queue's stages into Skipped. Never touches a Lead already Sent. */
+  rejectMany(ids: string[]): Promise<void>;
+  /** Back from Skipped to the stage the Lead's DM puts it in. */
+  restoreMany(ids: string[]): Promise<void>;
   updateDM(id: string, content: string): Promise<void>;
   update(lead: Lead): Promise<void>;
   remove(id: string): Promise<void>;
   removeMany(ids: string[]): Promise<void>;
-  generateDMs(target?: Lead[]): Promise<void>;
+  /**
+   * Write DMs for the Leads without one: a batch of {@link GENERATION_BATCH}
+   * per call, or with `all`, batch after batch until every one is written,
+   * one fails for everyone, or `stopGenerating` is called. Each batch is saved
+   * as it finishes, so a long run keeps what it wrote.
+   */
+  generateDMs(target?: Lead[], options?: { all?: boolean }): Promise<void>;
+  /** Ends a running generation after the DM being written now. */
+  stopGenerating(): void;
   sendFollowUps(due: DueFollowUp[]): Promise<number>;
 
   /**
@@ -100,6 +114,13 @@ export interface OutreachEngine {
    * price happened while there was no Lead to stamp it on.
    */
   recordDeal(person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome): Promise<void>;
+}
+
+export interface GenerationProgress {
+  /** DMs attempted so far in this run. */
+  done: number;
+  /** DMs this run set out to write. */
+  total: number;
 }
 
 /** Who a deal is with, as the Inbox knows them. */
@@ -132,6 +153,9 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
   const [leads, setLeads] = useState<Lead[]>([]);
   const [dmUsed, setDmUsed] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generation, setGeneration] = useState<GenerationProgress | null>(null);
+  // Read between DMs, so Stop lands after the one in flight, never mid-request.
+  const stopRef = useRef(false);
 
   // Live mirror so callbacks stay stable while still reading current Leads.
   // Written in an effect, not during render — a ref assignment during render is
@@ -283,6 +307,17 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     [patchMany],
   );
 
+  /** Bulk skip. A Sent Lead is out of the queue already; skipping it means nothing. */
+  const rejectMany = useCallback(
+    (ids: string[]) => patchMany(ids, (l) => (l.dmSent ? l : { ...l, rejected: true, approved: false })),
+    [patchMany],
+  );
+
+  const restoreMany = useCallback(
+    (ids: string[]) => patchMany(ids, (l) => ({ ...l, rejected: false })),
+    [patchMany],
+  );
+
   /**
    * Stamps the Leads a DELIVERED Handoff carried. Call it only when
    * `sendCampaign(...).delivered` is true — a refused Handoff stamps nothing.
@@ -319,7 +354,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     toast.success(`${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted from the queue`);
   }, [toast, store]);
 
-  const generateDMs = useCallback(async (target?: Lead[]) => {
+  const generateDMs = useCallback(async (target?: Lead[], options: { all?: boolean } = {}) => {
     const remaining = limits.maxDMGenerations - dmUsed;
     if (remaining <= 0) {
       toast.error(`You've used all ${limits.maxDMGenerations} DMs in this month's allowance. It refills next month — email ${SUPPORT_EMAIL} if you need more before then.`);
@@ -332,85 +367,112 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       return;
     }
 
+    // One batch per call; with `all`, the whole list, a batch at a time. A
+    // scrape is 50–250 Leads, and clicking "next batch" twenty-five times was
+    // the price of the one-batch rule.
+    const run = options.all ? pending : pending.slice(0, GENERATION_BATCH);
+    stopRef.current = false;
     setIsGenerating(true);
+    setGeneration({ done: 0, total: run.length });
     const dmDate = new Date().toISOString();
-    const generated: Lead[] = [];
     /** Handles the provider answered for, but with no message in the answer. */
     const blank: string[] = [];
     let failure: string | null = null;
     let trialLimited = false;
     let usedAfter: number | null = null;
+    let attempted = 0;
+    let landedCount = 0;
+    let dropped = 0;
 
-    for (const lead of pending.slice(0, GENERATION_BATCH)) {
-      try {
-        // The server meters the quota and returns the authoritative count, so
-        // the engine keeps no tally of its own.
-        const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, lead, config.systemPrompt);
-        usedAfter = used;
-        // A 200 carrying no message is a failed generation, not a generation.
-        // Only a *thrown* error used to count as failure, so a blank was
-        // stamped on as `dmContent: ''` — which the queue reads as "no DM yet"
-        // (`!!l.dmContent`). The toast said ten and the queue showed none, with
-        // nothing anywhere naming the reason. Whitespace is the same failure
-        // wearing a truthy value: it renders as a Ready row with an empty body.
-        const text = (dm || '').trim();
-        if (!text) { blank.push(lead.handle); continue; }
-        generated.push({ ...lead, dmContent: text, dmDate });
-      } catch (error: unknown) {
-        console.error(`Error generating DM for ${lead.handle}:`, error);
-        // Two failures wearing one shape. A model that returned nothing is a
-        // verdict on THIS Lead — generate-dm already retried, billed nothing,
-        // and the next Lead will very likely be fine — so skip and carry on.
-        // Anything else (no provider configured, spent quota, dead network) is
-        // failing for every Lead alike, and grinding the remaining nine against
-        // it just spends the Operator's wait for nine identical errors.
-        if (isEmptyCompletion(error)) { blank.push(lead.handle); continue; }
-        // Stop the batch but keep what succeeded. Returning here used to discard
-        // up to nine finished DMs that had already been paid for.
-        failure = error instanceof Error ? error.message : 'Unknown error';
-        trialLimited = isTrialLimit(error);
-        break;
+    for (let start = 0; start < run.length && !failure && !stopRef.current; start += GENERATION_BATCH) {
+      const written = new Map<string, string>();
+
+      for (const lead of run.slice(start, start + GENERATION_BATCH)) {
+        if (stopRef.current) break;
+        // A long run outlives the list it was given: a Lead skipped, written
+        // or deleted since is not worth a paid generation.
+        const now = leadsRef.current.find((l) => l.id === lead.id);
+        if (now && (now.dmContent || now.rejected)) continue;
+        attempted += 1;
+        try {
+          // The server meters the quota and returns the authoritative count, so
+          // the engine keeps no tally of its own.
+          const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, now ?? lead, config.systemPrompt);
+          usedAfter = used;
+          // A 200 carrying no message is a failed generation, not a generation.
+          // Only a *thrown* error used to count as failure, so a blank was
+          // stamped on as `dmContent: ''` — which the queue reads as "no DM yet"
+          // (`!!l.dmContent`). The toast said ten and the queue showed none, with
+          // nothing anywhere naming the reason. Whitespace is the same failure
+          // wearing a truthy value: it renders as a Ready row with an empty body.
+          const text = (dm || '').trim();
+          if (!text) { blank.push(lead.handle); continue; }
+          written.set(lead.id, text);
+        } catch (error: unknown) {
+          console.error(`Error generating DM for ${lead.handle}:`, error);
+          // Two failures wearing one shape. A model that returned nothing is a
+          // verdict on THIS Lead — generate-dm already retried, billed nothing,
+          // and the next Lead will very likely be fine — so skip and carry on.
+          // Anything else (no provider configured, spent quota, dead network) is
+          // failing for every Lead alike, and grinding the remaining nine against
+          // it just spends the Operator's wait for nine identical errors.
+          if (isEmptyCompletion(error)) { blank.push(lead.handle); continue; }
+          // Stop the batch but keep what succeeded. Returning here used to discard
+          // up to nine finished DMs that had already been paid for.
+          failure = error instanceof Error ? error.message : 'Unknown error';
+          trialLimited = isTrialLimit(error);
+          break;
+        } finally {
+          setGeneration({ done: attempted, total: run.length });
+        }
+      }
+
+      // Only a Lead still in the queue can receive its DM. A re-scrape or a bulk
+      // delete during the batch removes it, and the `prev.map` below drops the
+      // result on the floor — which the count has to reflect, or the toast
+      // reports DMs that exist nowhere. `leadsRef` refreshes in an effect, so it
+      // is current by the time the awaited batch finishes. The DM lands on the
+      // Lead as it is NOW, so a skip or an edit made mid-run survives it.
+      const landed: Lead[] = [];
+      for (const [id, text] of written) {
+        const current = leadsRef.current.find((l) => l.id === id);
+        if (current) landed.push({ ...current, dmContent: text, dmDate });
+        else dropped += 1;
+      }
+      if (landed.length > 0) {
+        const byId = new Map(landed.map((l) => [l.id, l]));
+        setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
+        await store.saveLeads(landed);
+        landedCount += landed.length;
       }
     }
 
-    // Only a Lead still in the queue can receive its DM. A re-scrape or a bulk
-    // delete during the batch removes it, and the `prev.map` below drops the
-    // result on the floor — which the count has to reflect, or the toast
-    // reports DMs that exist nowhere. `leadsRef` refreshes in an effect, so it
-    // is current by the time the awaited batch finishes.
-    const present = new Set(leadsRef.current.map((l) => l.id));
-    const landed = generated.filter((l) => present.has(l.id));
-    const dropped = generated.length - landed.length;
-
-    if (landed.length > 0) {
-      const byId = new Map(landed.map((l) => [l.id, l]));
-      setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-      await store.saveLeads(landed);
-    }
+    const stopped = stopRef.current;
+    stopRef.current = false;
     if (usedAfter !== null) setDmUsed(usedAfter);
     setIsGenerating(false);
-    const attempted = Math.min(pending.length, GENERATION_BATCH);
+    setGeneration(null);
     posthogLogs.info('dm_generation_batch_completed', {
       event: 'dm_generation_batch_completed',
       attempted_count: attempted,
-      generated_count: landed.length,
+      generated_count: landedCount,
       empty_completion_count: blank.length,
       dropped_count: dropped,
-      completed: !failure,
+      completed: !failure && !stopped,
     });
-    if (landed.length > 0) {
+    if (landedCount > 0) {
       posthogCapture('dms_generated', {
         requested_count: attempted,
-        generated_count: landed.length,
-        remaining_count: pending.length - landed.length,
+        generated_count: landedCount,
+        remaining_count: pending.length - landedCount,
       });
     }
 
     const count = (n: number) => `${n} DM${n !== 1 ? 's' : ''}`;
 
     if (failure) {
-      toast.error(landed.length > 0
-        ? `Generated ${count(landed.length)}, then stopped: ${failure}`
+      toast.error(landedCount > 0
+        ? `Generated ${count(landedCount)}, then stopped: ${failure}`
         : `DM generation failed: ${failure}`);
       // The batch is saved above, so the Operator can go and pay in full.
       if (trialLimited) onTrialLimit?.();
@@ -420,9 +482,11 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     // Every Lead the batch touched but did not finish is still pending, so the
     // hint belongs on the error path too. It used to `return` above this line,
     // which meant one fumbled Lead hid the fact that forty more were waiting.
-    const stillPending = pending.length - landed.length;
+    const stillPending = pending.length - landedCount;
     const nextBatch = stillPending > 0
-      ? ` ${stillPending} still pending, click again for the next batch.`
+      ? options.all
+        ? ` ${stillPending} still to write.`
+        : ` ${stillPending} still pending, click again for the next batch.`
       : '';
 
     // Name what went wrong — and who it went wrong for — instead of sending the
@@ -432,14 +496,21 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
         blank.length > 0 ? `the AI returned an empty message for ${nameHandles(blank)}` : '',
         dropped > 0 ? `${dropped} left the queue mid-batch` : '',
       ].filter(Boolean).join(', and ');
-      toast.error(`Generated ${count(landed.length)} — ${why}.${nextBatch}`);
+      toast.error(`Generated ${count(landedCount)} — ${why}.${nextBatch}`);
+      return;
+    }
+
+    if (stopped) {
+      toast.info(`Stopped after ${count(landedCount)}.${nextBatch}`);
       return;
     }
 
     toast.success(stillPending > 0
-      ? `Generated ${count(landed.length)} —${nextBatch}`
-      : `Generated ${count(landed.length)} — review them in the Approval Queue.`);
+      ? `Generated ${count(landedCount)} —${nextBatch}`
+      : `Generated ${count(landedCount)} — review them in the Approval Queue.`);
   }, [config, filteredLeads, limits, dmUsed, toast, store, onTrialLimit]);
+
+  const stopGenerating = useCallback(() => { stopRef.current = true; }, []);
 
   /** Hand due follow-ups to the extension and stamp the step. The extension
    *  enforces the daily cap on actual sends. */
@@ -584,6 +655,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     stats,
     dmUsed,
     isGenerating,
+    generation,
     hydrate,
     addLeads,
     approve,
@@ -591,11 +663,14 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     unapproveMany,
     markHandedOff,
     reject,
+    rejectMany,
+    restoreMany,
     updateDM,
     update,
     remove,
     removeMany,
     generateDMs,
+    stopGenerating,
     sendFollowUps,
     markSent,
     recordOutcomes,

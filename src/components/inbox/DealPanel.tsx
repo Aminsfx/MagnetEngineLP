@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { DollarSign, Trophy } from 'lucide-react';
+import React, { useEffect, useId, useState } from 'react';
+import { Trophy } from 'lucide-react';
 import type { Conversation, Lead } from '../../lib/types';
 import { formatMoney, parseMoney } from '../../lib/reports';
 import { DealEditor } from '../campaign/DealEditor';
+import { ROW_PILL } from './Copilot';
 
 /**
  * The deal with the person in this Conversation: the price the Operator is
@@ -14,6 +15,11 @@ import { DealEditor } from '../campaign/DealEditor';
  * (revenue), so typing a hopeful number mid-conversation never shows up as
  * money. Won is offered only once the call is booked: the order the sale
  * actually happens in.
+ *
+ * It renders inline, as part of an open conversation's bar, so its guidance
+ * is the price field's description (a tooltip, and read with the field)
+ * rather than a sentence in the bar; the editor for a win takes a line of its
+ * own.
  */
 export const DealPanel: React.FC<{
     conversation: Conversation;
@@ -24,6 +30,7 @@ export const DealPanel: React.FC<{
     const saved = lead?.dealValue ? lead.dealValue.toLocaleString('en-US') : '';
     const [price, setPrice] = useState(saved);
     const [editing, setEditing] = useState(false);
+    const hintId = useId();
 
     // A different Conversation, or the value changed elsewhere (the Approval
     // Queue, another tab): show what is stored, not a stale draft.
@@ -44,11 +51,11 @@ export const DealPanel: React.FC<{
             ? 'Type the price you’re pitching to track this deal.'
             : booked
                 ? 'Call booked — this counts in your pipeline. Mark it won when they pay.'
-                : 'Press Booked when they book a call.';
+                : 'Mark it booked when they book a call.';
 
     if (editing) {
         return (
-            <div className="px-4 py-3 border-b border-white/5 flex-shrink-0">
+            <div className="basis-full px-4 py-3.5 rounded-2xl border border-white/15 bg-white/[0.04]">
                 <DealEditor
                     lead={lead ?? placeholderLead(conversation, parseMoney(price))}
                     onSave={(next) => onSave((l) => ({
@@ -64,39 +71,36 @@ export const DealPanel: React.FC<{
     }
 
     return (
-        <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 flex-wrap flex-shrink-0">
-            <DollarSign className="w-3 h-3 text-neutral-400" aria-hidden />
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
             {won ? (
-                <span className="flex items-center gap-1 text-label px-2 py-0.5 rounded-full border font-medium text-positive-300 border-positive-500/30 bg-positive-500/10">
-                    <Trophy className="w-3 h-3" aria-hidden />
-                    Won · {formatMoney(lead!.dealValue!)}
+                <span className="inline-flex items-center gap-1.5 text-meta px-3 py-1.5 rounded-full border font-medium text-positive-300 border-positive-500/30 bg-positive-500/10">
+                    <Trophy className="w-3.5 h-3.5" aria-hidden />
+                    Won · <span className="font-mono tabular-nums">{formatMoney(lead!.dealValue!)}</span>
                     {(lead!.cashCollected ?? 0) < lead!.dealValue! && (
-                        <span className="font-normal opacity-80"> · {formatMoney(lead!.cashCollected ?? 0)} paid</span>
+                        <span className="font-normal opacity-80"> · <span className="font-mono tabular-nums">{formatMoney(lead!.cashCollected ?? 0)}</span> paid</span>
                     )}
                 </span>
             ) : (
                 <label className="relative">
                     <span className="sr-only">Deal price</span>
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-label text-neutral-400" aria-hidden>$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-meta text-neutral-400" aria-hidden>$</span>
                     <input
                         inputMode="decimal"
                         value={price}
                         onChange={(e) => setPrice(e.target.value)}
                         onBlur={savePrice}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                        placeholder="Price"
-                        className="w-24 pl-5 pr-2 py-1 rounded-lg bg-white/5 border border-white/10 text-label text-white tabular-nums placeholder:text-neutral-500 focus:outline-none focus:border-white/40"
+                        aria-describedby={hint ? hintId : undefined}
+                        title={hint ?? undefined}
+                        placeholder="Deal price"
+                        className="w-28 pl-6 pr-3 py-1.5 rounded-full bg-white/[0.03] border border-white/12 text-meta font-mono text-white tabular-nums placeholder:font-sans placeholder:text-neutral-500 focus:outline-none focus:border-white/40 focus:ring-2 focus:ring-white/10"
                     />
                 </label>
             )}
-            {hint && <span className="text-label text-neutral-400 min-w-0">{hint}</span>}
+            {hint && <span id={hintId} className="sr-only">{hint}</span>}
             {(booked || won) && (
-                <button
-                    type="button"
-                    onClick={() => setEditing(true)}
-                    className="ml-auto flex items-center gap-1 text-label px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 text-neutral-300 hover:text-white hover:border-white/20 transition-colors"
-                >
-                    <Trophy className="w-3 h-3" aria-hidden /> {won ? 'Edit deal' : 'Mark as won'}
+                <button type="button" onClick={() => setEditing(true)} className={ROW_PILL}>
+                    <Trophy className="w-3.5 h-3.5" aria-hidden /> {won ? 'Edit deal' : 'Mark as won'}
                 </button>
             )}
         </div>

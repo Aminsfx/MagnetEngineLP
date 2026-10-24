@@ -44,7 +44,7 @@ export interface ScrapeRequest {
     kind: SourceKind;
     /** One per search term, hashtag, account, post link or place. For `profiles`: the handles. */
     queries: string[];
-    /** Profiles to collect per query, ≤ MAX_PER_QUERY (which means "everything"). Ignored for `profiles`. */
+    /** Profiles to collect per query, ≤ MAX_PER_QUERY (which means "all of it, up to the ceiling"). Ignored for `profiles`. */
     limit: number;
     /** Look up bio + follower count for the rows a list endpoint leaves short. */
     enrich: boolean;
@@ -286,13 +286,11 @@ export async function runScrape(
             if (q.done) continue;
             const total = q.total ?? (q.read === 0 ? avg : undefined);
             if (total === undefined) return undefined;
-            let rest = Math.max(0, total - q.read);
-            // A limit below "everything" ends the query before the source does.
-            if (limit < MAX_PER_QUERY) {
-                const perProfile = q.found > 0 ? q.read / q.found : 1;
-                rest = Math.min(rest, Math.max(0, limit - q.found) * perProfile);
-            }
-            left += rest;
+            // The limit ends the query before a bigger source does — the
+            // ceiling included, so an account following 5,000 reads as
+            // 500 to go, not 5,000.
+            const perProfile = q.found > 0 ? q.read / q.found : 1;
+            left += Math.min(Math.max(0, total - q.read), Math.max(0, limit - q.found) * perProfile);
         }
         return { left, read };
     };

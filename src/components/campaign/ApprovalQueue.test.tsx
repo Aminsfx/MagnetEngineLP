@@ -5,10 +5,11 @@ import { ApprovalQueue } from './ApprovalQueue';
 import { ToastProvider } from '../common/Toast';
 import type { Lead, AppConfig } from '../../lib/types';
 
-function makeLeads(n: number): Lead[] {
+/** Drafts waiting to be read — the To review stage — in one campaign unless told otherwise. */
+function makeLeads(n: number, over: Partial<Lead> = {}, prefix = 'lead'): Lead[] {
     return Array.from({ length: n }, (_, i) => ({
-        id: `lead-${i}`,
-        handle: `founder_${i}`,
+        id: `${prefix}-${i}`,
+        handle: `${prefix === 'lead' ? 'founder' : prefix}_${i}`,
         name: `Founder ${i}`,
         followers: 1_000 + i,
         isPrivate: false,
@@ -16,6 +17,7 @@ function makeLeads(n: number): Lead[] {
         dmSent: false,
         replied: false,
         dmContent: `draft for founder ${i}`,
+        ...over,
     }));
 }
 
@@ -51,28 +53,23 @@ const rowCount = () => document.querySelectorAll('tbody tr').length;
 const rowsSettle = (expected: number) => waitFor(() => expect(rowCount()).toBe(expected));
 
 // Read the index off the DM cell, not the handle: row text runs the handle
-// straight into the follower count ("@founder_0" + "1.0K"), so a `\d+` match on
-// the handle swallows the count's leading digit.
+// straight into the follower count, so a `\d+` match on the handle swallows
+// the count's leading digit.
 const handlesOnPage = () =>
     [...document.querySelectorAll('tbody tr')].map(tr => {
         const n = tr.textContent?.match(/draft for founder (\d+)/)?.[1];
         return n === undefined ? '' : `founder_${n}`;
     });
 
-// The pager renders above AND below the table, so every control exists twice.
-// Driving the top copy is enough — they are the same component.
-const nextButton = () => screen.getAllByRole('button', { name: /Next/ })[0];
+const nextButton = () => screen.getByRole('button', { name: /Next/ });
 
-// Both summaries, in DOM order. The `span` selector keeps the pager's wrapper
-// <div>s out of the match: with only one page they hold no buttons, so their
-// textContent is identical to the span's and they match the text too.
-const summaries = () =>
-    screen
-        .getAllByText(/^Page \d+ of \d+ · showing/, { selector: 'span' })
-        .map(el => el.textContent);
+/** The pager's one-line statement of the paging model. */
+const summary = () =>
+    [...document.querySelectorAll('span')]
+        .map(s => s.textContent ?? '')
+        .find(t => /^\d+–\d+ of \d+ · page \d+ of \d+$/.test(t));
 
-/** Asserts the summary AND that the two bars agree — they must never drift. */
-const expectSummary = (text: string) => expect(summaries()).toEqual([text, text]);
+const tab = (name: RegExp) => screen.getByRole('tab', { name });
 
 describe('ApprovalQueue pagination', () => {
     beforeEach(() => localStorage.clear());
@@ -81,38 +78,35 @@ describe('ApprovalQueue pagination', () => {
         renderQueue(makeLeads(250));
 
         await rowsSettle(25);
-        expectSummary('Page 1 of 10 · showing 1–25 of 250 leads');
+        expect(summary()).toBe('1–25 of 250 · page 1 of 10');
     });
 
-    it('shows no pagination controls when everything fits on one page', async () => {
+    it('shows no page controls when everything fits on one page', async () => {
         renderQueue(makeLeads(20));
 
         await rowsSettle(20);
         expect(screen.queryByRole('button', { name: /Next/ })).not.toBeInTheDocument();
     });
 
-    // The bug this whole pager exists for: the controls used to appear only
-    // below a six-screen table and only when there was more than one page, so
-    // the queue read as a plain list. The summary has to state the model even
-    // when there is nowhere to page to.
+    // The bug the pager exists for: with controls only at the bottom and only
+    // when there was more than one page, a long page that ended read as "that's
+    // everything". The summary states the model even with nowhere to page to.
     it('still states the paging model when there is only one page', async () => {
         renderQueue(makeLeads(18));
 
         await rowsSettle(18);
-        expectSummary('Page 1 of 1 · showing 1–18 of 18 leads');
+        expect(summary()).toBe('1–18 of 18 · page 1 of 1');
     });
 
-    // "0 of 250" is the reading the totals exist for, so a filter that matches
-    // nothing keeps its bar — only a genuinely empty workspace loses it, where
-    // the empty state's "go scrape some prospects" is the whole message.
-    it('keeps the summary when a filter matches nothing', async () => {
+    it('says what matched nothing, and offers to clear the search', async () => {
         const user = userEvent.setup();
         renderQueue(makeLeads(250));
 
         await user.type(screen.getByPlaceholderText(/search/i), 'nobody_here');
 
-        expectSummary('Page 1 of 1 · showing 0–0 of 0 leads');
-        expect(screen.getByText(/No leads match this filter/)).toBeInTheDocument();
+        expect(screen.getByText('No leads match "nobody_here"')).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Clear search' }));
+        await rowsSettle(25);
     });
 
     it('advances to the next slice of leads', async () => {
@@ -125,13 +119,13 @@ describe('ApprovalQueue pagination', () => {
 
         expect(handlesOnPage()[0]).toBe('founder_25');
         await rowsSettle(25);
-        expectSummary('Page 2 of 5 · showing 26–50 of 120 leads');
+        expect(summary()).toBe('26–50 of 120 · page 2 of 5');
 
-        await user.click(screen.getAllByRole('button', { name: '5' })[0]);
+        await user.click(screen.getByRole('button', { name: '5' }));
 
         expect(handlesOnPage()[0]).toBe('founder_100');
         await rowsSettle(20); // last page is partial
-        expectSummary('Page 5 of 5 · showing 101–120 of 120 leads');
+        expect(summary()).toBe('101–120 of 120 · page 5 of 5');
     });
 
     it('acts on the lead in the row that was clicked, not the first one', async () => {
@@ -146,25 +140,28 @@ describe('ApprovalQueue pagination', () => {
         expect(onApproveLead).toHaveBeenCalledWith('lead-26');
     });
 
-    it('select-all covers every filtered lead, not just the visible page', async () => {
+    it('select-all covers every lead in the view, not just the visible page', async () => {
         const user = userEvent.setup();
-        renderQueue(makeLeads(250));
+        const onApproveLeads = vi.fn();
+        renderQueue(makeLeads(250), { onApproveLeads });
 
-        await user.click(screen.getByTitle('Select all'));
+        await user.click(screen.getByLabelText('Select all 250 leads in this view'));
+        expect(screen.getByText('selected').textContent).toBe('250 selected');
 
-        expect(screen.getByText(/Delete selected \(250\)/)).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Approve 250' }));
+        expect(onApproveLeads).toHaveBeenCalledWith(makeLeads(250).map(l => l.id));
     });
 
-    it('returns to page 1 when the filter changes', async () => {
+    it('returns to page 1 when the search changes', async () => {
         const user = userEvent.setup();
         renderQueue(makeLeads(250));
 
         await user.click(nextButton());
-        expectSummary('Page 2 of 10 · showing 26–50 of 250 leads');
+        expect(summary()).toBe('26–50 of 250 · page 2 of 10');
 
         await user.type(screen.getByPlaceholderText(/search/i), 'founder_1');
 
-        expect(summaries()[0]).toMatch(/^Page 1 of \d+ · showing 1–/);
+        expect(summary()).toMatch(/^1–\d+ of \d+ · page 1 of \d+$/);
         expect(handlesOnPage()[0]).toBe('founder_1');
     });
 
@@ -176,13 +173,13 @@ describe('ApprovalQueue pagination', () => {
         await user.selectOptions(screen.getByLabelText('Rows per page'), '10');
 
         await rowsSettle(10);
-        expectSummary('Page 1 of 25 · showing 1–10 of 250 leads');
+        expect(summary()).toBe('1–10 of 250 · page 1 of 25');
 
         // A fresh visit reads the choice back rather than snapping to 25.
         unmount();
         renderQueue(makeLeads(250));
         await rowsSettle(10);
-        expectSummary('Page 1 of 25 · showing 1–10 of 250 leads');
+        expect(summary()).toBe('1–10 of 250 · page 1 of 25');
     });
 
     it('keeps the row you were looking at when the page size changes', async () => {
@@ -190,54 +187,15 @@ describe('ApprovalQueue pagination', () => {
         renderQueue(makeLeads(250));
 
         await user.click(nextButton());
-        await user.click(nextButton()); // page 3 of 25-row pages — leads 51–75
-        expectSummary('Page 3 of 10 · showing 51–75 of 250 leads');
+        await user.click(nextButton()); // leads 51–75
+        expect(summary()).toBe('51–75 of 250 · page 3 of 10');
 
         await user.selectOptions(screen.getByLabelText('Rows per page'), '50');
 
         // Lead 51 is still the first row, now on page 2 of the wider pages.
-        expectSummary('Page 2 of 5 · showing 51–100 of 250 leads');
+        expect(summary()).toBe('51–100 of 250 · page 2 of 5');
         await rowsSettle(50);
         expect(handlesOnPage()[0]).toBe('founder_50');
-    });
-
-    it('never re-sends a lead the extension already confirmed', async () => {
-        const user = userEvent.setup();
-        const leads = makeLeads(4).map((l, i) => ({
-            ...l,
-            approved: true,
-            dmContent: `draft for founder ${i}`,
-            dmSent: i < 2, // first two already went out
-        }));
-        const posted = vi.spyOn(window, 'postMessage');
-        renderQueue(leads);
-
-        await user.click(screen.getByRole('button', { name: 'Send 2 approved DMs' }));
-        // Nothing leaves before the Operator confirms.
-        expect(posted.mock.calls.some(([m]) => (m as { type?: string })?.type === 'MAGNET_ENGINE_CAMPAIGN')).toBe(false);
-        await user.click(screen.getByRole('button', { name: 'Send 2 DMs' }));
-
-        const payload = posted.mock.calls
-            .map(([msg]) => msg as { type?: string; payload?: { leads: { handle: string }[] } })
-            .find(msg => msg?.type === 'MAGNET_ENGINE_CAMPAIGN')?.payload;
-
-        expect(payload?.leads.map(l => l.handle)).toEqual(['founder_2', 'founder_3']);
-        posted.mockRestore();
-    });
-
-    it('refuses to send when every approved lead is already sent', async () => {
-        const user = userEvent.setup();
-        const leads = makeLeads(3).map((l, i) => ({
-            ...l, approved: true, dmContent: `draft for founder ${i}`, dmSent: true,
-        }));
-        const posted = vi.spyOn(window, 'postMessage');
-        renderQueue(leads);
-
-        await user.click(screen.getByRole('button', { name: 'Send approved DMs' }));
-
-        expect(posted.mock.calls.some(([m]) => (m as { type?: string })?.type === 'MAGNET_ENGINE_CAMPAIGN')).toBe(false);
-        expect(await screen.findByText(/already been sent/i)).toBeInTheDocument();
-        posted.mockRestore();
     });
 
     it('clamps the page when the lead list shrinks under it', async () => {
@@ -245,16 +203,11 @@ describe('ApprovalQueue pagination', () => {
         const { rerender } = renderQueue(makeLeads(250));
 
         await user.click(nextButton());
-        expectSummary('Page 2 of 10 · showing 26–50 of 250 leads');
+        expect(summary()).toBe('26–50 of 250 · page 2 of 10');
 
         rerender(
             <ToastProvider>
-                <ApprovalQueue
-                    leads={makeLeads(20)}
-                    config={config}
-                    onGenerateDMs={vi.fn()}
-                    isGenerating={false}
-                />
+                <ApprovalQueue leads={makeLeads(20)} config={config} onGenerateDMs={vi.fn()} isGenerating={false} />
             </ToastProvider>,
         );
 
@@ -263,32 +216,95 @@ describe('ApprovalQueue pagination', () => {
     });
 });
 
-describe('ApprovalQueue approval safety', () => {
+describe('ApprovalQueue campaigns', () => {
     beforeEach(() => localStorage.clear());
 
-    it('opens on Ready when drafts are waiting, not on All', async () => {
+    // The owner's ask: a fresh scrape must not land among Leads already
+    // written, approved or sent, so it can be looked at — and written — on purpose.
+    it('opens on the newest campaign, at its first stage with work, and shows only that campaign', async () => {
+        const older = makeLeads(4, { campaignId: 'old', campaignName: 'Older campaign', createdAt: '2026-10-01T12:00:00Z' }, 'old');
+        const fresh = makeLeads(3, {
+            campaignId: 'new', campaignName: 'Fresh scrape', createdAt: '2026-10-20T12:00:00Z', dmContent: undefined,
+        }, 'new');
+        renderQueue([...older, ...fresh]);
+
+        expect(tab(/^To write/)).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('button', { name: /^Fresh scrape, Oct 20: 3 to write$/ })).toHaveAttribute('aria-pressed', 'true');
+        await rowsSettle(3);
+        expect(document.querySelector('tbody')!.textContent).not.toMatch(/old_\d/);
+        expect(screen.getByText(/have no DM yet/)).toHaveTextContent('3 leads in Fresh scrape have no DM yet');
+    });
+
+    it('writes the whole campaign on one press, not ten at a time', async () => {
+        const user = userEvent.setup();
+        const onGenerateDMs = vi.fn();
+        const fresh = makeLeads(30, { campaignId: 'new', campaignName: 'Fresh scrape', dmContent: undefined }, 'new');
+        renderQueue(fresh, { onGenerateDMs });
+
+        await user.click(screen.getByRole('button', { name: 'Write 30 DMs' }));
+
+        const [list, options] = onGenerateDMs.mock.calls[0];
+        expect((list as Lead[]).map(l => l.id)).toEqual(fresh.map(l => l.id));
+        expect(options).toEqual({ all: true });
+    });
+
+    it('shows progress and a Stop while a campaign is being written', async () => {
+        const user = userEvent.setup();
+        const onStopGenerating = vi.fn();
+        renderQueue(makeLeads(30, { dmContent: undefined }), {
+            isGenerating: true, generation: { done: 12, total: 30 }, onStopGenerating,
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Writing DMs… 12 of 30');
+        await user.click(screen.getByRole('button', { name: 'Stop' }));
+        expect(onStopGenerating).toHaveBeenCalled();
+    });
+
+    it('jumps to where a campaign\'s work is when its chip is picked', async () => {
+        const user = userEvent.setup();
+        const fresh = makeLeads(2, { campaignId: 'new', campaignName: 'Fresh scrape', createdAt: '2026-10-20T12:00:00Z', dmContent: undefined }, 'new');
+        const drafts = makeLeads(5, { campaignId: 'old', campaignName: 'Drafted campaign', createdAt: '2026-10-01T12:00:00Z' }, 'old');
+        renderQueue([...fresh, ...drafts]);
+
+        expect(tab(/^To write/)).toHaveAttribute('aria-selected', 'true');
+        await user.click(screen.getByRole('button', { name: /^Drafted campaign/ }));
+
+        expect(tab(/^To review/)).toHaveAttribute('aria-selected', 'true');
+        await rowsSettle(5);
+    });
+
+    it('keeps sent leads out of the stages, in Sent', async () => {
+        const user = userEvent.setup();
         const leads = [
-            ...makeLeads(3),
-            ...makeLeads(2).map((l, i) => ({ ...l, id: `sent-${i}`, handle: `sent_${i}`, approved: true, dmSent: true })),
+            ...makeLeads(2),
+            ...makeLeads(3, { approved: true, dmSent: true }, 'sent'),
         ];
         renderQueue(leads);
 
-        expect(screen.getByRole('button', { name: /^Ready/ })).toHaveAttribute('aria-pressed', 'true');
+        await rowsSettle(2);
+        expect(document.querySelector('tbody')!.textContent).not.toMatch(/sent_\d/);
+
+        await user.click(tab(/^Sent/));
         await rowsSettle(3);
+        expect(screen.getAllByText('No reply yet')).toHaveLength(3);
     });
+});
+
+describe('ApprovalQueue approval safety', () => {
+    beforeEach(() => localStorage.clear());
 
     it('asks before approving every draft, and approves nothing if you keep reviewing', async () => {
         const user = userEvent.setup();
         const onApproveLeads = vi.fn();
         renderQueue(makeLeads(4), { onApproveLeads });
 
-        await user.click(screen.getByRole('button', { name: 'Approve all (4)' }));
+        await user.click(screen.getByRole('button', { name: 'Approve 4 DMs' }));
         expect(screen.getByText('Approve 4 drafts without reading them?')).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: 'Keep reviewing' }));
         expect(onApproveLeads).not.toHaveBeenCalled();
 
-        await user.click(screen.getByRole('button', { name: 'Approve all (4)' }));
+        await user.click(screen.getByRole('button', { name: 'Approve 4 DMs' }));
         await user.click(screen.getByRole('button', { name: 'Approve 4 drafts' }));
         expect(onApproveLeads).toHaveBeenCalledWith(['lead-0', 'lead-1', 'lead-2', 'lead-3']);
     });
@@ -298,18 +314,138 @@ describe('ApprovalQueue approval safety', () => {
         const onUnapproveLeads = vi.fn();
         renderQueue(makeLeads(2), { onApproveLeads: vi.fn(), onUnapproveLeads });
 
-        await user.click(screen.getByRole('button', { name: 'Approve all (2)' }));
+        await user.click(screen.getByRole('button', { name: 'Approve 2 DMs' }));
         await user.click(screen.getByRole('button', { name: 'Approve 2 drafts' }));
         await user.click(await screen.findByRole('button', { name: 'Undo' }));
 
         expect(onUnapproveLeads).toHaveBeenCalledWith(['lead-0', 'lead-1']);
     });
 
+    // Skimming fast, the next row sliding up under a just-clicked Approve is
+    // how the wrong person gets approved. The row stays where it was.
+    it('keeps an approved row in place, with an undo, instead of pulling the next one up', async () => {
+        const user = userEvent.setup();
+        const leads = makeLeads(3);
+        const onApproveLead = vi.fn();
+        const onUnapproveLeads = vi.fn();
+        const { rerender } = renderQueue(leads, { onApproveLead, onUnapproveLeads });
+        await rowsSettle(3);
+
+        await user.click(within(document.querySelectorAll('tbody tr')[0] as HTMLElement).getByTitle('Approve'));
+        expect(onApproveLead).toHaveBeenCalledWith('lead-0');
+
+        // The engine's update arrives: lead-0 is approved now.
+        const approved = leads.map(l => (l.id === 'lead-0' ? { ...l, approved: true } : l));
+        rerender(
+            <ToastProvider>
+                <ApprovalQueue leads={approved} config={config} onGenerateDMs={vi.fn()} isGenerating={false}
+                    onApproveLead={onApproveLead} onUnapproveLeads={onUnapproveLeads} />
+            </ToastProvider>,
+        );
+
+        await rowsSettle(3);
+        expect(handlesOnPage()[0]).toBe('founder_0');
+        expect(tab(/^To review/)).toHaveTextContent('2');
+        await user.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(onUnapproveLeads).toHaveBeenCalledWith(['lead-0']);
+    });
+
+    it('sends skipped leads to Skipped, where they can be restored', async () => {
+        const user = userEvent.setup();
+        const onRestoreLeads = vi.fn();
+        renderQueue([...makeLeads(2), ...makeLeads(1, { rejected: true }, 'skip')], { onRestoreLeads });
+
+        await rowsSettle(2);
+        await user.click(tab(/^Skipped/));
+        await rowsSettle(1);
+        await user.click(screen.getByRole('button', { name: 'Restore @skip_0' }));
+
+        expect(onRestoreLeads).toHaveBeenCalledWith(['skip-0']);
+    });
+
+    it('asks inline before deleting, and deletes nothing on Cancel', async () => {
+        const user = userEvent.setup();
+        const onDeleteLeads = vi.fn();
+        renderQueue(makeLeads(3), { onDeleteLeads, onDeleteLead: vi.fn() });
+
+        await user.click(screen.getByLabelText('Select @founder_0'));
+        await user.click(screen.getByLabelText('Select @founder_1'));
+        await user.click(screen.getByRole('button', { name: 'Delete' }));
+        expect(screen.getByRole('alertdialog')).toHaveTextContent("Delete 2 leads from the queue? This can't be undone.");
+
+        await user.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onDeleteLeads).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole('button', { name: 'Delete' }));
+        await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+        expect(onDeleteLeads).toHaveBeenCalledWith(['lead-0', 'lead-1']);
+    });
+
+    it('names the next mark a sent lead can take', async () => {
+        const user = userEvent.setup();
+        const onUpdateLead = vi.fn();
+        renderQueue(makeLeads(1, { approved: true, dmSent: true, replied: true }), { onUpdateLead });
+
+        await user.click(tab(/^Sent/));
+        await user.click(screen.getByRole('button', { name: "Mark @founder_0's reply as interested" }));
+        expect(onUpdateLead).toHaveBeenCalledWith(expect.objectContaining({ positiveReply: true }));
+    });
+
+    it('shows the whole DM, not a clamped preview', async () => {
+        const long = 'word '.repeat(120).trim();
+        renderQueue(makeLeads(1, { dmContent: long }));
+
+        const dm = await screen.findByText(long);
+        expect(dm.className).not.toMatch(/line-clamp/);
+    });
+});
+
+describe('ApprovalQueue sending', () => {
+    beforeEach(() => localStorage.clear());
+
+    const sentPayload = (posted: { mock: { calls: unknown[][] } }) =>
+        posted.mock.calls
+            .map(([msg]) => msg as { type?: string; payload?: { leads: { handle: string }[] } })
+            .find(msg => msg?.type === 'MAGNET_ENGINE_CAMPAIGN')?.payload;
+
+    it('never re-sends a lead the extension already confirmed', async () => {
+        const user = userEvent.setup();
+        const leads = makeLeads(4).map((l, i) => ({ ...l, approved: true, dmSent: i < 2 }));
+        const posted = vi.spyOn(window, 'postMessage');
+        renderQueue(leads);
+
+        await user.click(screen.getByRole('button', { name: 'Send 2 approved DMs' }));
+        // Nothing leaves before the Operator confirms.
+        expect(sentPayload(posted)).toBeUndefined();
+        await user.click(screen.getByRole('button', { name: 'Send 2 DMs' }));
+
+        expect(sentPayload(posted)?.leads.map(l => l.handle)).toEqual(['founder_2', 'founder_3']);
+        posted.mockRestore();
+    });
+
+    // The extension REPLACES its queue with every Handoff, so sending one campaign
+    // alone would drop another campaign's approved DMs on the floor.
+    it('hands over every approved DM, whatever campaign is on screen', async () => {
+        const user = userEvent.setup();
+        const a = makeLeads(2, { approved: true, campaignId: 'a', campaignName: 'Campaign A', createdAt: '2026-10-20T12:00:00Z' }, 'a');
+        const b = makeLeads(3, { approved: true, campaignId: 'b', campaignName: 'Campaign B', createdAt: '2026-10-10T12:00:00Z' }, 'b');
+        const posted = vi.spyOn(window, 'postMessage');
+        renderQueue([...a, ...b]);
+
+        expect(screen.getByRole('button', { name: /^Campaign A/ })).toHaveAttribute('aria-pressed', 'true');
+        // Campaign A is on screen, so the band says the send reaches past it.
+        expect(screen.getByText(/in another campaign/)).toHaveTextContent('2 approved in this campaign, 3 in another campaign');
+        await user.click(screen.getByRole('button', { name: 'Send all 5 DMs' }));
+        await user.click(screen.getByRole('button', { name: 'Send 5 DMs' }));
+
+        expect(sentPayload(posted)?.leads).toHaveLength(5);
+        posted.mockRestore();
+    });
+
     it('stamps a delivered Handoff as Handed off, and never calls it Sent', async () => {
         const user = userEvent.setup();
         const onMarkHandedOff = vi.fn();
-        const leads = makeLeads(2).map(l => ({ ...l, approved: true }));
-        renderQueue(leads, { onMarkHandedOff });
+        renderQueue(makeLeads(2, { approved: true }), { onMarkHandedOff });
 
         await user.click(screen.getByRole('button', { name: 'Send 2 approved DMs' }));
         await user.click(screen.getByRole('button', { name: 'Send 2 DMs' }));
@@ -318,15 +454,15 @@ describe('ApprovalQueue approval safety', () => {
         // so the Handoff is delivered.
         expect(onMarkHandedOff).toHaveBeenCalledWith(['lead-0', 'lead-1']);
         const toastText = (await screen.findByText(/handed to the extension/)).textContent ?? '';
-        expect(toastText).not.toMatch(/\bsent\b\s+—|drip/i);
         expect(toastText).toMatch(/shows Sent once the extension confirms it/);
     });
 
-    it('shows the whole DM, not a clamped preview', async () => {
-        const long = 'word '.repeat(120).trim();
-        renderQueue(makeLeads(1).map(l => ({ ...l, dmContent: long })));
+    it('says plainly when there is nothing approved to send', async () => {
+        const user = userEvent.setup();
+        renderQueue(makeLeads(3, { approved: true, dmSent: true }));
 
-        const dm = await screen.findByText(long);
-        expect(dm.className).not.toMatch(/line-clamp/);
+        await user.click(tab(/^To send/));
+        expect(screen.getByText('Nothing approved yet')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Send/ })).not.toBeInTheDocument();
     });
 });

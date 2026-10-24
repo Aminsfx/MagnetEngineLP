@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FunctionError, invokeFunction } from './functions';
-import { explainEmptyScrape, formatEta, parseQueries, runScrape, ScrapeControl, type ScrapeOutcome, type ScrapeProgress } from './scrape';
+import { explainEmptyScrape, formatEta, MAX_PER_QUERY, parseQueries, runScrape, ScrapeControl, type ScrapeOutcome, type ScrapeProgress } from './scrape';
 import { demoScrape } from './scrapeDemo';
 
 /**
@@ -171,7 +171,7 @@ describe('runScrape', () => {
             return demoScrape(body, { delayMs: 0 });
         });
         const run = runScrape(
-            { kind: 'following', queries: ['competitor'], limit: 2000, enrich: false },
+            { kind: 'following', queries: ['competitor'], limit: MAX_PER_QUERY, enrich: false },
             p => phases.push(p.phase),
             control,
         );
@@ -194,7 +194,7 @@ describe('runScrape', () => {
             if (body.op === 'page') control.pause();
             return demoScrape(body, { delayMs: 0 });
         });
-        const run = runScrape({ kind: 'following', queries: ['competitor'], limit: 2000, enrich: false }, p => phases.push(p.phase), control);
+        const run = runScrape({ kind: 'following', queries: ['competitor'], limit: MAX_PER_QUERY, enrich: false }, p => phases.push(p.phase), control);
         await vi.waitFor(() => expect(phases).toContain('paused'));
         control.finish();
 
@@ -205,7 +205,7 @@ describe('runScrape', () => {
 
     it('scrapes all of a post’s comments on "everything", with a time estimate from the comment count', async () => {
         const seen: ScrapeProgress[] = [];
-        const out = await runScrape({ kind: 'commenters', queries: ['https://www.instagram.com/p/ABCdef123/'], limit: 2000, enrich: false }, p => seen.push(p));
+        const out = await runScrape({ kind: 'commenters', queries: ['https://www.instagram.com/p/ABCdef123/'], limit: MAX_PER_QUERY, enrich: false }, p => seen.push(p));
 
         expect(out.leads).toHaveLength(200);                // 14 pages of 15 — well past the old 30-page and 250 caps' reach
         const mid = seen.find(p => p.phase === 'collecting' && p.found > 0)!;
@@ -214,9 +214,32 @@ describe('runScrape', () => {
         expect(mid.message).toContain('of 200 comments read');
     });
 
+    it('stops every query at the 500 ceiling, and counts its progress toward 500', async () => {
+        // An account following 5,000: fresh people on every page, and always a next page.
+        invoke.mockImplementation(async (_name, body) => {
+            const res = await demoScrape(body, { delayMs: 0 }) as { rows: { pk: string; username: string }[] };
+            if (body.op !== 'page') return res;
+            const n = calls('page').length;
+            return {
+                ...res,
+                rows: res.rows.map(r => ({ ...r, pk: `${r.pk}${n}`, username: `${r.username}-${n}` })),
+                cursor: JSON.stringify({ p: '0', n }),
+                total: 5000,
+            };
+        });
+        const seen: ScrapeProgress[] = [];
+        const out = await runScrape({ kind: 'following', queries: ['competitor'], limit: MAX_PER_QUERY, enrich: false }, p => seen.push(p));
+
+        expect(MAX_PER_QUERY).toBe(500);
+        expect(out.leads).toHaveLength(500);
+        expect(calls('page')).toHaveLength(10);             // 50 a page
+        const first = seen.find(p => p.phase === 'collecting' && p.found === 50)!;
+        expect(first.percent).toBeGreaterThan(8);           // 50 of 500, not 50 of 5,000
+    });
+
     it('has no estimate for a source that never says how big it is', async () => {
         const seen: ScrapeProgress[] = [];
-        await runScrape({ kind: 'hashtag', queries: ['smma'], limit: 2000, enrich: false }, p => seen.push(p));
+        await runScrape({ kind: 'hashtag', queries: ['smma'], limit: MAX_PER_QUERY, enrich: false }, p => seen.push(p));
         const mid = seen.filter(p => p.phase === 'collecting' && p.found > 0 && p.percent !== 100);
         expect(mid.length).toBeGreaterThan(0);
         expect(mid.every(p => p.etaSeconds === undefined && p.percent === undefined)).toBe(true);
@@ -227,7 +250,7 @@ describe('runScrape', () => {
             const page = await demoScrape(body, { delayMs: 0 }) as Record<string, unknown>;
             return { ...page, cursor: '{"p":"1"}' };        // the same "next page" every time
         });
-        await runScrape({ kind: 'hashtag', queries: ['smma'], limit: 2000, enrich: false });
+        await runScrape({ kind: 'hashtag', queries: ['smma'], limit: MAX_PER_QUERY, enrich: false });
         expect(calls('page')).toHaveLength(2);
     });
 

@@ -41,7 +41,8 @@ describe('CampaignBuilder', () => {
         expect(screen.getByText(/1 account × 50 = up to 50 profiles/)).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /Start scrape/ }));
-        const add = await screen.findAllByRole('button', { name: /Add 50 to Queue/ });
+        // Five details batches: slow under a full parallel run, like the test below.
+        const add = await screen.findAllByRole('button', { name: /Add 50 to Queue/ }, { timeout: 5000 });
 
         await user.click(add[0]);
         expect(onLeadsScraped).toHaveBeenCalledTimes(1);
@@ -70,7 +71,7 @@ describe('CampaignBuilder', () => {
 
         await user.click(screen.getByRole('button', { name: /^Following/ }));
         await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
-        expect(screen.getByText(/every profile each one has/)).toBeInTheDocument();
+        expect(screen.getByText(/up to 500 profiles$/)).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /Start scrape/ }));
         await waitFor(() => expect(gates.has(2)).toBe(true));

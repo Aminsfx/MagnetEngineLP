@@ -147,9 +147,9 @@ const SOURCES: SourceOption[] = [
     },
 ];
 
-/** MAX_PER_QUERY is "everything": page until the source runs out or the Operator finishes. */
+/** MAX_PER_QUERY is "everything": page until the source runs out, the Operator finishes, or the ceiling. */
 const EVERYTHING = MAX_PER_QUERY;
-const LIMIT_OPTIONS = [50, 100, 250, 500, 1000, EVERYTHING];
+const LIMIT_OPTIONS = [...[50, 100, 250].filter(n => n < EVERYTHING), EVERYTHING];
 
 /** Fill for the scrape progress bar — white on black, like every other action surface. */
 function progressFill(progress: number): string {
@@ -335,7 +335,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             source_kind: kind,
             lead_count: toAdd.length,
         });
-        showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added to "${name}" ✓`);
+        showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added as their own campaign, "${name}". It opens first in the Approval Queue.`);
         setResults([]);
         setSelected(new Set());
         setProgress(null);
@@ -408,7 +408,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     <div>
                         <label htmlFor="campaignbu-campaign-name" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                             Campaign name
-                            <span className="ml-2 text-neutral-400 font-normal">so you can track this batch later — optional</span>
+                            <span className="ml-2 text-neutral-400 font-normal">so you can find this campaign later — optional</span>
                         </label>
                         <input id="campaignbu-campaign-name"
                             type="text"
@@ -602,7 +602,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                                 {queries.length > 0 && (isList
                                     ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} to look up</>
                                     : perQuery === EVERYTHING
-                                    ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} · every profile each one has</>
+                                    ? <>{queries.length} {source.unit[queries.length === 1 ? 0 : 1]} · up to {EVERYTHING.toLocaleString('en-US')} profiles{queries.length > 1 ? ' each' : ''}</>
                                     : <>
                                         {queries.length} {source.unit[queries.length === 1 ? 0 : 1]}
                                         {' '}× {source.cap ? `~${perQuery}` : perQuery} = {source.cap ? 'about' : 'up to'} {queries.length * perQuery} profiles

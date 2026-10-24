@@ -8,10 +8,9 @@ import { usePlan } from '../../contexts/PlanContext';
 import { useToast } from '../common/Toast';
 import { NumberField } from '../common/NumberField';
 import {
-    buildSystemPrompt,
-    buildReplySystemPrompt,
-    isLegacyGeneratedPrompt,
-    DEFAULT_REPLY_SYSTEM_PROMPT,
+    identityOf,
+    withIdentity,
+    replyFollowsIdentity,
     TONE_OPTIONS,
     type PromptIdentity,
     type OfferLedger,
@@ -57,37 +56,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
 type WizardData = PromptIdentity;
 
 const STEP_LABELS = ['Business', 'Value Prop', 'Your Offer', 'Tone & Style', 'Review'];
-
-/**
- * Read the identity back off a stored config.
- *
- * Written once rather than at each of the three call sites that needed it,
- * because the list is now seventeen fields and the previous hand-copied version
- * was already one field short the day the Offer Ledger landed — a miss there is
- * silent, and its only symptom is a prompt that quietly stops mentioning your
- * price.
- */
-function identityOf(config: AppConfig): PromptIdentity {
-    return {
-        founderName: config.founderName ?? '',
-        founderRole: config.founderRole ?? '',
-        businessName: config.businessName ?? '',
-        businessNiche: config.businessNiche ?? '',
-        targetAudience: config.targetAudience ?? '',
-        valueProposition: config.valueProposition ?? '',
-        exampleDM: config.exampleDM ?? '',
-        dmTone: config.dmTone ?? 'casual',
-        proofPoint: config.proofPoint,
-        removedSacrifice: config.removedSacrifice,
-        timeToResult: config.timeToResult,
-        freeGive: config.freeGive,
-        price: config.price,
-        priceAnchor: config.priceAnchor,
-        guarantee: config.guarantee,
-        callLength: config.callLength,
-        callPromise: config.callPromise,
-    };
-}
 
 /**
  * The Offer Ledger, as nine questions.
@@ -189,26 +157,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
     );
     const [wizard, setWizard] = useState<WizardData>(() => identityOf(config));
 
-    const updateWizard = (patch: Partial<WizardData>) => setWizard(prev => ({ ...prev, ...patch }));
-
     /**
-     * The AI SDR's persona used to stay "You are the founder of MagnetEngine"
-     * for every Operator, because nothing regenerated it when the wizard ran.
-     * Regenerate it from the new identity — unless the Operator has written
-     * their own, which we detect by checking whether the stored value is still
-     * one this module would have produced.
+     * What you type is what the AI uses. Every answer saves as it is typed, and
+     * both prompts follow it unless the Operator edited one by hand
+     * (`withIdentity`). Answers used to wait in this panel for "Generate
+     * Prompt", so an Operator who jumped to Review or left the page kept a reply
+     * assistant that spoke for MagnetEngine.
      */
-    const regeneratedReplyPrompt = (data: PromptIdentity): string | undefined => {
-        const current = config.replySystemPrompt ?? '';
-        const machineWritten =
-            current === '' ||
-            current === DEFAULT_REPLY_SYSTEM_PROMPT ||
-            // A persona generated at an older recipe version is still ours to
-            // replace — without this, re-running the wizard would preserve a
-            // stale prompt as if the Operator had typed it.
-            isLegacyGeneratedPrompt(current) ||
-            current === buildReplySystemPrompt(identityOf(config));
-        return machineWritten ? buildReplySystemPrompt(data) : config.replySystemPrompt;
+    const updateWizard = (patch: Partial<WizardData>) => {
+        const next = { ...wizard, ...patch };
+        setWizard(next);
+        onUpdateConfig(withIdentity(config, next));
     };
 
     const handleApplyPreset = (preset: NichePreset) => {
@@ -225,16 +184,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
         };
         setWizard(newWizard);
 
-        // Regenerate the system prompt from the merged wizard data so presets
-        // benefit from the universal high-reply prompt too.
+        // Rebuild the DM prompt from the merged wizard data so presets benefit
+        // from the universal high-reply prompt too; the reply persona follows
+        // unless it was written by hand. `withIdentity` carries every
+        // PromptIdentity field, Ledger included — listing them by hand is how
+        // the Ledger would silently stop being persisted.
         const updatedConfig: AppConfig = {
-            ...config,
-            // Every PromptIdentity field, Ledger included. Listing them by hand
-            // is how the Ledger would silently stop being persisted the next
-            // time one was added.
-            ...newWizard,
-            systemPrompt: buildSystemPrompt(newWizard),
-            replySystemPrompt: regeneratedReplyPrompt(newWizard),
+            ...withIdentity(config, newWizard, { dm: true }),
             includeKeywords: p.includeKeywords ?? config.includeKeywords,
             excludeKeywords: p.excludeKeywords ?? config.excludeKeywords,
             minFollowers: p.minFollowers ?? config.minFollowers,
@@ -246,16 +202,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
     };
 
     const handleGeneratePrompt = () => {
-        const updated: AppConfig = {
-            ...config,
-            ...wizard,
-            systemPrompt: buildSystemPrompt(wizard),
-            replySystemPrompt: regeneratedReplyPrompt(wizard),
-            onboardingComplete: true,
-        };
-        onUpdateConfig(updated);
+        onUpdateConfig({ ...withIdentity(config, wizard, { dm: true }), onboardingComplete: true });
         setWizardStep(5);
     };
+
+    const replyFollows = replyFollowsIdentity(config);
+    const hasIdentity = Boolean(config.businessName?.trim() || config.valueProposition?.trim() || config.targetAudience?.trim());
 
     const handleUpdateKeywords = (type: 'includeKeywords' | 'excludeKeywords', value: string) => {
         const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
@@ -655,7 +607,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                             placeholder="Describe how the AI should reply to prospects, handle objections, and steer toward booking a call…"
                             className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-xs text-neutral-300 font-mono focus:outline-none focus:ring-1 focus:ring-white/50 resize-none leading-relaxed"
                         />
-                        <p className="text-label text-neutral-400 mt-1">Your booking link (set above) is shared automatically once a prospect shows interest.</p>
+                        <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                            <p className="max-w-xl text-label text-neutral-400 leading-relaxed">
+                                {!replyFollows
+                                    ? 'You edited this script, so changes to your business info no longer reach it.'
+                                    : hasIdentity
+                                        ? 'Written from your answers in the AI Prompt Wizard above, and rewritten when you change them.'
+                                        : 'Fill in the AI Prompt Wizard above and this script will speak for your business and your offer.'}
+                                {' '}Your booking link (set above) is shared automatically once a prospect shows interest.
+                            </p>
+                            {!replyFollows && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onUpdateConfig(withIdentity(config, identityOf(config), { reply: true }));
+                                        toast.success('Reply script rebuilt from your business info.');
+                                    }}
+                                    className="flex-none inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/12 text-label font-medium text-neutral-200 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-colors"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" aria-hidden /> Rebuild from my business info
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <label className="flex items-start gap-3 p-3.5 rounded-xl border border-white/8 bg-white/[0.02] cursor-pointer">

@@ -72,8 +72,13 @@ export interface PromptIdentity extends OfferLedger {
  * anyone having to remember to add a fingerprint for the shape they are
  * replacing — which is what the old marker list required, and why the previous
  * improvement reached new sign-ups and nobody else.
+ *
+ * v5 changes no rule. A new Operator's identity is now empty rather than
+ * MagnetEngine's, so the wording for an empty field was rewritten to read as a
+ * sentence — and the bump rebuilds every stored, untouched prompt from its own
+ * Operator's identity on their next load.
  */
-export const PROMPT_VERSION = 4;
+export const PROMPT_VERSION = 5;
 
 const VERSION_TAG = /<!--\s*prompt-version:\s*(\d+)\s*-->/;
 
@@ -195,7 +200,12 @@ does not exist, however reasonable it sounds and however much better the
 message would read with it.`;
 }
 
-/** Blank fields are normal — the wizard can be half-filled. */
+/**
+ * Blank fields are normal — the wizard can be half-filled, and a brand-new
+ * Operator starts with every field empty (v5). The fallbacks are written to
+ * read as sentences where they land: "You help potential clients achieve real
+ * growth in their business", "I noticed you're in this space".
+ */
 function resolve(identity: Partial<PromptIdentity>) {
   const businessName = identity.businessName?.trim() || 'our business';
   const founderRole = identity.founderRole?.trim() || 'founder';
@@ -211,8 +221,8 @@ function resolve(identity: Partial<PromptIdentity>) {
       ? `You are ${founderName}, ${founderRole} at ${businessName}.`
       : `You are the ${founderRole} of ${businessName}.`,
     audience: identity.targetAudience?.trim() || 'potential clients',
-    outcome: identity.valueProposition?.trim() || 'grow their business',
-    niche: identity.businessNiche?.trim() || 'their space',
+    outcome: identity.valueProposition?.trim() || 'real growth in their business',
+    niche: identity.businessNiche?.trim() || 'this space',
     tone: TONE_LIBRARY[identity.dmTone ?? 'casual'] ?? TONE_LIBRARY.casual,
     exampleDM: identity.exampleDM?.trim() ?? '',
   };
@@ -611,6 +621,111 @@ export function migrateStoredPrompts<
   };
 }
 
+// ─── Whose words the prompts speak ───────────────────────────────────────────
+
+/** A config, as far as the prompts are concerned. */
+type PromptConfig = Partial<PromptIdentity> & { systemPrompt?: string; replySystemPrompt?: string };
+
+/**
+ * Read the identity back off a stored config.
+ *
+ * Written once rather than at each call site that needs it, because the list
+ * is seventeen fields and a hand-copied version was already one field short
+ * the day the Offer Ledger landed — a miss is silent, and its only symptom is
+ * a prompt that quietly stops mentioning your price.
+ */
+export function identityOf(config: Partial<PromptIdentity>): PromptIdentity {
+  return {
+    founderName: config.founderName ?? '',
+    founderRole: config.founderRole ?? '',
+    businessName: config.businessName ?? '',
+    businessNiche: config.businessNiche ?? '',
+    targetAudience: config.targetAudience ?? '',
+    valueProposition: config.valueProposition ?? '',
+    exampleDM: config.exampleDM ?? '',
+    dmTone: config.dmTone ?? 'casual',
+    proofPoint: config.proofPoint,
+    removedSacrifice: config.removedSacrifice,
+    timeToResult: config.timeToResult,
+    freeGive: config.freeGive,
+    price: config.price,
+    priceAnchor: config.priceAnchor,
+    guarantee: config.guarantee,
+    callLength: config.callLength,
+    callPromise: config.callPromise,
+  };
+}
+
+/**
+ * True when `prompt` is one this module built — from `identity`, from an empty
+ * identity, or from the old seed — rather than words the Operator wrote. Only
+ * a prompt like that may be rebuilt when the identity changes.
+ */
+function builtFrom(
+  prompt: string | undefined,
+  identity: Partial<PromptIdentity>,
+  build: (identity: Partial<PromptIdentity>) => string,
+): boolean {
+  if (!prompt?.trim()) return true;
+  return isLegacyGeneratedPrompt(prompt)
+    || prompt === build(identity)
+    || prompt === build(DEFAULT_IDENTITY)
+    || prompt === build(LEGACY_SEED_IDENTITY);
+}
+
+/**
+ * Put a new identity on a config and bring both prompts with it.
+ *
+ * The prompts are strings saved on the config, so a new business name reaches
+ * the AI only if they are rebuilt — the reply persona used to go on speaking
+ * for MagnetEngine after an Operator had told the wizard who they were. A
+ * prompt still built from the old identity is rebuilt from the new one; one
+ * the Operator edited by hand is theirs and stays, unless `rebuild` names it
+ * (the explicit Generate and Rebuild buttons).
+ */
+export function withIdentity<T extends PromptConfig>(
+  config: T,
+  identity: PromptIdentity,
+  rebuild: { dm?: boolean; reply?: boolean } = {},
+): T {
+  const before = identityOf(config);
+  const dm = rebuild.dm || builtFrom(config.systemPrompt, before, buildSystemPrompt);
+  const reply = rebuild.reply || builtFrom(config.replySystemPrompt, before, buildReplySystemPrompt);
+  return {
+    ...config,
+    ...identity,
+    ...(dm ? { systemPrompt: buildSystemPrompt(identity) } : {}),
+    ...(reply ? { replySystemPrompt: buildReplySystemPrompt(identity) } : {}),
+  };
+}
+
+/** Whether the reply persona still follows the identity on its config, rather than words typed over it. */
+export function replyFollowsIdentity(config: PromptConfig): boolean {
+  return builtFrom(config.replySystemPrompt, identityOf(config), buildReplySystemPrompt);
+}
+
+/** The identity fields the old seed filled in. */
+const SEED_FIELDS = ['businessName', 'businessNiche', 'targetAudience', 'valueProposition'] as const;
+
+/**
+ * Take the old MagnetEngine seed out of a config.
+ *
+ * Until 2026-10-24 every new Operator started with MagnetEngine's own business
+ * name, niche, audience and offer. A client who skipped the wizard, applied a
+ * preset (presets never touch the name) or changed only some fields had DMs
+ * and replies that spoke for MagnetEngine. A field still holding the seed's
+ * exact words was never theirs: it is emptied, and the prompts built from it
+ * are rebuilt. The Owner's own workspace, where the seed is the truth, is the
+ * caller's to exempt. Returns the same object when there is nothing to do.
+ */
+export function clearSeedIdentity<T extends PromptConfig>(config: T): T {
+  const seeded = SEED_FIELDS.filter((key) => config[key]?.trim() === LEGACY_SEED_IDENTITY[key]);
+  if (seeded.length === 0) return config;
+  const identity = identityOf(config);
+  for (const key of seeded) identity[key] = '';
+  return withIdentity(config, identity);
+}
+
 // ─── The follow-up ladders ───────────────────────────────────────────────────
 
 /**
@@ -757,14 +872,33 @@ export function migrateSequence<T extends FollowUpSequence>(
   };
 }
 
-/** MagnetEngine's own identity — the seed for a brand-new Operator's config. */
-export const DEFAULT_IDENTITY: PromptIdentity = {
+/**
+ * The identity every new Operator was seeded with until 2026-10-24:
+ * MagnetEngine's own. Kept only to recognise it — in stored configs
+ * (`clearSeedIdentity`) and in prompts built from it (`builtFrom`).
+ */
+export const LEGACY_SEED_IDENTITY: PromptIdentity = {
   founderName: '',
   founderRole: 'founder',
   businessName: 'MagnetEngine',
   businessNiche: 'AI-powered Instagram lead generation and outreach automation',
   targetAudience: 'agency owners, coaches, and consultants who do cold Instagram outreach',
   valueProposition: 'a calendar that fills with booked calls without manual prospecting',
+  exampleDM: '',
+  dmTone: 'casual',
+};
+
+/**
+ * A brand-new Operator's identity: empty until they say who they are. The
+ * prompts built from it name no business and no offer — never somebody else's.
+ */
+export const DEFAULT_IDENTITY: PromptIdentity = {
+  founderName: '',
+  founderRole: 'founder',
+  businessName: '',
+  businessNiche: '',
+  targetAudience: '',
+  valueProposition: '',
   exampleDM: '',
   dmTone: 'casual',
 };

@@ -20,12 +20,13 @@
 export const HIKER_BASE = "https://api.hikerapi.com";
 
 /**
- * Per-query ceiling — a safety net, not a target. The Operator's default is
- * "everything": the client pages until the source runs out, they pause and
- * keep what's found, or this. Every page and every detail lookup is billed
- * against MONTHLY_SCRAPE_LIMIT, which is the real brake.
+ * Per-query ceiling: the most one search term, account, post or place brings
+ * in (owner, 2026-10-24 — it was 2,000). The Operator's default is all of it:
+ * the client pages until the source runs out, they pause and keep what's
+ * found, or this. Every page and every detail lookup is also billed against
+ * MONTHLY_SCRAPE_LIMIT.
  */
-export const MAX_PER_QUERY = 2000;
+export const MAX_PER_QUERY = 500;
 
 /** Profiles looked up per call — one upstream request each. */
 export const ENRICH_BATCH = 10;

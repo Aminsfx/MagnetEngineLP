@@ -52,6 +52,11 @@ The review surface where an operator reads, edits, approves or rejects each
 drafted DM before it can be sent.
 _Avoid_: review list, drafts, pending
 
+**Skipped**:
+A Lead the operator took out of the Approval Queue without sending it. It waits
+in the Skipped list and can be restored to the stage its DM puts it in.
+_Avoid_: rejected (the field's name in code, not the operator's word), archived
+
 **Approved**:
 The operator has accepted a drafted DM. Approval permits sending; it is not
 sending.

@@ -360,7 +360,10 @@ describe('perf harness', () => {
       h.dbCalls = [];
       const { view } = await mountAt('/queue');
       await screen.findByRole('heading', { name: /Approval Queue/i });
-      const settled = Math.min(n, QUEUE_PAGE_DEFAULT);
+      // The queue opens on one batch, and the fixture spreads its leads over
+      // three campaigns, so the settled rows are that batch's share, capped at
+      // a page. The budget below — never more than a page — is unchanged.
+      const settled = Math.min(Math.ceil(n / 3), QUEUE_PAGE_DEFAULT);
       await waitFor(() => {
         expect(document.querySelectorAll('tbody tr').length).toBe(settled);
       });
