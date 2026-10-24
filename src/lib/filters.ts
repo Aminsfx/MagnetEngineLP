@@ -1,5 +1,19 @@
 import { Lead, AppConfig, DashboardStats } from './types';
 
+/**
+ * The exclude rule: any keyword appearing anywhere in the text, ignoring case.
+ * One function because two places apply it — the queue's rules filter, over
+ * name + handle + bio, and the lead search, over name + username before it
+ * pays for a details lookup.
+ */
+export function excludedBy(text: string, keywords: readonly string[]): boolean {
+    const haystack = text.toLowerCase();
+    return keywords.some(keyword => {
+        const k = keyword.trim().toLowerCase();
+        return k !== '' && haystack.includes(k);
+    });
+}
+
 export const filterUtils = {
     // Filter leads based on config
     filterLeads(leads: Lead[], config: AppConfig): Lead[] {
@@ -21,12 +35,7 @@ export const filterUtils = {
             const leadText = `${lead.name} ${lead.handle} ${lead.bio || ''}`.toLowerCase();
 
             // Exclude keywords (if any match, exclude)
-            if (config.excludeKeywords.length > 0) {
-                const hasExcluded = config.excludeKeywords.some(keyword =>
-                    leadText.includes(keyword.toLowerCase())
-                );
-                if (hasExcluded) return false;
-            }
+            if (excludedBy(leadText, config.excludeKeywords)) return false;
 
             // Include keywords (if list is not empty, at least one must match)
             if (config.includeKeywords.length > 0) {

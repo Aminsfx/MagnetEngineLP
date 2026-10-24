@@ -530,7 +530,7 @@ const DashboardShell: React.FC = () => {
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
           <p className="text-neutral-400 text-sm mt-1.5">Search Instagram for leads and add them to your Approval Queue.</p>
         </div>
-        <CampaignBuilder onLeadsScraped={outreach.addLeads} onTrialLimit={toTrialUpgrade} />
+        <CampaignBuilder onLeadsScraped={outreach.addLeads} onBeforeSearch={outreach.searchAllowance} onTrialLimit={toTrialUpgrade} />
       </div>
     ),
 

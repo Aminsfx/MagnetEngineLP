@@ -67,6 +67,13 @@ export interface OutreachEngine {
   hydrate(leads: Lead[], dmUsed: number): void;
 
   addLeads(leads: Lead[]): Promise<void>;
+  /**
+   * Read once before a lead search spends anything. The month's lead and
+   * campaign quotas used to be checked only at Add to Queue — after every
+   * lookup had been paid for — and the details of people already in the
+   * queue, or matching an exclude keyword, were bought and then thrown away.
+   */
+  searchAllowance(): Promise<SearchAllowance>;
   approve(id: string): Promise<void>;
   approveMany(ids: string[]): Promise<void>;
   /** Undo for a bulk approve. Leaves any Lead already Sent alone. */
@@ -114,6 +121,18 @@ export interface OutreachEngine {
    * price happened while there was no Lead to stamp it on.
    */
   recordDeal(person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome): Promise<void>;
+}
+
+/** What a lead search may still spend on, and who it can pass over without a lookup. */
+export interface SearchAllowance {
+  /** Handles already in the workspace. */
+  known: Set<string>;
+  /** The Operator's exclude keywords. */
+  exclude: string[];
+  /** New leads this month's quota still takes. Absent when the workspace is not metered. */
+  leadsLeft?: number;
+  /** Campaigns this month's quota still takes. Absent when the workspace is not metered. */
+  campaignsLeft?: number;
 }
 
 export interface GenerationProgress {
@@ -266,6 +285,22 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       toast.info(`${parts[0]} · skipped ${parts.slice(1).join(' + ')}.`);
     }
   }, [metered, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store]);
+
+  const searchAllowance = useCallback(async (): Promise<SearchAllowance> => {
+    const known = new Set(leadsRef.current.map((l) => l.handle));
+    const exclude = config.excludeKeywords;
+    if (!metered) return { known, exclude };
+    const [campaignsUsed, leadsUsed] = await Promise.all([
+      db.getMonthlyCount('campaigns'),
+      db.getMonthlyCount('leads'),
+    ]);
+    return {
+      known,
+      exclude,
+      leadsLeft: Math.max(0, limits.maxLeadsPerMonth - leadsUsed),
+      campaignsLeft: Math.max(0, limits.maxCampaignsPerMonth - campaignsUsed),
+    };
+  }, [config.excludeKeywords, metered, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth]);
 
   const approve = useCallback(async (id: string) => {
     await patch(id, (l) => ({ ...l, approved: true, rejected: false }));
@@ -658,6 +693,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     generation,
     hydrate,
     addLeads,
+    searchAllowance,
     approve,
     approveMany,
     unapproveMany,

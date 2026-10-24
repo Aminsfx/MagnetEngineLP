@@ -237,6 +237,64 @@ describe('runScrape', () => {
         expect(first.percent).toBeGreaterThan(8);           // 50 of 500, not 50 of 5,000
     });
 
+    it('spends no details lookup on people already in the queue, and pages on to new ones', async () => {
+        const first = await runScrape({ kind: 'following', queries: ['competitor'], limit: 50, enrich: false });
+        const known = new Set(first.leads.map(l => l.handle));      // the list's first page
+        invoke.mockClear();
+
+        const out = await runScrape({ kind: 'following', queries: ['competitor'], limit: 50, enrich: true, known });
+
+        expect(out.alreadyKnown).toBe(50);
+        expect(out.leads).toHaveLength(50);
+        expect(out.leads.some(l => known.has(l.handle))).toBe(false);
+        expect(calls('enrich').flatMap(([, body]) => body.ids as string[])).toHaveLength(50); // the new people only
+        expect(out.notes).toContain('50 profiles already in your queue — skipped, with no lookup spent on them.');
+    });
+
+    it('passes over a name or username that matches an exclude keyword before its details load', async () => {
+        invoke.mockImplementation(async (_name, body) => {
+            if (body.op === 'page') {
+                return {
+                    rows: [
+                        { pk: '1', username: 'cryptokate', full_name: 'Kate' },
+                        { pk: '2', username: 'ann.coaching', full_name: 'Ann | Crypto mentor' },
+                        { pk: '3', username: 'bo.coaching', full_name: 'Bo' },
+                    ],
+                    complete: false, cursor: null, items: 3, used: 1, limit: 5000,
+                };
+            }
+            const ids = body.ids as string[];
+            return { rows: ids.map(id => ({ pk: id, username: 'bo.coaching', full_name: 'Bo', biography: 'Coach', follower_count: 900 })), used: 2, limit: 5000 };
+        });
+
+        const out = await runScrape({ kind: 'keyword', queries: ['coach'], limit: 50, enrich: true, exclude: ['Crypto', ' '] });
+
+        expect(out.excluded).toBe(2);
+        expect(out.leads.map(l => l.handle)).toEqual(['bo.coaching']);
+        expect(calls('enrich')).toHaveLength(1);
+        expect(calls('enrich')[0][1].ids).toEqual(['3']);
+    });
+
+    it("stops at the room left in the month's lead quota", async () => {
+        const out = await runScrape({ kind: 'following', queries: ['competitor'], limit: MAX_PER_QUERY, enrich: false, maxLeads: 70 });
+
+        expect(out.leads).toHaveLength(70);
+        expect(out.quotaReached).toBe(true);
+        expect(calls('page')).toHaveLength(2);                 // 50 + 20 of the second page, then no more
+        expect(out.notes.at(-1)).toMatch(/^Stopped at 70 profiles/);
+    });
+
+    it('never looks up a listed handle that is already in the queue', async () => {
+        const out = await runScrape({
+            kind: 'profiles', queries: ['person0', '@Person1', 'person2'], limit: 1, enrich: true, known: new Set(['person1']),
+        });
+
+        expect(calls('page')).toHaveLength(1);
+        expect(calls('page')[0][1].source).toEqual({ kind: 'profiles', query: 'person0,person2' });
+        expect(out.alreadyKnown).toBe(1);
+        expect(out.leads).toHaveLength(2);
+    });
+
     it('has no estimate for a source that never says how big it is', async () => {
         const seen: ScrapeProgress[] = [];
         await runScrape({ kind: 'hashtag', queries: ['smma'], limit: MAX_PER_QUERY, enrich: false }, p => seen.push(p));
@@ -305,7 +363,7 @@ describe('parseQueries', () => {
 
 describe('explainEmptyScrape', () => {
     const outcome = (over: Partial<ScrapeOutcome> = {}): ScrapeOutcome => ({
-        leads: [], received: 0, skipped: 0, notes: [], stopped: false, unenriched: 0, ...over,
+        leads: [], received: 0, skipped: 0, notes: [], stopped: false, unenriched: 0, alreadyKnown: 0, excluded: 0, ...over,
     });
 
     it("repeats each query's own reason rather than inventing one", () => {

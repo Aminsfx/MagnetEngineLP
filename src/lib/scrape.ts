@@ -2,10 +2,12 @@ import { Lead } from './types';
 import { FunctionError, invokeFunction } from './functions';
 import { isTrialLimit } from './trial';
 import { intake } from './intake';
+import { excludedBy } from './filters';
 import {
     ENRICH_BATCH,
     FOLLOWERS_VISIBLE,
     MAX_PER_QUERY,
+    toUsername,
     type ProfileRow,
     type SourceKind,
 } from '../../supabase/functions/_shared/hiker.ts';
@@ -48,6 +50,16 @@ export interface ScrapeRequest {
     limit: number;
     /** Look up bio + follower count for the rows a list endpoint leaves short. */
     enrich: boolean;
+    /**
+     * Handles already in the Operator's workspace (lowercase, `@`-less). Add to
+     * Queue would drop them, so the run spends no details lookup on them, and a
+     * handle list never looks them up at all.
+     */
+    known?: ReadonlySet<string>;
+    /** The Operator's exclude keywords, matched on name and username before any details lookup. */
+    exclude?: readonly string[];
+    /** New leads this month's lead quota still takes. The run stops there; unset means no quota. */
+    maxLeads?: number;
 }
 
 export type ScrapePhase = 'collecting' | 'details' | 'paused';
@@ -149,6 +161,12 @@ export interface ScrapeOutcome {
      * found up to it, details included; the next search is refused.
      */
     trialLimit?: boolean;
+    /** Profiles passed over because they were already in the workspace. No details lookup was spent on them. */
+    alreadyKnown: number;
+    /** Profiles passed over because their name or username matched an exclude keyword, before any details lookup. */
+    excluded: number;
+    /** The run stopped at `maxLeads`, the room left in this month's lead quota. */
+    quotaReached?: boolean;
 }
 
 interface PageResponse {
@@ -233,7 +251,49 @@ export async function runScrape(
     const campaignId = crypto.randomUUID();
     const limit = Math.max(1, Math.min(MAX_PER_QUERY, req.limit));
     const isList = req.kind === 'profiles';
-    const queries = isList ? chunk(req.queries, ENRICH_BATCH).map(c => c.join(',')) : req.queries;
+
+    // Every profile costs about one lookup for its details, so the people the
+    // Operator would throw away are passed over before that lookup: anyone
+    // already in the workspace (Add to Queue drops them), and anyone whose
+    // name or username matches an exclude keyword (the queue's rules would
+    // hide them). A passed-over profile does not count toward the limit.
+    const known = req.known ?? new Set<string>();
+    const exclude = req.exclude ?? [];
+    const passedOver = new Set<string>();
+    let alreadyKnown = 0;
+    let excluded = 0;
+    const passOver = (username: string, name?: string): boolean => {
+        if (known.has(username)) {
+            alreadyKnown++;
+        } else if (excludedBy(`${name ?? ''} ${username}`, exclude)) {
+            excluded++;
+        } else {
+            return false;
+        }
+        passedOver.add(username);
+        return true;
+    };
+
+    // The month's lead quota: the run stops once it has found what the queue
+    // can still take, instead of paying for leads Add to Queue would refuse.
+    const room = req.maxLeads === undefined ? undefined : Math.max(0, req.maxLeads);
+    let quotaReached = false;
+
+    // A handle list is filtered before anything is looked up — its lookup is
+    // the full profile, so a skipped handle costs nothing at all.
+    let handles = isList
+        ? req.queries.filter(raw => {
+            const name = toUsername(raw);
+            if (!name) return true;               // not a handle: the server says so
+            if (passedOver.has(name)) return false;
+            return !passOver(name);
+        })
+        : [];
+    if (isList && room !== undefined && handles.length > room) {
+        handles = handles.slice(0, room);
+        quotaReached = true;
+    }
+    const queries = isList ? chunk(handles, ENRICH_BATCH).map(c => c.join(',')) : req.queries;
 
     // Keyed by lowercased username: a profile turning up under two search
     // terms, or twice across pages, is one Lead.
@@ -245,6 +305,7 @@ export async function runScrape(
     let stopped = false;
     let halted: string | undefined;
     let trialLimit = false;
+    const full = () => room !== undefined && rows.size >= room;
 
     // Time spent waiting on calls, not on the Operator: a pause must not make
     // the run look slower than it is.
@@ -347,6 +408,10 @@ export async function runScrape(
         const of = queries.length > 1 && !isList ? ` (${qi + 1} of ${queries.length})` : '';
 
         do {
+            if (full()) {
+                quotaReached = true;
+                break collect;
+            }
             if (!await control.checkpoint(onPause)) {
                 stopped = true;
                 break collect;
@@ -377,10 +442,19 @@ export async function runScrape(
             q.read += page.items ?? page.rows.length;
 
             let fresh = 0;
+            let passed = 0;
             for (const row of page.rows) {
                 if (!isList && q.found >= limit) break;
+                if (full()) {
+                    quotaReached = true;
+                    break;
+                }
                 const key = row.username.toLowerCase();
-                if (rows.has(key)) continue;
+                if (rows.has(key) || passedOver.has(key)) continue;
+                if (passOver(key, row.full_name)) {
+                    passed++;
+                    continue;
+                }
                 rows.set(key, row);
                 if (page.complete) complete.add(key);
                 fresh++;
@@ -390,7 +464,10 @@ export async function runScrape(
                 notes.push(`Not on Instagram: ${page.missing.map(h => `@${h}`).join(', ')}.`);
             }
 
-            dry = fresh === 0 ? dry + 1 : 0;
+            // A page of people passed over still moved through the list: on a
+            // second search of the same account, the new people come after the
+            // ones already in the queue.
+            dry = fresh === 0 && passed === 0 ? dry + 1 : 0;
             // A cursor handed back twice would page the same results forever.
             cursor = page.cursor && !seenCursors.has(page.cursor) ? page.cursor : null;
             if (cursor) seenCursors.add(cursor);
@@ -433,9 +510,9 @@ export async function runScrape(
                 break;
             }
             lookupsLeft = res.limit - res.used;
-            for (const full of res.rows) {
-                const key = byPk.get(full.pk) ?? full.username.toLowerCase();
-                rows.set(key, { ...rows.get(key), ...full });
+            for (const profile of res.rows) {
+                const key = byPk.get(profile.pk) ?? profile.username.toLowerCase();
+                rows.set(key, { ...rows.get(key), ...profile });
                 complete.add(key);
             }
             done += batch.length;
@@ -444,6 +521,18 @@ export async function runScrape(
     const unenriched = enriching ? [...rows.keys()].filter(k => !complete.has(k)).length : 0;
 
     const { leads, skipped } = intake({ source: 'scrape', rows: [...rows.values()] as unknown as Record<string, unknown>[], campaignId });
+
+    const people = (n: number) => `${n} profile${n !== 1 ? 's' : ''}`;
+    if (alreadyKnown > 0) {
+        notes.push(`${people(alreadyKnown)} already in your queue — skipped, with no lookup spent on ${alreadyKnown === 1 ? 'it' : 'them'}.`);
+    }
+    if (excluded > 0) {
+        notes.push(`${people(excluded)} matched your exclude keywords — skipped before their details loaded.`);
+    }
+    if (quotaReached) {
+        notes.push(`Stopped at ${people(room ?? 0)}: that's all the room left in this month's lead limit. It resets on the 1st.`);
+    }
+
     onProgress?.({
         message: `Done — ${leads.length} profile${leads.length !== 1 ? 's' : ''}${stopped || halted ? ' (finished early)' : ''}.`,
         phase: 'collecting',
@@ -451,7 +540,11 @@ export async function runScrape(
         percent: 100,
         etaSeconds: 0,
     });
-    return { leads, received: rows.size, skipped, notes, stopped, halted, unenriched, lookupsLeft, ...(trialLimit ? { trialLimit } : {}) };
+    return {
+        leads, received: rows.size, skipped, notes, stopped, halted, unenriched, lookupsLeft, alreadyKnown, excluded,
+        ...(trialLimit ? { trialLimit } : {}),
+        ...(quotaReached ? { quotaReached } : {}),
+    };
 }
 
 /**

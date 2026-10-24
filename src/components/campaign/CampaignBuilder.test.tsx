@@ -52,6 +52,40 @@ describe('CampaignBuilder', () => {
         expect(leads.every((l: { bio?: string }) => l.bio)).toBe(true); // details loaded
     });
 
+    it("refuses a search the month's campaigns can't hold, before any lookup is spent", async () => {
+        const user = userEvent.setup();
+        const onBeforeSearch = vi.fn(async () => ({ known: new Set<string>(), exclude: [], leadsLeft: 300, campaignsLeft: 0 }));
+        render(<CampaignBuilder onLeadsScraped={vi.fn()} onBeforeSearch={onBeforeSearch} />);
+
+        await user.click(screen.getByRole('button', { name: /^Following/ }));
+        await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
+        await user.click(screen.getByRole('button', { name: /Start scrape/ }));
+
+        expect(await screen.findByText(/used all 6 campaigns this month/)).toBeInTheDocument();
+        expect(invokeFunction).not.toHaveBeenCalled();
+    });
+
+    it("stops at the room left in the month's lead quota and passes over people already in the queue", async () => {
+        const user = userEvent.setup();
+        const onLeadsScraped = vi.fn();
+        // The demo following list's first person, already in the queue.
+        const first = (await demoScrape({ op: 'page', source: { kind: 'following', query: 'competitor' } }, { delayMs: 0 }) as { rows: { username: string }[] }).rows[0].username;
+        vi.mocked(invokeFunction).mockClear();
+        const onBeforeSearch = vi.fn(async () => ({ known: new Set([first]), exclude: [], leadsLeft: 20, campaignsLeft: 3 }));
+        render(<CampaignBuilder onLeadsScraped={onLeadsScraped} onBeforeSearch={onBeforeSearch} />);
+
+        await user.click(screen.getByRole('button', { name: /^Following/ }));
+        await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
+        await user.click(screen.getByRole('button', { name: /Start scrape/ }));
+
+        const add = await screen.findAllByRole('button', { name: /Add 20 to Queue/ }, { timeout: 5000 });
+        expect(screen.getByText(/1 profile already in your queue/)).toBeInTheDocument();
+        expect(screen.getByText(/Stopped at 20 profiles/)).toBeInTheDocument();
+        await user.click(add[0]);
+        const leads = onLeadsScraped.mock.calls[0][0] as { handle: string }[];
+        expect(leads.map(l => l.handle)).not.toContain(first);
+    });
+
     it('defaults to everything, and can pause, resume, and finish with what was found', async () => {
         const user = userEvent.setup();
         // The demo following list is 180 profiles, 50 a page. Pages 2 and 3 are

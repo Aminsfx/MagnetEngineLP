@@ -286,6 +286,15 @@ APIKeys { openai?, claude?, gemini? }  // NO scraping key — backend-managed
   profiles per search" stays true.
 - **Metered.** Every billed upstream request (`x-hiker-info: reqs=N`) is counted in
   `scrape_usage`; `MONTHLY_SCRAPE_LIMIT` (default 5000) → `429 scrape_quota`.
+- **Nothing is bought to be thrown away** (owner, 2026-10-24). A details lookup is about one
+  request per lead, so before a search `outreach.searchAllowance()` reads the month's lead and
+  campaign quotas, the handles already in the workspace and the exclude keywords.
+  `CampaignBuilder` refuses a search the quotas can't hold; `runScrape` passes over known
+  handles and any name or username matching an exclude keyword before their details load (a
+  handle list never looks them up at all), and stops at the room left in the lead quota
+  (`maxLeads`). Passed-over people don't count toward the per-term limit and don't make a page
+  "dry", so a repeat search pages on to new people. `excludedBy` (`filters.ts`) is the one
+  exclude rule, shared with the queue's filter. Add to Queue still checks the quotas as a backstop.
 - **Errors carry a code.** `not_found` / `private_target` / `bad_source` are about one query —
   the client notes them and carries on; anything else stops the run. Operator-facing messages
   never name the provider; the real cause is in the function log.

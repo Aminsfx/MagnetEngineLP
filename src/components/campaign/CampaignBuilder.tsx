@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { NICHE_PRESETS } from '../../lib/presets';
 import { TRIAL_ALLOWANCE, isTrialLimit } from '../../lib/trial';
+import { PLAN_LIMITS } from '../../lib/plans';
+import type { SearchAllowance } from '../../lib/useOutreach';
 import { CsvImport } from './CsvImport';
 import { CHANNEL, alpha } from '../../lib/theme';
 import { posthogCapture } from '../../lib/posthog';
@@ -22,6 +24,11 @@ interface CampaignBuilderProps {
     onLeadsScraped: (leads: Lead[]) => void | Promise<void>;
     /** A search was refused because the free trial's leads are spent: go and pay in full. */
     onTrialLimit?: () => void;
+    /**
+     * Read before a search spends anything: the month's quotas, who is already
+     * in the queue, and the exclude keywords (`outreach.searchAllowance`).
+     */
+    onBeforeSearch?: () => Promise<SearchAllowance>;
 }
 
 interface SourceOption {
@@ -166,7 +173,7 @@ function formatFollowers(n: number): string {
 
 const FIELD = 'w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors';
 
-export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped, onTrialLimit }) => {
+export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped, onTrialLimit, onBeforeSearch }) => {
     const [tab, setTab] = useState<'find' | 'import'>('find');
     const [campaignName, setCampaignName] = useState('');
 
@@ -224,6 +231,26 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         if (queries.length === 0) { setError(`Enter at least one ${source.unit[0]}.`); return; }
 
         resetRun();
+
+        // Before anything is spent. A search the queue would refuse, or more
+        // leads than this month has room for, used to be paid for in full and
+        // then turned away at Add to Queue. A failed count does not block the
+        // search: Add to Queue still checks, and the server meters lookups.
+        let allowance: SearchAllowance | undefined;
+        try {
+            allowance = await onBeforeSearch?.();
+        } catch {
+            allowance = undefined;
+        }
+        if (allowance?.campaignsLeft === 0) {
+            setError(`You've used all ${PLAN_LIMITS.maxCampaignsPerMonth} campaigns this month, so a new search couldn't be added to your queue. They reset on the 1st.`);
+            return;
+        }
+        if (allowance?.leadsLeft === 0) {
+            setError(`You've added all ${PLAN_LIMITS.maxLeadsPerMonth.toLocaleString('en-US')} leads this month allows, so a new search couldn't be added to your queue. It resets on the 1st.`);
+            return;
+        }
+
         const control = new ScrapeControl();
         controlRef.current = control;
         setActivePhase('collecting');
@@ -232,7 +259,12 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
 
         try {
             const outcome = await runScrape(
-                { kind, queries, limit: perQuery, enrich },
+                {
+                    kind, queries, limit: perQuery, enrich,
+                    known: allowance?.known,
+                    exclude: allowance?.exclude,
+                    maxLeads: allowance?.leadsLeft,
+                },
                 p => {
                     if (p.phase !== 'paused') setActivePhase(p.phase);
                     setProgress(p);
@@ -282,7 +314,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         }
     // resetRun and source are derived from the deps below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [kind, raw, perQuery, enrich, onTrialLimit]);
+    }, [kind, raw, perQuery, enrich, onTrialLimit, onBeforeSearch]);
 
     const handlePause = () => {
         controlRef.current?.pause();

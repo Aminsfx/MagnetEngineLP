@@ -91,7 +91,9 @@ export const PLAN_LIMITS: PlanLimits = {
     maxDailyCap: 200,
     maxDMGenerations: 1500,
     maxLeadsPerMonth: 1500,
-    // 6 x the 250-profile search cap = 1,500, so the lead quota is reachable.
+    // Three searches at the 500-profile cap reach the lead quota; six campaigns
+    // leave room for smaller searches and CSV imports. Both are checked before a
+    // search spends anything (`outreach.searchAllowance`).
     maxCampaignsPerMonth: 6,
 };
 
