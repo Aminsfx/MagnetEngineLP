@@ -235,8 +235,9 @@ export const MarqueeBand: React.FC<{ label: string; children: React.ReactNode; d
 /**
  * Screenshots of the owner's calls with clients, framed like the product
  * cards, two to a row: the real thing the reference's avatar strip only
- * pretended to be. A caption names the client and nothing more (content.ts
- * says why). Renders nothing until CLIENT_CALLS has an entry.
+ * pretended to be. A caption gives the client's first name and what they do,
+ * nothing more (content.ts says why). Renders nothing until CLIENT_CALLS has
+ * an entry.
  */
 export const ClientCalls: React.FC<{ label?: string }> = ({ label = 'On calls with our clients' }) => {
     if (CLIENT_CALLS.length === 0) return null;
@@ -246,14 +247,14 @@ export const ClientCalls: React.FC<{ label?: string }> = ({ label = 'On calls wi
         <section aria-label={label} className="pt-10 md:pt-14 px-6">
             <BandLabel label={label} />
             <ul className="mt-8 max-w-5xl mx-auto grid sm:grid-cols-2 gap-5">
-                {CLIENT_CALLS.map(({ src, width, height, name }) => (
+                {CLIENT_CALLS.map(({ src, width, height, name, role }) => (
                     <li key={src}>
                         {/* Not for opening, saving or dragging out (owner, 2026-10-31): these are real clients. */}
                         <figure onContextMenu={(e) => e.preventDefault()} className="select-none [-webkit-touch-callout:none]">
                             <Panel className="p-1.5">
                                 <img
                                     src={src}
-                                    alt={name ? `Video call with ${name}` : 'Video call with a client'}
+                                    alt={`Video call with ${name ?? 'a client'} (${role})`}
                                     width={width}
                                     height={height}
                                     loading="lazy"
@@ -262,7 +263,10 @@ export const ClientCalls: React.FC<{ label?: string }> = ({ label = 'On calls wi
                                     className="w-full h-auto rounded-[calc(1.25rem-7px)] bg-surface pointer-events-none"
                                 />
                             </Panel>
-                            {name && <figcaption className="mt-3 px-1 text-meta text-neutral-400">{name}</figcaption>}
+                            <figcaption className="mt-3 px-1 text-meta text-neutral-400">
+                                {name && <><span className="text-neutral-200">{name}</span> · </>}
+                                {role}
+                            </figcaption>
                         </figure>
                     </li>
                 ))}

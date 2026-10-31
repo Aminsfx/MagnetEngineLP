@@ -189,9 +189,10 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   call button passes under it, so it never covers an action on a phone.
 - **A shows screenshots of calls with clients** above the reviews (`ClientCalls` in the
   kit; `CLIENT_CALLS` in `content.ts`, files in `public/clients/`). A caption gives the
-  client's first name only and never quotes them; the row renders nothing while the list
-  is empty. Each file is cropped, with the client's face softened (only the face), the
-  surname on their name tag and the dashboard figures blurred, before it goes in. The
+  client's first name (or none) and what they do, and never quotes them; the row renders
+  nothing while the list is empty. Each file is cropped, with the client's face softened
+  (only the face), the owner's name tag, the client's surname (or whole name, if unnamed)
+  and the dashboard figures blurred, before it goes in. The
   page shows them uncropped, two of one shape per row, and blocks the context menu,
   dragging and the phone long-press on them.
 - **DFY** at `/lp/dfy` (`variant="dfy"`, also noindex) sells the same engine as a

@@ -91,14 +91,15 @@ export const WHATSAPP_GREETING = 'Hi! I have a question about MagnetEngine.';
  * Screenshots of the owner's video calls with clients, shown beside the
  * reviews on `/` as proof the people are real (owner, 2026-10-31). Only real
  * calls, with clients who agreed to be shown: each `src` is a file the owner
- * supplied, under public/clients/. A caption names who is on the call and
- * never puts words in their mouth: a screenshot is not a quote. The row
- * renders nothing while this list is empty.
+ * supplied, under public/clients/. A caption says who is on the call and
+ * what they do, and never puts words in their mouth: a screenshot is not a
+ * quote. The row renders nothing while this list is empty.
  */
 export interface ClientCall {
     /**
      * A path under public/, e.g. '/clients/call-brandon.jpg'. Shown uncropped,
-     * so crop the file itself; the client's face is softened in the file.
+     * so crop the file itself; in the file, the client's face is softened and
+     * the owner's name tag blurred.
      */
     src: string;
     /** The file's size in pixels, so the page keeps its space while it loads. */
@@ -106,18 +107,20 @@ export interface ClientCall {
     height: number;
     /**
      * The client's first name, and nothing more (owner, 2026-10-31): the
-     * surname on the call's name tag is blurred in the file too. Omit to show
-     * no caption.
+     * surname on the call's name tag is blurred in the file too. Omit it, and
+     * blur the whole name tag, for a client who stays unnamed.
      */
     name?: string;
+    /** What they do, in the owner's words, e.g. 'Agency owner'. */
+    role: string;
 }
 
 // Two to a row, so each pair shares a shape: the calls are 3:2, the calls over the dashboard 2:1.
 export const CLIENT_CALLS: ClientCall[] = [
-    { src: '/clients/call-alec.jpg', width: 942, height: 628, name: 'Alec' },
-    { src: '/clients/call-dan-car.jpg', width: 420, height: 280, name: 'Dan' },
-    { src: '/clients/call-dan.jpg', width: 1000, height: 500, name: 'Dan' },
-    { src: '/clients/call-brandon.jpg', width: 594, height: 297, name: 'Brandon' },
+    { src: '/clients/call-alec.jpg', width: 942, height: 628, name: 'Alec', role: 'Agency owner' },
+    { src: '/clients/call-joon.jpg', width: 463, height: 309, name: 'Joon', role: 'Agency owner' },
+    { src: '/clients/call-dan.jpg', width: 1000, height: 500, name: 'Dan', role: 'Business owner' },
+    { src: '/clients/call-brandon.jpg', width: 594, height: 297, name: 'Brandon', role: 'HVAC company owner' },
 ];
 
 /**
