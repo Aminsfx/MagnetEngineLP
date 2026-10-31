@@ -2,7 +2,7 @@ import React from 'react';
 import { Search, PenLine, CheckCheck, Send } from 'lucide-react';
 import {
     LandingShell, Hero, ProductPreview, MarqueeBand, Section, Heading, Em, Panel, Pipeline,
-    Pricing, FAQ, Close, Testimonials, type Step,
+    Pricing, FAQ, Close, Testimonials, ClientCalls, type Step,
 } from '../../components/landing/kit';
 import { MONTHLY_DMS } from '../../components/landing/content';
 import { DMStream } from '../../components/landing/motion/DMStream';
@@ -184,6 +184,7 @@ const VariantA: React.FC = () => (
             </div>
         </Section>
 
+        <ClientCalls />
         <Testimonials />
 
         <Pricing

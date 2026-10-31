@@ -12,7 +12,8 @@ import { TRIAL_ALLOWANCE } from '../../lib/trial';
 import { SOURCE_KINDS } from '../../../supabase/functions/_shared/hiker.ts';
 import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
 import {
-    AUDIENCE, CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, MONTHLY_LEADS, TESTIMONIALS, TRIAL_CTA, type Testimonial,
+    AUDIENCE, CALL_BOOKING, CALL_CTA, CLIENT_CALLS, FAQ_ITEMS, MONTHLY_DMS, MONTHLY_LEADS, TESTIMONIALS, TRIAL_CTA,
+    type Testimonial,
 } from './content';
 
 /**
@@ -206,6 +207,15 @@ export const ProductPreview: React.FC<{ caption?: React.ReactNode; sendNote?: Re
 
 // ─── Marquee band ─────────────────────────────────────────────────────────────
 
+/** A band's label, between two fading rules. */
+const BandLabel: React.FC<{ label: string }> = ({ label }) => (
+    <div className="flex items-center justify-center gap-4 px-6">
+        <span aria-hidden className="hidden md:block h-px w-40 bg-gradient-to-l from-white/20 to-transparent" />
+        <p className="text-meta text-neutral-400 text-center">{label}</p>
+        <span aria-hidden className="hidden md:block h-px w-40 bg-gradient-to-r from-white/20 to-transparent" />
+    </div>
+);
+
 /** The reference's "loved by" strip: a label between two fading rules, then the marquee. */
 export const MarqueeBand: React.FC<{ label: string; children: React.ReactNode; duration?: number }> = ({
     label,
@@ -214,17 +224,52 @@ export const MarqueeBand: React.FC<{ label: string; children: React.ReactNode; d
 }) => (
     <section aria-label={label} className="py-10 md:py-14">
         <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-center gap-4 px-6">
-                <span aria-hidden className="hidden md:block h-px w-40 bg-gradient-to-l from-white/20 to-transparent" />
-                <p className="text-meta text-neutral-400 text-center">{label}</p>
-                <span aria-hidden className="hidden md:block h-px w-40 bg-gradient-to-r from-white/20 to-transparent" />
-            </div>
+            <BandLabel label={label} />
             <Marquee pauseOnHover duration={duration} className="mt-7 [--gap:0.75rem]">
                 {children}
             </Marquee>
         </div>
     </section>
 );
+
+/**
+ * Screenshots of the owner's calls with clients, framed like the product
+ * cards, two to a row: the real thing the reference's avatar strip only
+ * pretended to be. A caption names the client and nothing more (content.ts
+ * says why). Renders nothing until CLIENT_CALLS has an entry.
+ */
+export const ClientCalls: React.FC<{ label?: string }> = ({ label = 'On calls with our clients' }) => {
+    if (CLIENT_CALLS.length === 0) return null;
+
+    // No bottom padding: the reviews' own top padding is the gap, so the row reads as theirs.
+    return (
+        <section aria-label={label} className="pt-10 md:pt-14 px-6">
+            <BandLabel label={label} />
+            <ul className="mt-8 max-w-5xl mx-auto grid sm:grid-cols-2 gap-5">
+                {CLIENT_CALLS.map(({ src, width, height, name }) => (
+                    <li key={src}>
+                        {/* Not for opening, saving or dragging out (owner, 2026-10-31): these are real clients. */}
+                        <figure onContextMenu={(e) => e.preventDefault()} className="select-none [-webkit-touch-callout:none]">
+                            <Panel className="p-1.5">
+                                <img
+                                    src={src}
+                                    alt={name ? `Video call with ${name}` : 'Video call with a client'}
+                                    width={width}
+                                    height={height}
+                                    loading="lazy"
+                                    decoding="async"
+                                    draggable={false}
+                                    className="w-full h-auto rounded-[calc(1.25rem-7px)] bg-surface pointer-events-none"
+                                />
+                            </Panel>
+                            {name && <figcaption className="mt-3 px-1 text-meta text-neutral-400">{name}</figcaption>}
+                        </figure>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+};
 
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 
