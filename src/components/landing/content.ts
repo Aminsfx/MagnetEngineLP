@@ -8,7 +8,12 @@
  * (owner, 2026-10-18): no scarcity on the page.
  */
 
+import { PLAN_LIMITS } from '../../lib/plans';
+
 export const MONTHLY_DMS = '1,500';
+
+/** The monthly lead quota, as the scraper enforces it. */
+export const MONTHLY_LEADS = PLAN_LIMITS.maxLeadsPerMonth.toLocaleString('en-US');
 
 /** Who the page is for, said in the hero. */
 export const AUDIENCE = 'For agency owners and coaches who sell through DMs.';

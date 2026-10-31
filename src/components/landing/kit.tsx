@@ -8,8 +8,12 @@ import { PillButton, GhostPill } from '../ui/PillButton';
 import { Marquee } from '../ui/Marquee';
 import { ApprovalPreview, BrandPanel, EXAMPLE_QUEUE_SIZE } from '../ApprovalPreview';
 import { PRICES, SUPPORT_EMAIL } from '../../lib/plans';
+import { TRIAL_ALLOWANCE } from '../../lib/trial';
+import { SOURCE_KINDS } from '../../../supabase/functions/_shared/hiker.ts';
 import { LANDING_PATH, rememberLandingVariant, type LandingVariant } from '../../lib/landingVariant';
-import { AUDIENCE, CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, TESTIMONIALS, TRIAL_CTA, type Testimonial } from './content';
+import {
+    AUDIENCE, CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, MONTHLY_LEADS, TESTIMONIALS, TRIAL_CTA, type Testimonial,
+} from './content';
 
 /**
  * The public landing kit: the pieces the three /preview variants share, in the
@@ -277,12 +281,19 @@ const ANCHORS: [string, string][] = [
     ['Paying an agency to do it', `${COST_OF_AN_AGENCY}/mo`],
 ];
 
-const FEATURES = [
-    `${MONTHLY_DMS} personalised DMs a month`,
-    'Lead search by keyword, hashtag or place',
-    'The approval queue, the Chrome extension and the inbox',
-    'Automated follow-ups',
-    'Reply and booked-call tracking',
+/**
+ * The whole offer (owner, 2026-10-31), grouped the way a buyer weighs it:
+ * where the leads come from, how each one is written to, what happens when
+ * they answer, and the help getting started. A few words a line, and only
+ * what the product ships: the quotas are PLAN_LIMITS, the sources are the
+ * scraper's own list, the qualifier is the Inbox's triage, and the call comes
+ * with the onboarding email. No daily send figure.
+ */
+const OFFER: [group: string, items: string[]][] = [
+    ['Leads', [`${MONTHLY_LEADS} leads a month`, `${SOURCE_KINDS.length} ways to find them`, 'Follower and keyword filters']],
+    ['Outreach', [`${MONTHLY_DMS} personalised DMs a month`, 'Automated follow-ups']],
+    ['Booking', ['AI appointment setter', 'AI lead qualifier', 'One inbox for every reply', 'Deal and revenue tracking']],
+    ['Support', ['30-minute onboarding call', 'Zapier and Make webhooks']],
 ];
 
 export const Pricing: React.FC<{ heading: React.ReactNode; id?: string }> = ({ heading, id = 'pricing' }) => (
@@ -318,21 +329,31 @@ export const Pricing: React.FC<{ heading: React.ReactNode; id?: string }> = ({ h
                         </span>
                     </div>
                     <p className="text-body-sm text-neutral-400 mt-3">
-                        Cancel any time before the trial ends and you pay nothing.
+                        The trial includes {TRIAL_ALLOWANCE.leads} leads and {TRIAL_ALLOWANCE.dms} DMs. Cancel any
+                        time before it ends and you pay nothing.
                     </p>
                 </div>
 
-                <ul className="space-y-3 mb-9">
-                    {FEATURES.map(f => (
-                        <li key={f} className="flex items-start gap-3">
-                            <Check className="text-white mt-[4px] flex-none" size={15} strokeWidth={2.6} aria-hidden />
-                            <span className="text-body-sm text-neutral-300">{f}</span>
-                        </li>
+                <div className="grid sm:grid-cols-2 gap-x-8 gap-y-7 mb-7">
+                    {OFFER.map(([group, items]) => (
+                        <div key={group}>
+                            <h3 className="mb-3 text-label font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                                {group}
+                            </h3>
+                            <ul className="space-y-2">
+                                {items.map(f => (
+                                    <li key={f} className="flex items-start gap-2.5">
+                                        <Check className="text-white mt-[5px] flex-none" size={14} strokeWidth={2.6} aria-hidden />
+                                        <span className="text-body-sm text-neutral-300">{f}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     ))}
-                    <li className="text-body-sm text-neutral-400 pl-7">
-                        All AI and infrastructure costs included. You never touch an API key.
-                    </li>
-                </ul>
+                </div>
+                <p className="mb-9 pt-6 border-t border-white/8 text-body-sm text-neutral-400">
+                    All AI and infrastructure costs included. You never touch an API key.
+                </p>
 
                 <PillButton to={SIGNUP} block>
                     Start my 3-day trial
