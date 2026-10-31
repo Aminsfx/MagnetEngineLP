@@ -74,11 +74,13 @@ export const FAQ_ITEMS = [
     },
 ];
 
-/** The niche question answered for a page with no trial (`/`): the demo is where they find out. */
-export const NICHE_FAQ_CALL = {
-    question: FAQ_ITEMS[FAQ_ITEMS.length - 1].question,
-    answer: "That's what the demo is for. Bring your niche to the call and see the kind of profiles it finds and the messages it writes for them before you decide anything.",
-};
+/**
+ * The owner's WhatsApp, behind the chat bubble on `/` (owner, 2026-10-31):
+ * digits only, country code first, the form wa.me takes. The greeting is
+ * typed into the chat for the visitor, so the owner knows where they came from.
+ */
+export const WHATSAPP_NUMBER = '33743338664';
+export const WHATSAPP_GREETING = 'Hi! I have a question about MagnetEngine.';
 
 /**
  * Client messages for the testimonials wall, exactly as the client sent them.

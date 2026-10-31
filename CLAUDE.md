@@ -178,10 +178,15 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   (first touch) and written into the new Supabase user's metadata
   (`raw_user_meta_data->>'landing_variant'`).
 - B and C set `robots: noindex` — they are the same offer as `/`.
-- **A shows no price and no trial** (owner, 2026-10-19): header, hero and close all
-  book the demo call (`ctaBooksCall`, `CALL_BOOKING`), there is no Pricing section, the
-  niche FAQ points at the demo (`NICHE_FAQ_CALL`), and `index.html`'s JSON-LD carries no
-  offer. B and C still sell the trial.
+- **A sells the trial again** (owner, 2026-10-31, reversing the 2026-10-19 decision to
+  show no price and no trial on A): header, hero and close start the trial with the demo
+  call beside it, as on B and C (the kit's defaults, no `ctaBooksCall`), the shared
+  Pricing section is back, the FAQ is the shared one, and `index.html`'s JSON-LD carries
+  the offer at `PRICES.monthly`. Change the two together.
+- **A has a WhatsApp chat bubble** (`src/components/landing/WhatsAppChat.tsx`; the number
+  and greeting are `WHATSAPP_NUMBER` / `WHATSAPP_GREETING` in `content.ts`): bottom-right,
+  black and white rather than WhatsApp's green, and it steps aside while a trial link or
+  call button passes under it, so it never covers an action on a phone.
 - **DFY** at `/lp/dfy` (`variant="dfy"`, also noindex) sells the same engine as a
   done-for-you service. It has no trial, so `LandingShell`'s `ctaBooksCall` and the
   `actions`/`terms` props on `Hero` and `Close` swap every trial button for the call

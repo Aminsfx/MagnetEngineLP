@@ -2,12 +2,12 @@ import React from 'react';
 import { Search, PenLine, CheckCheck, Send } from 'lucide-react';
 import {
     LandingShell, Hero, ProductPreview, MarqueeBand, Section, Heading, Em, Panel, Pipeline,
-    FAQ, Close, Testimonials, type Step,
+    Pricing, FAQ, Close, Testimonials, type Step,
 } from '../../components/landing/kit';
-import { CALL_BOOKING, CALL_CTA, FAQ_ITEMS, MONTHLY_DMS, NICHE_FAQ_CALL } from '../../components/landing/content';
-import { PillButton } from '../../components/ui/PillButton';
+import { MONTHLY_DMS } from '../../components/landing/content';
 import { DMStream } from '../../components/landing/motion/DMStream';
 import { HormoziClip } from '../../components/landing/HormoziClip';
+import { WhatsAppChat } from '../../components/landing/WhatsAppChat';
 import type { NavItem } from '../../components/landing/Header';
 
 /**
@@ -17,25 +17,19 @@ import type { NavItem } from '../../components/landing/Header';
  * after the hero (owner, 2026-10-18): it is the section that makes the reader
  * feel understood, so it goes before anything asks them to believe.
  *
- * No price and no trial on this page (owner, 2026-10-19): every action books
- * the demo call, and the math counts conversations, not a break-even. B and C
- * still sell the trial.
+ * The price and the trial are back (owner, 2026-10-31, reversing 2026-10-19):
+ * header, hero and close start the trial with the demo call beside it, as on
+ * B and C. The math still counts conversations, not a break-even. A WhatsApp
+ * bubble in the corner is for the reader who wants to ask before either.
  */
 
 const NAV: NavItem[] = [
     { href: '#problem', label: 'The problem' },
     { href: '#how', label: 'How it works' },
     { href: '#math', label: 'The math' },
+    { href: '#pricing', label: 'Pricing' },
     { href: '#faq', label: 'FAQ' },
 ];
-
-/** The page's one action: the demo call. */
-const BookCall: React.FC = () => <PillButton {...CALL_BOOKING}>{CALL_CTA}</PillButton>;
-
-const CALL_TERMS = 'A 15-minute call';
-
-/** The shared FAQ, with the niche question answered by the demo instead of the trial. */
-const FAQ_A = [...FAQ_ITEMS.filter(f => f.question !== NICHE_FAQ_CALL.question), NICHE_FAQ_CALL];
 
 /** Search terms the Campaign Builder takes as-is. Niches, not customers. */
 const NICHES = [
@@ -88,7 +82,7 @@ const MATH_ROWS = [
 ] as const;
 
 const VariantA: React.FC = () => (
-    <LandingShell nav={NAV} variant="a" cta={CALL_CTA} ctaBooksCall>
+    <LandingShell nav={NAV} variant="a">
         <Hero
             field={<DMStream />}
             title={
@@ -103,8 +97,6 @@ const VariantA: React.FC = () => (
                     part is closing the calls.
                 </>
             }
-            actions={<BookCall />}
-            terms={CALL_TERMS}
         >
             <ProductPreview />
         </Hero>
@@ -194,7 +186,15 @@ const VariantA: React.FC = () => (
 
         <Testimonials />
 
-        <FAQ items={FAQ_A} />
+        <Pricing
+            heading={
+                <>
+                    Priced so one client <Em>covers the year.</Em>
+                </>
+            }
+        />
+
+        <FAQ />
 
         <Close
             heading={
@@ -208,9 +208,9 @@ const VariantA: React.FC = () => (
                     month while you work on something else.
                 </>
             }
-            actions={<BookCall />}
-            terms={CALL_TERMS}
         />
+
+        <WhatsAppChat />
     </LandingShell>
 );
 
