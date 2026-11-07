@@ -1,64 +1,62 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, RefreshCw, Undo2 } from 'lucide-react';
 import { sendCapOf } from '../../lib/plans';
-import { Save, Sparkles, ChevronRight, ChevronLeft, CheckCircle, RefreshCw, Settings as SettingsIcon, Zap, ChevronDown, CalendarClock, Webhook, Bot } from 'lucide-react';
-import { AppConfig } from '../../lib/types';
+import type { AppConfig } from '../../lib/types';
 import { INBOX_PAUSED } from '../../lib/routes';
 import { NICHE_PRESETS, type NichePreset } from '../../lib/presets';
+import { CARD_BEZEL } from '../../lib/theme';
 import { usePlan } from '../../contexts/PlanContext';
 import { useToast } from '../common/Toast';
 import { NumberField } from '../common/NumberField';
+import { ROW_PILL } from '../inbox/Copilot';
 import {
+    dmFollowsIdentity,
     identityOf,
-    withIdentity,
     replyFollowsIdentity,
+    withIdentity,
     TONE_OPTIONS,
-    type PromptIdentity,
     type OfferLedger,
+    type PromptIdentity,
 } from '../../lib/prompt';
 
 interface SettingsPanelProps {
     config: AppConfig;
     onUpdateConfig: (config: AppConfig) => void;
+    /** The Owner's workspace also sees the preset that sells MagnetEngine itself. */
+    isOwner?: boolean;
 }
+
+/**
+ * Settings, as one page of sections in the order an Operator sets them up:
+ * who the messages come from, what they may claim, how they sound, who gets
+ * them, how fast they go, what happens when someone answers, and where events
+ * are sent.
+ *
+ * It replaces six stacked cards and a five-step wizard whose answers already
+ * saved as they were typed, so its Next, Generate and Save buttons did nothing
+ * an Operator could see. Everything here still saves through `onUpdateConfig`
+ * on each change, and the page says so once, at the top, instead.
+ *
+ * The prompts are generated, so they sit folded under the section that
+ * generates them, with a line saying whether they still follow the answers.
+ */
 
 /** Weekdays in a month — the horizon the daily cap is really spent over, since
  *  the extension only sends while the Operator has Instagram open. */
 const WORKING_DAYS = 22;
 
-/**
- * Colour on this page follows one rule, because it is six near-identical
- * section cards and the eye needs something to group them by:
- *
- *   `info`  — the two panels that configure the AI itself (Prompt Wizard,
- *             Reply Assistant), including their focus rings.
- *   `brand` — every other section: things the Operator configures.
- *
- * Both render monochrome in the dashboard today; the rule is kept because it
- * is what decides where a colour would go if one came back.
- *
- * That rule is why two hues went away. Violet is retired outright
- * (docs/DESIGN-TOKENS.md); the Reply Assistant folds to `info` because it *is*
- * the AI, while the preset picker folds to `brand` with the other config
- * sections rather than to `neutral` — Lead Filtering and Booking Link were
- * already `brand`, so `neutral` would have invented a third treatment for a
- * section that behaves exactly like them. Integrations was `info` but a webhook
- * is plumbing, not generation, so it moves the other way, to `brand`.
- *
- * The upshot: `info` here means "the AI" and nothing else, which is the whole
- * point of reserving it.
- */
-
-// ─── Onboarding Wizard ──────────────────────────────────────────────────────
-
-type WizardStep = 1 | 2 | 3 | 4 | 5;
-
-/** The wizard collects exactly what the prompt module needs. */
-type WizardData = PromptIdentity;
-
-const STEP_LABELS = ['Business', 'Value Prop', 'Your Offer', 'Tone & Style', 'Review'];
+const SECTIONS = [
+    { id: 'settings-business', label: 'Your business' },
+    { id: 'settings-claims', label: 'What the AI may claim' },
+    { id: 'settings-voice', label: 'How DMs sound' },
+    { id: 'settings-filters', label: 'Lead filters' },
+    { id: 'settings-sending', label: 'Sending' },
+    { id: 'settings-replies', label: INBOX_PAUSED ? 'Booking link' : 'Replies and booking' },
+    { id: 'settings-integrations', label: 'Integrations' },
+] as const;
 
 /**
- * The Offer Ledger, as nine questions.
+ * The Offer Ledger, in three groups of three.
  *
  * Every placeholder is a worked example rather than a description, because the
  * placeholder is what most Operators will copy the shape of — and the shape is
@@ -66,663 +64,824 @@ const STEP_LABELS = ['Business', 'Value Prop', 'Your Offer', 'Tone & Style', 'Re
  * teaches proximate and ordinary; "we get amazing results" teaches nothing and
  * is also what an empty box invites.
  */
-const LEDGER_FIELDS: { key: keyof OfferLedger; label: string; placeholder: string }[] = [
-    { key: 'proofPoint', label: 'One real result you have produced', placeholder: '9 booked calls in 3 weeks for a 2-person agency in Leeds' },
-    { key: 'removedSacrifice', label: 'What they do NOT have to do', placeholder: 'without hiring a VA or posting every day' },
-    { key: 'timeToResult', label: 'How fast it happens', placeholder: 'inside the first 30 days' },
-    { key: 'freeGive', label: 'One useful thing you will give away free', placeholder: 'the 3-line profile audit I run before writing anything' },
-    { key: 'price', label: 'Your price', placeholder: '$197/mo' },
-    { key: 'priceAnchor', label: 'What it normally costs', placeholder: '$497/mo' },
-    { key: 'guarantee', label: 'Your guarantee', placeholder: '7 days, money back' },
-    { key: 'callLength', label: 'How long the call is', placeholder: '15 minutes' },
-    { key: 'callPromise', label: 'What they get on the call even if they never buy', placeholder: 'a written 30-day outreach plan' },
+const LEDGER_GROUPS: {
+    title: string;
+    fields: { key: keyof OfferLedger; label: string; placeholder: string; hint?: string; wide?: boolean }[];
+}[] = [
+    {
+        title: 'Results',
+        fields: [
+            { key: 'proofPoint', label: 'A real result you got for a client', placeholder: '9 booked calls in 3 weeks for a 2-person agency in Leeds', wide: true },
+            { key: 'removedSacrifice', label: "What they don't have to do", placeholder: 'without hiring a VA or posting every day' },
+            { key: 'timeToResult', label: 'How fast it happens', placeholder: 'inside the first 30 days' },
+        ],
+    },
+    {
+        title: 'Price',
+        fields: [
+            { key: 'price', label: 'Your price', placeholder: '$197/mo' },
+            { key: 'priceAnchor', label: 'What it normally costs', placeholder: '$497/mo' },
+            { key: 'guarantee', label: 'Your guarantee', placeholder: '7 days, money back' },
+        ],
+    },
+    {
+        title: 'The call',
+        fields: [
+            { key: 'callLength', label: 'How long the call is', placeholder: '15 minutes' },
+            { key: 'callPromise', label: "What they get on it, even if they don't buy", placeholder: 'a written 30-day outreach plan' },
+            {
+                key: 'freeGive',
+                label: "Something useful you'd give away free",
+                placeholder: 'the 3-line profile audit I run before writing anything',
+                hint: 'Lets some first DMs offer it instead of asking a question.',
+                wide: true,
+            },
+        ],
+    },
 ];
 
-// ─── Preset Picker ──────────────────────────────────────────────────────────
+const LEDGER_KEYS = LEDGER_GROUPS.flatMap((g) => g.fields.map((f) => f.key));
 
-interface PresetPickerProps {
-    onApply: (preset: NichePreset) => void;
+const ACCOUNT_TYPES: { value: AppConfig['accountType']; label: string }[] = [
+    { value: 'all', label: 'All accounts' },
+    { value: 'public', label: 'Public only' },
+    { value: 'private', label: 'Private only' },
+];
+
+const WEBHOOK_EVENTS = [
+    { key: 'replied' as const, label: 'Lead replied' },
+    { key: 'positiveReply' as const, label: 'Positive reply' },
+    { key: 'booked' as const, label: 'Call booked' },
+];
+
+// ─── Building blocks ────────────────────────────────────────────────────────
+
+const INPUT =
+    'w-full rounded-xl border border-white/10 bg-surface-raised px-4 py-2.5 text-body-sm text-white ' +
+    'placeholder:text-neutral-500 transition-colors hover:border-white/20 ' +
+    'focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/10';
+
+const TEXTAREA = `${INPUT} resize-y`;
+
+/** A generated prompt is text the model reads, so it is shown as such. */
+const PROMPT_TEXT =
+    'w-full rounded-xl border border-white/10 bg-surface px-4 py-3 font-mono text-meta leading-relaxed text-neutral-300 ' +
+    'resize-y transition-colors hover:border-white/20 focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/10';
+
+const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40';
+
+const Section: React.FC<{
+    id: string;
+    title: string;
+    description: React.ReactNode;
+    aside?: React.ReactNode;
+    children: React.ReactNode;
+}> = ({ id, title, description, aside, children }) => (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-6">
+        <div className="rounded-[1.5rem] p-[1px]" style={CARD_BEZEL.outer}>
+            <div className="rounded-[calc(1.5rem-1px)] bg-surface-sunken" style={CARD_BEZEL.inner}>
+                <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 px-5 pb-5 pt-6 sm:px-6">
+                    <div className="min-w-0 max-w-xl">
+                        <h2 id={`${id}-title`} className="text-base font-semibold tracking-tight text-white">{title}</h2>
+                        <p className="mt-1 text-meta text-neutral-400">{description}</p>
+                    </div>
+                    {aside}
+                </header>
+                <div className="divide-y divide-white/6 border-t border-white/6">{children}</div>
+            </div>
+        </div>
+    </section>
+);
+
+/** One ruled band inside a section. */
+const Group: React.FC<{ title?: string; children: React.ReactNode; className?: string }> = ({ title, children, className }) => (
+    <div className={`space-y-4 px-5 py-5 sm:px-6 ${className ?? ''}`}>
+        {title && <h3 className="text-meta font-semibold text-neutral-200">{title}</h3>}
+        {children}
+    </div>
+);
+
+const Field: React.FC<{
+    id: string;
+    label: string;
+    hint?: React.ReactNode;
+    className?: string;
+    children: React.ReactNode;
+}> = ({ id, label, hint, className, children }) => (
+    <div className={className}>
+        <label htmlFor={id} className="mb-1.5 block text-meta font-medium text-neutral-300">{label}</label>
+        {children}
+        {hint && <p id={`${id}-hint`} className="mt-1.5 text-meta text-neutral-400">{hint}</p>}
+    </div>
+);
+
+/** The Approval Queue's stage track, as a choice of one. */
+function Segmented<T extends string>({ labelledBy, value, options, onChange }: {
+    labelledBy: string;
+    value: T;
+    options: { value: T; label: string }[];
+    onChange: (value: T) => void;
+}) {
+    return (
+        <div
+            role="radiogroup"
+            aria-labelledby={labelledBy}
+            className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-full border border-white/6 bg-white/4 p-1"
+        >
+            {options.map((o) => {
+                const active = o.value === value;
+                return (
+                    <button
+                        key={o.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => onChange(o.value)}
+                        className={`rounded-full px-3.5 py-1.5 text-meta font-medium transition-colors ${FOCUS} ${
+                            active ? 'bg-surface text-white ring-1 ring-inset ring-white/12' : 'text-neutral-400 hover:text-white'
+                        }`}
+                    >
+                        {o.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
 }
 
-const PresetPicker: React.FC<PresetPickerProps> = ({ onApply }) => {
+/** The Inbox's Autopilot switch, without the pill around it. */
+const Switch: React.FC<{ checked: boolean; onChange: (on: boolean) => void; labelledBy: string; describedBy?: string }> = ({
+    checked, onChange, labelledBy, describedBy,
+}) => (
+    <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
+        onClick={() => onChange(!checked)}
+        className={`flex-none rounded-full p-1 ${FOCUS}`}
+    >
+        <span aria-hidden className={`relative block h-[18px] w-8 rounded-full transition-colors ${checked ? 'bg-white' : 'bg-white/15'}`}>
+            <span className={`absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full transition-transform duration-200 ${
+                checked ? 'translate-x-[14px] bg-surface' : 'bg-white'
+            }`} />
+        </span>
+    </button>
+);
+
+/**
+ * A generated prompt, folded. The line above it says whether it still follows
+ * the answers on this page; once the Operator types over it, it is theirs and
+ * the answers stop reaching it until they ask for a rebuild.
+ */
+const PromptEditor: React.FC<{
+    id: string;
+    title: string;
+    label: string;
+    value: string;
+    placeholder?: string;
+    status: string;
+    edited: boolean;
+    rebuildLabel: string;
+    onChange: (value: string) => void;
+    onRebuild: () => void;
+}> = ({ id, title, label, value, placeholder, status, edited, rebuildLabel, onChange, onRebuild }) => {
     const [open, setOpen] = useState(false);
-    const [applied, setApplied] = useState<string | null>(null);
-
-    const handleApply = (preset: NichePreset) => {
-        onApply(preset);
-        setApplied(preset.id);
-        setOpen(false);
-        setTimeout(() => setApplied(null), 3000);
-    };
-
     return (
-        <div className="bg-surface-raised border border-white/5 rounded-2xl overflow-hidden">
-            <button
-                onClick={() => setOpen(v => !v)}
-                className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/[0.02] transition-colors"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-                        <Zap className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">Quick-Start Niche Preset</h3>
-                        <p className="text-label text-neutral-400">Pick your niche to pre-fill all settings instantly</p>
-                    </div>
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                <div className="min-w-0 max-w-xl">
+                    <h3 className="text-meta font-semibold text-neutral-200">{title}</h3>
+                    <p className="mt-0.5 text-meta text-neutral-400">{status}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    {applied && (
-                        <span className="text-label text-white bg-white/10 border border-white/20 px-2.5 py-1 rounded-full font-medium">
-                            Applied ✓
-                        </span>
+                <div className="flex flex-wrap gap-2">
+                    {edited && (
+                        <button type="button" onClick={onRebuild} className={`${ROW_PILL} ${FOCUS}`}>
+                            <RefreshCw className="h-3.5 w-3.5" aria-hidden /> {rebuildLabel}
+                        </button>
                     )}
-                    <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+                    <button
+                        type="button"
+                        aria-expanded={open}
+                        aria-controls={id}
+                        onClick={() => setOpen((v) => !v)}
+                        className={`${ROW_PILL} ${FOCUS}`}
+                    >
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
+                        {open ? 'Hide the prompt' : 'Show the prompt'}
+                    </button>
                 </div>
-            </button>
-
+            </div>
             {open && (
-                <div className="px-6 pb-6 border-t border-white/5 pt-4">
-                    <p className="text-label text-neutral-400 mb-4">
-                        Selecting a preset fills your AI prompt, bio keywords, follower range, and suggested search terms. You can edit anything after.
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                        {NICHE_PRESETS.map(preset => (
-                            <button
-                                key={preset.id}
-                                onClick={() => handleApply(preset)}
-                                className="flex flex-col items-start gap-1.5 p-3.5 rounded-xl border border-white/6 bg-white/[0.02] hover:border-white/30 hover:bg-white/5 transition-colors duration-200 text-left group"
-                            >
-                                <span className="text-xl leading-none">{preset.emoji}</span>
-                                <span className="text-xs font-semibold text-white leading-snug group-hover:text-white transition-colors">
-                                    {preset.name}
-                                </span>
-                                <span className="text-label text-neutral-400 leading-snug">{preset.description}</span>
-                            </button>
-                        ))}
-                    </div>
+                <div>
+                    <label htmlFor={id} className="sr-only">{label}</label>
+                    <textarea
+                        id={id}
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                        rows={14}
+                        spellCheck={false}
+                        placeholder={placeholder}
+                        className={PROMPT_TEXT}
+                    />
                 </div>
             )}
         </div>
     );
 };
 
+/** Comma-separated keywords, kept as typed until the field is left. */
+const KeywordField: React.FC<{
+    id: string;
+    label: string;
+    hint: string;
+    placeholder: string;
+    value: string[];
+    onCommit: (keywords: string[]) => void;
+}> = ({ id, label, hint, placeholder, value, onCommit }) => (
+    <Field id={id} label={label} hint={hint}>
+        <input
+            // Remounts when the list changes from outside (a preset, an undo),
+            // which an uncontrolled field would otherwise never show.
+            key={value.join(',')}
+            id={id}
+            type="text"
+            defaultValue={value.join(', ')}
+            onBlur={(e) => onCommit(e.target.value.split(',').map((k) => k.trim()).filter(Boolean))}
+            placeholder={placeholder}
+            aria-describedby={`${id}-hint`}
+            className={INPUT}
+        />
+    </Field>
+);
+
+/** The section list: a column beside the page on wide screens, a row above it on narrow ones. */
+const SectionNav: React.FC = () => {
+    const [active, setActive] = useState<string>(SECTIONS[0].id);
+
+    useEffect(() => {
+        if (typeof IntersectionObserver === 'undefined') return;
+        const els = SECTIONS.map((s) => document.getElementById(s.id)).filter((el): el is HTMLElement => !!el);
+        // A thin band a fifth of the way down the viewport: the section
+        // crossing it is the one being read.
+        const io = new IntersectionObserver((entries) => {
+            const hit = entries
+                .filter((e) => e.isIntersecting)
+                .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+            if (hit) setActive(hit.target.id);
+        }, { rootMargin: '-20% 0px -75% 0px' });
+        els.forEach((el) => io.observe(el));
+        return () => io.disconnect();
+    }, []);
+
+    const go = (id: string) => {
+        setActive(id);
+        const el = document.getElementById(id);
+        if (!el) return;
+        const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        el.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    };
+
+    return (
+        <nav aria-label="Settings sections" className="lg:sticky lg:top-8 lg:self-start">
+            <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0">
+                {SECTIONS.map((s) => {
+                    const current = s.id === active;
+                    return (
+                        <li key={s.id} className="flex-none">
+                            <button
+                                type="button"
+                                onClick={() => go(s.id)}
+                                aria-current={current ? 'location' : undefined}
+                                className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-meta font-medium transition-colors lg:w-full lg:text-left ${FOCUS} ${
+                                    current ? 'bg-white/6 text-white' : 'text-neutral-400 hover:text-white'
+                                }`}
+                            >
+                                {s.label}
+                            </button>
+                        </li>
+                    );
+                })}
+            </ul>
+        </nav>
+    );
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateConfig, isOwner = false }) => {
     const { limits } = usePlan();
-    const dailyCap = sendCapOf(config);
     const toast = useToast();
-    const [wizardStep, setWizardStep] = useState<WizardStep>(
-        config.onboardingComplete ? 5 : 1
-    );
-    const [wizard, setWizard] = useState<WizardData>(() => identityOf(config));
+    const dailyCap = sendCapOf(config);
+    const identity = identityOf(config);
+
+    const [presetsOpen, setPresetsOpen] = useState(false);
+    const [applied, setApplied] = useState<{ name: string; before: AppConfig } | null>(null);
 
     /**
      * What you type is what the AI uses. Every answer saves as it is typed, and
      * both prompts follow it unless the Operator edited one by hand
-     * (`withIdentity`). Answers used to wait in this panel for "Generate
-     * Prompt", so an Operator who jumped to Review or left the page kept a reply
-     * assistant that spoke for MagnetEngine.
+     * (`withIdentity`). The identity is read off the config on every render
+     * rather than copied into this panel, so the two can never disagree.
      */
-    const updateWizard = (patch: Partial<WizardData>) => {
-        const next = { ...wizard, ...patch };
-        setWizard(next);
-        onUpdateConfig(withIdentity(config, next));
+    const updateIdentity = (patch: Partial<PromptIdentity>) => {
+        onUpdateConfig(withIdentity(config, { ...identity, ...patch }));
     };
 
-    const handleApplyPreset = (preset: NichePreset) => {
+    const applyPreset = (preset: NichePreset) => {
         const p = preset.config;
-        const newWizard: WizardData = {
-            // A preset describes a niche, never the Operator — so their identity
-            // and their Offer Ledger survive it untouched. A preset that
-            // overwrote the Ledger would hand everyone the same invented proof.
-            ...wizard,
-            businessNiche: p.businessNiche ?? wizard.businessNiche,
-            targetAudience: p.targetAudience ?? wizard.targetAudience,
-            valueProposition: p.valueProposition ?? wizard.valueProposition,
-            dmTone: p.dmTone ?? wizard.dmTone,
+        // A preset describes a niche, never the Operator — so their identity
+        // and their Offer Ledger survive it untouched. A preset that
+        // overwrote the Ledger would hand everyone the same invented proof.
+        const next: PromptIdentity = {
+            ...identity,
+            businessNiche: p.businessNiche ?? identity.businessNiche,
+            targetAudience: p.targetAudience ?? identity.targetAudience,
+            valueProposition: p.valueProposition ?? identity.valueProposition,
+            dmTone: p.dmTone ?? identity.dmTone,
         };
-        setWizard(newWizard);
-
-        // Rebuild the DM prompt from the merged wizard data so presets benefit
-        // from the universal high-reply prompt too; the reply persona follows
-        // unless it was written by hand. `withIdentity` carries every
-        // PromptIdentity field, Ledger included — listing them by hand is how
-        // the Ledger would silently stop being persisted.
-        const updatedConfig: AppConfig = {
-            ...withIdentity(config, newWizard, { dm: true }),
+        setApplied({ name: preset.name, before: config });
+        setPresetsOpen(false);
+        // `withIdentity` carries every PromptIdentity field, Ledger included;
+        // listing them by hand is how the Ledger would silently stop being
+        // persisted.
+        onUpdateConfig({
+            ...withIdentity(config, next, { dm: true }),
             includeKeywords: p.includeKeywords ?? config.includeKeywords,
             excludeKeywords: p.excludeKeywords ?? config.excludeKeywords,
             minFollowers: p.minFollowers ?? config.minFollowers,
             maxFollowers: p.maxFollowers ?? config.maxFollowers,
             onboardingComplete: true,
-        };
-        onUpdateConfig(updatedConfig);
-        setWizardStep(5); // jump to review so user sees what was generated
+        });
     };
 
-    const handleGeneratePrompt = () => {
-        onUpdateConfig({ ...withIdentity(config, wizard, { dm: true }), onboardingComplete: true });
-        setWizardStep(5);
+    const undoPreset = () => {
+        if (!applied) return;
+        onUpdateConfig(applied.before);
+        setApplied(null);
     };
 
+    const presets = NICHE_PRESETS.filter((p) => isOwner || p.id !== 'magnetengine');
+    const hasIdentity = Boolean(identity.businessName.trim() || identity.valueProposition.trim() || identity.targetAudience.trim());
+    const dmFollows = dmFollowsIdentity(config);
     const replyFollows = replyFollowsIdentity(config);
-    const hasIdentity = Boolean(config.businessName?.trim() || config.valueProposition?.trim() || config.targetAudience?.trim());
-
-    const handleUpdateKeywords = (type: 'includeKeywords' | 'excludeKeywords', value: string) => {
-        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
-        onUpdateConfig({ ...config, [type]: keywords });
-    };
+    const ledgerFilled = LEDGER_KEYS.filter((k) => identity[k]?.trim()).length;
+    const tone = TONE_OPTIONS.find((t) => t.value === identity.dmTone) ?? TONE_OPTIONS[0];
+    const webhookEvents = config.webhookEvents ?? { replied: false, positiveReply: true, booked: true };
+    const webhookInvalid = !!config.webhookUrl && !config.webhookUrl.startsWith('https://');
+    const creditsRunOut = dailyCap * WORKING_DAYS > limits.maxDMGenerations;
+    const monthly = limits.maxDMGenerations.toLocaleString('en-US');
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-10">
+            <SectionNav />
 
-            {/* ── Niche Preset Picker ───────────────────────────────────── */}
-            <PresetPicker onApply={handleApplyPreset} />
+            <div className="mt-4 space-y-6 lg:mt-0">
 
-            {/* ── AI Onboarding Wizard ──────────────────────────────────── */}
-            <div className="bg-surface-raised border border-white/5 rounded-2xl overflow-hidden">
-                {/* Wizard header */}
-                <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">AI Prompt Wizard</h3>
-                        <p className="text-label text-neutral-400">Tell us about your business and we'll craft the perfect outreach prompt</p>
-                    </div>
-                    {config.onboardingComplete && (
-                        <span className="ml-auto flex items-center gap-1 text-label text-white bg-white/10 border border-white/20 px-2.5 py-1 rounded-full">
-                            <CheckCircle className="w-3 h-3" /> Configured
-                        </span>
-                    )}
-                </div>
-
-                {/* Step indicator */}
-                <div className="flex px-6 pt-5 gap-2">
-                    {STEP_LABELS.map((label, i) => {
-                        const step = (i + 1) as WizardStep;
-                        const done = step < wizardStep;
-                        const active = step === wizardStep;
-                        return (
-                            <React.Fragment key={label}>
-                                <button
-                                    onClick={() => setWizardStep(step)}
-                                    className={`flex flex-col items-center gap-1 flex-1 transition-all ${active ? 'opacity-100' : 'opacity-50 hover:opacity-75'}`}
-                                >
-                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
-                                        done ? 'bg-white text-surface' :
-                                        active ? 'bg-white text-surface' :
-                                        'bg-white/8 text-neutral-400'
-                                    }`}>
-                                        {done ? <CheckCircle className="w-3.5 h-3.5" /> : i + 1}
-                                    </div>
-                                    <span className={`text-label font-medium ${active ? 'text-white' : 'text-neutral-400'}`}>{label}</span>
-                                </button>
-                                {i < STEP_LABELS.length - 1 && (
-                                    <div className={`flex-1 h-[1px] mt-3.5 transition-colors ${done ? 'bg-white/40' : 'bg-white/8'}`} />
-                                )}
-                            </React.Fragment>
-                        );
-                    })}
-                </div>
-
-                {/* Step content */}
-                <div className="px-6 py-5">
-                    {wizardStep === 1 && (
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-white mb-4">Tell us about your business</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label htmlFor="settingspa-your-name" className="block text-xs text-neutral-400 mb-1.5">Your Name</label>
-                                    <input id="settingspa-your-name"
-                                        type="text"
-                                        value={wizard.founderName}
-                                        onChange={e => updateWizard({ founderName: e.target.value })}
-                                        placeholder="e.g. Marcus"
-                                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                    />
-                                    <p className="text-label text-neutral-400 mt-1">The DMs are written as if from you.</p>
-                                </div>
-                                <div>
-                                    <label htmlFor="settingspa-your-role" className="block text-xs text-neutral-400 mb-1.5">Your Role</label>
-                                    <input id="settingspa-your-role"
-                                        type="text"
-                                        value={wizard.founderRole}
-                                        onChange={e => updateWizard({ founderRole: e.target.value })}
-                                        placeholder="e.g. founder, coach, consultant"
-                                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label htmlFor="settingspa-business-agency-name" className="block text-xs text-neutral-400 mb-1.5">Business / Agency Name</label>
-                                <input id="settingspa-business-agency-name"
-                                    type="text"
-                                    value={wizard.businessName}
-                                    onChange={e => updateWizard({ businessName: e.target.value })}
-                                    placeholder="e.g. Apex Growth Agency"
-                                    className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="settingspa-your-niche-industry" className="block text-xs text-neutral-400 mb-1.5">Your Niche / Industry</label>
-                                <input id="settingspa-your-niche-industry"
-                                    type="text"
-                                    value={wizard.businessNiche}
-                                    onChange={e => updateWizard({ businessNiche: e.target.value })}
-                                    placeholder="e.g. Social media marketing for e-commerce brands"
-                                    className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="settingspa-ideal-target-audience-icp" className="block text-xs text-neutral-400 mb-1.5">Ideal Target Audience (ICP)</label>
-                                <input id="settingspa-ideal-target-audience-icp"
-                                    type="text"
-                                    value={wizard.targetAudience}
-                                    onChange={e => updateWizard({ targetAudience: e.target.value })}
-                                    placeholder="e.g. Founders of 7-figure DTC brands with 10k-500k followers"
-                                    className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {wizardStep === 2 && (
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-white mb-4">What value do you deliver?</h4>
-                            <div>
-                                <label htmlFor="settingspa-core-value-proposition" className="block text-xs text-neutral-400 mb-1.5">Core Value Proposition</label>
-                                <textarea id="settingspa-core-value-proposition"
-                                    value={wizard.valueProposition}
-                                    onChange={e => updateWizard({ valueProposition: e.target.value })}
-                                    rows={3}
-                                    placeholder="e.g. We run paid social ads that generate $3-5 for every $1 spent, guaranteed in 90 days or you don't pay."
-                                    className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 resize-none"
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="settingspa-example-of-a-great-dm" className="block text-xs text-neutral-400 mb-1.5">Example of a great DM you've sent (optional)</label>
-                                <textarea id="settingspa-example-of-a-great-dm"
-                                    value={wizard.exampleDM}
-                                    onChange={e => updateWizard({ exampleDM: e.target.value })}
-                                    rows={3}
-                                    placeholder="Paste a real DM that got a positive reply — the AI will match its style"
-                                    className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 resize-none"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {wizardStep === 3 && (
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-white mb-1">What are you actually allowed to say?</h4>
-                            <p className="text-label text-neutral-400 leading-relaxed mb-4">
-                                Your prompts refuse to invent a number, which is the right instinct and useless
-                                without this. Leave a field blank and the AI will never mention it — it can only
-                                say what you type here. Round down, never up: a claim that sounds too good reads
-                                as a scam and costs you the reply a duller, believable one would have earned.
-                            </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {LEDGER_FIELDS.map(field => (
-                                    <div key={field.key} className={field.key === 'callPromise' ? 'sm:col-span-2' : undefined}>
-                                        <label htmlFor={`ledger-${field.key}`} className="block text-xs text-neutral-400 mb-1.5">{field.label}</label>
-                                        <input
-                                            id={`ledger-${field.key}`}
-                                            value={wizard[field.key] ?? ''}
-                                            onChange={e => updateWizard({ [field.key]: e.target.value } as Partial<WizardData>)}
-                                            placeholder={field.placeholder}
-                                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {wizardStep === 4 && (
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-white mb-4">Choose your outreach tone</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                {TONE_OPTIONS.map(tone => (
-                                    <button
-                                        key={tone.value}
-                                        onClick={() => updateWizard({ dmTone: tone.value })}
-                                        className={`text-left p-4 rounded-xl border transition-colors ${
-                                            wizard.dmTone === tone.value
-                                                ? 'bg-white/10 border-white/30 text-white'
-                                                : 'bg-white/3 border-white/5 text-neutral-400 hover:border-white/15 hover:text-neutral-200'
-                                        }`}
-                                    >
-                                        <div className="font-medium text-sm mb-1">{tone.label}</div>
-                                        <div className="text-label text-neutral-400 leading-relaxed">{tone.description}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {wizardStep === 5 && (
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-white mb-2">Your AI system prompt</h4>
-                            <p className="text-label text-neutral-400 mb-3">
-                                Generated from your wizard answers. You can edit it directly — changes save immediately.
-                            </p>
-                            <textarea
-                                value={config.systemPrompt}
-                                onChange={e => onUpdateConfig({ ...config, systemPrompt: e.target.value })}
-                                rows={10}
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-xs text-neutral-300 font-mono focus:outline-none focus:ring-1 focus:ring-white/50 resize-none leading-relaxed"
-                            />
-                            <button
-                                onClick={() => setWizardStep(1)}
-                                className="flex items-center gap-2 text-xs text-neutral-400 hover:text-neutral-300 transition-colors"
-                            >
-                                <RefreshCw className="w-3.5 h-3.5" /> Redo wizard
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* Wizard navigation */}
-                {wizardStep < 5 && (
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-white/5">
+                {/* ── Your business ─────────────────────────────────────── */}
+                <Section
+                    id="settings-business"
+                    title="Your business"
+                    description="Your DMs and replies are written as you, about what you sell."
+                    aside={
                         <button
-                            onClick={() => setWizardStep(prev => Math.max(1, prev - 1) as WizardStep)}
-                            disabled={wizardStep === 1}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            type="button"
+                            aria-expanded={presetsOpen}
+                            aria-controls="settings-presets"
+                            onClick={() => setPresetsOpen((v) => !v)}
+                            className={`${ROW_PILL} ${FOCUS}`}
                         >
-                            <ChevronLeft className="w-4 h-4" /> Back
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${presetsOpen ? 'rotate-180' : ''}`} aria-hidden />
+                            Fill from a niche
                         </button>
+                    }
+                >
+                    {presetsOpen && (
+                        <Group>
+                            <p className="text-meta text-neutral-400">
+                                Fills what you do, who you help, what they get and your tone, plus your lead filters.
+                                Your name, business name and claims stay as they are.
+                            </p>
+                            <ul id="settings-presets" className="grid gap-x-6 sm:grid-cols-2">
+                                {presets.map((preset) => (
+                                    <li key={preset.id} className="border-t border-white/6">
+                                        <button
+                                            type="button"
+                                            onClick={() => applyPreset(preset)}
+                                            className={`group -mx-2 w-[calc(100%+1rem)] rounded-xl px-2 py-3 text-left transition-colors hover:bg-white/4 ${FOCUS}`}
+                                        >
+                                            <span className="block text-body-sm font-medium text-neutral-100 group-hover:text-white">{preset.name}</span>
+                                            <span className="mt-0.5 block text-meta text-neutral-400">{preset.description}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Group>
+                    )}
 
-                        {wizardStep < 4 ? (
-                            <button
-                                onClick={() => setWizardStep(prev => (prev + 1) as WizardStep)}
-                                className="flex items-center gap-2 px-5 py-2 bg-white/8 hover:bg-white/12 border border-white/10 rounded-xl text-sm text-white font-medium transition-colors"
-                            >
-                                Next <ChevronRight className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleGeneratePrompt}
-                                className="flex items-center gap-2 px-5 py-2 bg-white hover:bg-neutral-200 text-surface font-semibold rounded-xl text-sm transition-colors"
-                            >
-                                <Sparkles className="w-4 h-4" /> Generate Prompt
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* ── Lead Filtering Rules ─────────────────────────────────────── */}
-            <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                        <SettingsIcon className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">Lead Filtering Rules</h3>
-                        <p className="text-label text-neutral-400">Applied after scraping to qualify leads</p>
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="settingspa-must-include-keywords-in-bio" className="block text-xs text-neutral-400 mb-1.5">Must Include Keywords (in bio/name)</label>
-                        <input id="settingspa-must-include-keywords-in-bio"
-                            type="text"
-                            defaultValue={config.includeKeywords.join(', ')}
-                            onBlur={e => handleUpdateKeywords('includeKeywords', e.target.value)}
-                            placeholder="founder, CEO, agency, entrepreneur"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                        />
-                    </div>
-
-                    <div>
-                        <label htmlFor="settingspa-exclude-keywords" className="block text-xs text-neutral-400 mb-1.5">Exclude Keywords</label>
-                        <input id="settingspa-exclude-keywords"
-                            type="text"
-                            defaultValue={config.excludeKeywords.join(', ')}
-                            onBlur={e => handleUpdateKeywords('excludeKeywords', e.target.value)}
-                            placeholder="bot, spam, fake, giveaway"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="settingspa-min-followers" className="block text-xs text-neutral-400 mb-1.5">Min Followers</label>
-                            <NumberField id="settingspa-min-followers"
-                                min={0}
-                                value={config.minFollowers}
-                                onCommit={n => onUpdateConfig({ ...config, minFollowers: n })}
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
-                            />
+                    {applied && (
+                        <div className="px-5 py-4 sm:px-6">
+                            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                                <p className="text-body-sm text-neutral-300">
+                                    Filled from <span className="text-white">{applied.name}</span>. Check the answers below.
+                                </p>
+                                <button type="button" onClick={undoPreset} className={`${ROW_PILL} ${FOCUS}`}>
+                                    <Undo2 className="h-3.5 w-3.5" aria-hidden /> Undo
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <label htmlFor="settingspa-max-followers" className="block text-xs text-neutral-400 mb-1.5">Max Followers</label>
-                            <NumberField id="settingspa-max-followers"
-                                min={0}
-                                value={config.maxFollowers}
-                                onCommit={n => onUpdateConfig({ ...config, maxFollowers: n })}
-                                className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
-                            />
-                        </div>
-                    </div>
+                    )}
 
-                    <div>
-                        <label htmlFor="settingspa-account-type-filter" className="block text-xs text-neutral-400 mb-1.5">Account Type Filter</label>
-                        <select id="settingspa-account-type-filter"
-                            value={config.accountType}
-                            onChange={e => onUpdateConfig({ ...config, accountType: e.target.value as any })}
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
+                    <Group>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field id="settings-founder-name" label="Your first name" hint="DMs are written as if from you.">
+                                <input
+                                    id="settings-founder-name"
+                                    type="text"
+                                    value={identity.founderName}
+                                    onChange={(e) => updateIdentity({ founderName: e.target.value })}
+                                    placeholder="Marcus"
+                                    autoComplete="given-name"
+                                    aria-describedby="settings-founder-name-hint"
+                                    className={INPUT}
+                                />
+                            </Field>
+                            <Field id="settings-founder-role" label="Your role">
+                                <input
+                                    id="settings-founder-role"
+                                    type="text"
+                                    value={identity.founderRole}
+                                    onChange={(e) => updateIdentity({ founderRole: e.target.value })}
+                                    placeholder="founder, coach, consultant"
+                                    className={INPUT}
+                                />
+                            </Field>
+                        </div>
+                        <Field id="settings-business-name" label="Business name" hint="Kept out of first DMs. Replies use it.">
+                            <input
+                                id="settings-business-name"
+                                type="text"
+                                value={identity.businessName}
+                                onChange={(e) => updateIdentity({ businessName: e.target.value })}
+                                placeholder="Apex Growth"
+                                autoComplete="organization"
+                                aria-describedby="settings-business-name-hint"
+                                className={INPUT}
+                            />
+                        </Field>
+                        <Field id="settings-niche" label="What you do">
+                            <input
+                                id="settings-niche"
+                                type="text"
+                                value={identity.businessNiche}
+                                onChange={(e) => updateIdentity({ businessNiche: e.target.value })}
+                                placeholder="Paid social for e-commerce brands"
+                                className={INPUT}
+                            />
+                        </Field>
+                        <Field id="settings-audience" label="Who you help">
+                            <input
+                                id="settings-audience"
+                                type="text"
+                                value={identity.targetAudience}
+                                onChange={(e) => updateIdentity({ targetAudience: e.target.value })}
+                                placeholder="Founders of 7-figure DTC brands"
+                                className={INPUT}
+                            />
+                        </Field>
+                        <Field
+                            id="settings-outcome"
+                            label="What they get"
+                            hint="The result, in their words. A first DM turns it into its question, never a pitch."
                         >
-                            <option value="all">All accounts</option>
-                            <option value="public">Public only</option>
-                            <option value="private">Private only</option>
-                        </select>
-                    </div>
-
-                    <div className="pt-2 border-t border-white/5">
-                        <label htmlFor="settingspa-daily-send-limit" className="block text-xs text-neutral-400 mb-1.5">
-                            Daily Send Limit
-                        </label>
-                        <div className="flex items-center gap-3">
-                            <NumberField id="settingspa-daily-send-limit"
-                                min={1}
-                                max={limits.maxDailyCap}
-                                value={dailyCap}
-                                onCommit={n => onUpdateConfig({ ...config, dailySendCap: n })}
-                                title={`Up to ${limits.maxDailyCap} a day on your plan`}
-                                className="w-28 bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/50"
+                            <textarea
+                                id="settings-outcome"
+                                value={identity.valueProposition}
+                                onChange={(e) => updateIdentity({ valueProposition: e.target.value })}
+                                rows={2}
+                                placeholder="More booked calls every week, without buying ads"
+                                aria-describedby="settings-outcome-hint"
+                                className={TEXTAREA}
                             />
-                            <span className="text-xs text-neutral-400">DMs per day</span>
+                        </Field>
+                    </Group>
+                </Section>
+
+                {/* ── What the AI may claim (the Offer Ledger) ─────────────── */}
+                <Section
+                    id="settings-claims"
+                    title="What the AI may claim"
+                    description="The AI only states a result, price or number you typed here. A blank field never comes up. Round down, never up."
+                    aside={
+                        <p className="text-meta text-neutral-400">
+                            <span className="font-mono text-neutral-200">{ledgerFilled}</span> of {LEDGER_KEYS.length} filled
+                        </p>
+                    }
+                >
+                    {LEDGER_GROUPS.map((group) => (
+                        <Group key={group.title} title={group.title}>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                {group.fields.map((f) => (
+                                    <Field
+                                        key={f.key}
+                                        id={`ledger-${f.key}`}
+                                        label={f.label}
+                                        hint={f.hint}
+                                        className={f.wide ? 'sm:col-span-2' : undefined}
+                                    >
+                                        <input
+                                            id={`ledger-${f.key}`}
+                                            type="text"
+                                            value={identity[f.key] ?? ''}
+                                            onChange={(e) => updateIdentity({ [f.key]: e.target.value } as Partial<PromptIdentity>)}
+                                            placeholder={f.placeholder}
+                                            aria-describedby={f.hint ? `ledger-${f.key}-hint` : undefined}
+                                            className={INPUT}
+                                        />
+                                    </Field>
+                                ))}
+                            </div>
+                        </Group>
+                    ))}
+                </Section>
+
+                {/* ── How DMs sound ──────────────────────────────────────── */}
+                <Section
+                    id="settings-voice"
+                    title="How DMs sound"
+                    description="Each first DM is one or two short sentences: one detail from their profile and one question."
+                >
+                    <Group>
+                        <p id="settings-tone-label" className="text-meta font-medium text-neutral-300">Tone</p>
+                        <div className="space-y-2">
+                            <Segmented
+                                labelledBy="settings-tone-label"
+                                value={identity.dmTone}
+                                options={TONE_OPTIONS}
+                                onChange={(dmTone) => updateIdentity({ dmTone })}
+                            />
+                            <p className="text-meta text-neutral-400">{tone.description}</p>
                         </div>
-                        {/* Two meters, two different jobs: this cap is about not
-                            tripping Instagram, the monthly credits are about
-                            what the Owner pays the AI providers. They are not
-                            the same number and should not be merged into one —
-                            but the Operator picks the cap HERE, and until now
-                            nothing on this screen mentioned that a cap they are
-                            allowed to set can spend the month in two days. */}
-                        {dailyCap * WORKING_DAYS > limits.maxDMGenerations && (
-                            <p className="mt-2 text-label text-white/90 leading-relaxed">
-                                At {dailyCap}/day you would spend all {limits.maxDMGenerations} monthly DM credits in
-                                about {Math.max(1, Math.round(limits.maxDMGenerations / dailyCap))} days. Around{' '}
-                                <strong>{Math.floor(limits.maxDMGenerations / WORKING_DAYS)}/day</strong> lasts a full month.
+                    </Group>
+                    <Group>
+                        <Field
+                            id="settings-example-dm"
+                            label="A DM that got you a reply (optional)"
+                            hint="The AI matches its tone and length, never its words."
+                        >
+                            <textarea
+                                id="settings-example-dm"
+                                value={identity.exampleDM}
+                                onChange={(e) => updateIdentity({ exampleDM: e.target.value })}
+                                rows={3}
+                                placeholder="Paste one you actually sent"
+                                aria-describedby="settings-example-dm-hint"
+                                className={TEXTAREA}
+                            />
+                        </Field>
+                    </Group>
+                    <Group>
+                        <PromptEditor
+                            id="settings-dm-prompt"
+                            title="The DM prompt"
+                            label="DM prompt"
+                            value={config.systemPrompt}
+                            status={!dmFollows
+                                ? 'You edited this prompt, so changes on this page no longer reach it.'
+                                : hasIdentity
+                                    ? 'Written from your answers on this page, and rewritten when you change them.'
+                                    : 'Written from this page. Fill in Your business so it speaks for you.'}
+                            edited={!dmFollows}
+                            rebuildLabel="Rebuild from my answers"
+                            onChange={(systemPrompt) => onUpdateConfig({ ...config, systemPrompt })}
+                            onRebuild={() => {
+                                onUpdateConfig(withIdentity(config, identity, { dm: true }));
+                                toast.success('DM prompt rebuilt from your answers.');
+                            }}
+                        />
+                    </Group>
+                </Section>
+
+                {/* ── Lead filters ──────────────────────────────────────── */}
+                <Section
+                    id="settings-filters"
+                    title="Lead filters"
+                    description="Every search is checked against these before a DM is written."
+                >
+                    <Group>
+                        <KeywordField
+                            id="settings-include"
+                            label="Name or bio must mention"
+                            hint="Any one of these words. Leave it blank to keep everyone."
+                            placeholder="founder, CEO, agency, coach"
+                            value={config.includeKeywords}
+                            onCommit={(includeKeywords) => onUpdateConfig({ ...config, includeKeywords })}
+                        />
+                        <KeywordField
+                            id="settings-exclude"
+                            label="Skip anyone whose name or bio mentions"
+                            hint="Checked before a profile's details load, so a skipped person costs you nothing."
+                            placeholder="giveaway, crypto, follow for follow"
+                            value={config.excludeKeywords}
+                            onCommit={(excludeKeywords) => onUpdateConfig({ ...config, excludeKeywords })}
+                        />
+                    </Group>
+                    <Group>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field id="settings-min-followers" label="Followers, at least">
+                                <NumberField
+                                    id="settings-min-followers"
+                                    min={0}
+                                    value={config.minFollowers}
+                                    onCommit={(minFollowers) => onUpdateConfig({ ...config, minFollowers })}
+                                    className={`${INPUT} font-mono`}
+                                />
+                            </Field>
+                            <Field id="settings-max-followers" label="Followers, at most">
+                                <NumberField
+                                    id="settings-max-followers"
+                                    min={0}
+                                    value={config.maxFollowers}
+                                    onCommit={(maxFollowers) => onUpdateConfig({ ...config, maxFollowers })}
+                                    className={`${INPUT} font-mono`}
+                                />
+                            </Field>
+                        </div>
+                        <div className="space-y-1.5">
+                            <p id="settings-account-type-label" className="text-meta font-medium text-neutral-300">Account type</p>
+                            <Segmented
+                                labelledBy="settings-account-type-label"
+                                value={config.accountType}
+                                options={ACCOUNT_TYPES}
+                                onChange={(accountType) => onUpdateConfig({ ...config, accountType })}
+                            />
+                        </div>
+                    </Group>
+                </Section>
+
+                {/* ── Sending ───────────────────────────────────────────── */}
+                <Section
+                    id="settings-sending"
+                    title="Sending"
+                    description="The extension sends from your own Instagram, one at a time with a pause between each, up to this many a day."
+                >
+                    <Group>
+                        <Field
+                            id="settings-daily-cap"
+                            label="Daily limit"
+                            hint={<>Up to <span className="font-mono text-neutral-300">{limits.maxDailyCap}</span> a day on your plan. Your plan also writes <span className="font-mono text-neutral-300">{monthly}</span> DMs a month.</>}
+                        >
+                            <div className="flex items-center gap-3">
+                                <NumberField
+                                    id="settings-daily-cap"
+                                    min={1}
+                                    max={limits.maxDailyCap}
+                                    value={dailyCap}
+                                    onCommit={(dailySendCap) => onUpdateConfig({ ...config, dailySendCap })}
+                                    aria-describedby="settings-daily-cap-hint"
+                                    className={`${INPUT} w-28 font-mono`}
+                                />
+                                <span className="text-meta text-neutral-400">DMs a day</span>
+                            </div>
+                        </Field>
+                        {/* Two meters, two jobs: the cap paces sending so the
+                            account isn't flagged; the monthly credits are what
+                            the Owner pays the AI providers. Not merged, but a
+                            cap the Operator may set can spend the month early,
+                            and this is where they set it. */}
+                        {creditsRunOut && (
+                            <p role="status" className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3 text-body-sm text-neutral-300">
+                                At <span className="font-mono text-white">{dailyCap}</span> a day, the month's{' '}
+                                <span className="font-mono text-white">{monthly}</span> DMs run out in about{' '}
+                                <span className="font-mono text-white">{Math.max(1, Math.round(limits.maxDMGenerations / dailyCap))}</span> days.
+                                About <span className="font-mono text-white">{Math.floor(limits.maxDMGenerations / WORKING_DAYS)}</span> a day lasts the month.
                             </p>
                         )}
-                        <p className="mt-1.5 text-label text-neutral-400 leading-relaxed">
-                            This cap paces sending so Instagram doesn't flag the account. Separately, your plan
-                            includes {limits.maxDMGenerations} AI-written DMs a month.
-                        </p>
-                    </div>
-                </div>
-            </div>
+                    </Group>
+                </Section>
 
-            {/* ── Booking Link ─────────────────────────────────────────────── */}
-            <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                        <CalendarClock className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">Booking Link</h3>
-                        <p className="text-label text-neutral-400">Inserted into your reply battlecards in the Approval Queue</p>
-                    </div>
-                </div>
-                <div>
-                    <label htmlFor="settingspa-calendly-booking-page-url" className="block text-xs text-neutral-400 mb-1.5">Calendly / booking page URL</label>
-                    <input id="settingspa-calendly-booking-page-url"
-                        type="url"
-                        value={config.calendarLink ?? ''}
-                        onChange={e => onUpdateConfig({ ...config, calendarLink: e.target.value })}
-                        placeholder="https://calendly.com/yourname/15min"
-                        className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                    />
-                </div>
-            </div>
+                {/* ── Replies and booking ───────────────────────────────── */}
+                <Section
+                    id="settings-replies"
+                    title={INBOX_PAUSED ? 'Booking link' : 'Replies and booking'}
+                    description={INBOX_PAUSED
+                        ? 'Where people go to book a call with you.'
+                        : 'How the AI answers people who write back, and where it sends them to book.'}
+                >
+                    <Group>
+                        <Field
+                            id="settings-booking-link"
+                            label="Booking link"
+                            hint={INBOX_PAUSED ? undefined : 'The reply assistant shares it once someone is interested.'}
+                        >
+                            <input
+                                id="settings-booking-link"
+                                type="url"
+                                inputMode="url"
+                                value={config.calendarLink ?? ''}
+                                onChange={(e) => onUpdateConfig({ ...config, calendarLink: e.target.value })}
+                                placeholder="https://calendly.com/yourname/15min"
+                                aria-describedby={INBOX_PAUSED ? undefined : 'settings-booking-link-hint'}
+                                className={INPUT}
+                            />
+                        </Field>
+                    </Group>
 
-            {/* ── AI Reply Assistant (Inbox) — `info`, it configures the AI ──
-                Hidden with the Inbox while INBOX_PAUSED is on. */}
-            {!INBOX_PAUSED && (
-            <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                        <Bot className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">AI Reply Assistant</h3>
-                        <p className="text-label text-neutral-400">How the AI answers inbound DMs in your Inbox and books calls</p>
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="settingspa-reply-persona-amp-instructions" className="block text-xs text-neutral-400 mb-1.5">Reply persona &amp; instructions</label>
-                        <textarea id="settingspa-reply-persona-amp-instructions"
-                            value={config.replySystemPrompt ?? ''}
-                            onChange={e => onUpdateConfig({ ...config, replySystemPrompt: e.target.value })}
-                            rows={8}
-                            placeholder="Describe how the AI should reply to prospects, handle objections, and steer toward booking a call…"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-xs text-neutral-300 font-mono focus:outline-none focus:ring-1 focus:ring-white/50 resize-none leading-relaxed"
-                        />
-                        <div className="mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                            <p className="max-w-xl text-label text-neutral-400 leading-relaxed">
-                                {!replyFollows
-                                    ? 'You edited this script, so changes to your business info no longer reach it.'
-                                    : hasIdentity
-                                        ? 'Written from your answers in the AI Prompt Wizard above, and rewritten when you change them.'
-                                        : 'Fill in the AI Prompt Wizard above and this script will speak for your business and your offer.'}
-                                {' '}Your booking link (set above) is shared automatically once a prospect shows interest.
-                            </p>
-                            {!replyFollows && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        onUpdateConfig(withIdentity(config, identityOf(config), { reply: true }));
+                    {!INBOX_PAUSED && (
+                        <>
+                            <Group>
+                                <div className="flex items-start justify-between gap-6">
+                                    <div className="min-w-0 max-w-xl">
+                                        <h3 id="settings-autopilot-label" className="text-meta font-semibold text-neutral-200">Autopilot</h3>
+                                        <p id="settings-autopilot-hint" className="mt-0.5 text-meta text-neutral-400">
+                                            {config.autopilot
+                                                ? 'On. The AI answers new messages without waiting for you, while a dashboard tab is open, paced by your daily limit.'
+                                                : 'Off. Every reply waits for you to approve it in the Inbox.'}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={!!config.autopilot}
+                                        onChange={(autopilot) => onUpdateConfig({ ...config, autopilot })}
+                                        labelledBy="settings-autopilot-label"
+                                        describedBy="settings-autopilot-hint"
+                                    />
+                                </div>
+                            </Group>
+                            <Group>
+                                <PromptEditor
+                                    id="settings-reply-prompt"
+                                    title="The reply script"
+                                    label="Reply persona and instructions"
+                                    value={config.replySystemPrompt ?? ''}
+                                    placeholder="How the AI should answer prospects, handle objections and steer toward a call"
+                                    status={!replyFollows
+                                        ? 'You edited this script, so changes to your business no longer reach it.'
+                                        : hasIdentity
+                                            ? 'Written from Your business, and rewritten when you change it.'
+                                            : 'Fill in Your business and this script will speak for you and your offer.'}
+                                    edited={!replyFollows}
+                                    rebuildLabel="Rebuild from my business"
+                                    onChange={(replySystemPrompt) => onUpdateConfig({ ...config, replySystemPrompt })}
+                                    onRebuild={() => {
+                                        onUpdateConfig(withIdentity(config, identity, { reply: true }));
                                         toast.success('Reply script rebuilt from your business info.');
                                     }}
-                                    className="flex-none inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/12 text-label font-medium text-neutral-200 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-colors"
-                                >
-                                    <RefreshCw className="w-3.5 h-3.5" aria-hidden /> Rebuild from my business info
-                                </button>
-                            )}
-                        </div>
-                    </div>
+                                />
+                            </Group>
+                        </>
+                    )}
+                </Section>
 
-                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-white/8 bg-white/[0.02] cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={!!config.autopilot}
-                            onChange={e => onUpdateConfig({ ...config, autopilot: e.target.checked })}
-                            className="accent-white mt-0.5"
-                        />
-                        <div>
-                            <div className="text-sm text-white font-medium">Autopilot — reply automatically</div>
-                            <p className="text-label text-neutral-400 mt-0.5">
-                                When on, the AI answers new inbound DMs on its own (paced by your DM delay and daily cap) while a dashboard tab is open. When off, replies wait for your approval in the Inbox.
-                            </p>
-                        </div>
-                    </label>
-                </div>
+                {/* ── Integrations ──────────────────────────────────────── */}
+                <Section
+                    id="settings-integrations"
+                    title="Integrations"
+                    description="Send an event to Zapier, Make or your CRM the moment it happens."
+                >
+                    <Group>
+                        <Field
+                            id="settings-webhook"
+                            label="Webhook URL"
+                            hint={webhookInvalid
+                                ? <span className="text-danger-300">Use an https:// address. Nothing is sent until it is.</span>
+                                : 'A Zapier Catch Hook, a Make webhook, or any https endpoint.'}
+                        >
+                            <input
+                                id="settings-webhook"
+                                type="url"
+                                inputMode="url"
+                                value={config.webhookUrl ?? ''}
+                                onChange={(e) => onUpdateConfig({ ...config, webhookUrl: e.target.value })}
+                                placeholder="https://hooks.zapier.com/hooks/catch/…"
+                                aria-invalid={webhookInvalid || undefined}
+                                aria-describedby="settings-webhook-hint"
+                                className={`${INPUT} ${webhookInvalid ? 'border-danger-500/40' : ''}`}
+                            />
+                        </Field>
+                        <fieldset>
+                            <legend className="mb-2 text-meta font-medium text-neutral-300">Send these events</legend>
+                            <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                {WEBHOOK_EVENTS.map(({ key, label }) => (
+                                    <label key={key} className="flex cursor-pointer items-center gap-2 text-body-sm text-neutral-200">
+                                        <input
+                                            type="checkbox"
+                                            checked={webhookEvents[key]}
+                                            onChange={(e) => onUpdateConfig({ ...config, webhookEvents: { ...webhookEvents, [key]: e.target.checked } })}
+                                            className="h-4 w-4 accent-white"
+                                        />
+                                        {label}
+                                    </label>
+                                ))}
+                            </div>
+                        </fieldset>
+                        <p className="text-meta text-neutral-400">
+                            Each event is a POST with a JSON body:{' '}
+                            <code className="font-mono text-neutral-300">{'{ event, timestamp, lead: { handle, name, followers, campaignId, dmContent } }'}</code>
+                        </p>
+                    </Group>
+                </Section>
             </div>
-            )}
-
-            {/* ── Integrations — Zapier / Make — `brand`, plumbing not AI ──── */}
-            <div className="bg-surface-raised border border-white/5 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                        <Webhook className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-white">Integrations — Zapier / Make</h3>
-                        <p className="text-label text-neutral-400">Push events to your CRM, Slack, or email the moment they happen</p>
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="settingspa-webhook-url-zapier-catch-hook" className="block text-xs text-neutral-400 mb-1.5">Webhook URL (Zapier Catch Hook, Make, etc.)</label>
-                        <input id="settingspa-webhook-url-zapier-catch-hook"
-                            type="url"
-                            value={config.webhookUrl ?? ''}
-                            onChange={e => onUpdateConfig({ ...config, webhookUrl: e.target.value })}
-                            placeholder="https://hooks.zapier.com/hooks/catch/…"
-                            className="w-full bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50"
-                        />
-                        {!!config.webhookUrl && !config.webhookUrl.startsWith('https://') && (
-                            <p className="text-label text-white/90 mt-1.5">
-                                Must be an https:// URL — events won't fire until it is.
-                            </p>
-                        )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-4">
-                        {([
-                            { key: 'replied' as const, label: 'Lead replied' },
-                            { key: 'positiveReply' as const, label: 'Positive reply' },
-                            { key: 'booked' as const, label: 'Call booked' },
-                        ]).map(({ key, label }) => {
-                            const toggles = config.webhookEvents ?? { replied: false, positiveReply: true, booked: true };
-                            return (
-                                <label key={key} className="flex items-center gap-2 text-xs text-neutral-400 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={toggles[key]}
-                                        onChange={e => onUpdateConfig({
-                                            ...config,
-                                            webhookEvents: { ...toggles, [key]: e.target.checked },
-                                        })}
-                                        className="accent-white"
-                                    />
-                                    {label}
-                                </label>
-                            );
-                        })}
-                    </div>
-
-                    <p className="text-label text-neutral-400">
-                        Each event POSTs JSON: {'{ event, timestamp, lead: { handle, name, followers, campaignId, dmContent } }'}. In Zapier, use "Webhooks by Zapier → Catch Hook".
-                    </p>
-                </div>
-            </div>
-
-            {/* ── Save button ─────────────────────────────────────────────── */}
-            {/* Every control above already persists through onUpdateConfig, so
-                this re-writes the current config and confirms. It used to call
-                storage.setConfig directly — writing a second, diverging copy to
-                localStorage — and then browser alert(). */}
-            <button
-                onClick={() => {
-                    onUpdateConfig(config);
-                    toast.success('Settings saved.');
-                }}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-neutral-200 text-surface rounded-xl transition-colors font-semibold text-sm"
-            >
-                <Save className="w-4 h-4" />
-                Save Settings
-            </button>
         </div>
     );
 };

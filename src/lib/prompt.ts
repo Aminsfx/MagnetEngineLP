@@ -109,10 +109,10 @@ function storedVersion(prompt: string): number | null {
 }
 
 export const TONE_OPTIONS: { value: DmTone; label: string; description: string }[] = [
-  { value: 'casual', label: '😎 Casual', description: 'Relaxed, conversational — feels like a friend reaching out' },
-  { value: 'friendly', label: '🤝 Friendly', description: 'Warm and personable — professional yet approachable' },
-  { value: 'professional', label: '💼 Professional', description: 'Polished and direct — best for B2B or high-ticket offers' },
-  { value: 'bold', label: '⚡ Bold', description: 'Confident and punchy — grabs attention immediately' },
+  { value: 'casual', label: 'Casual', description: 'Relaxed and unpolished, the way you type on your phone.' },
+  { value: 'friendly', label: 'Friendly', description: 'Warm and specific, like someone who really read the profile.' },
+  { value: 'professional', label: 'Professional', description: 'Direct and economical. Best for B2B and high-ticket offers.' },
+  { value: 'bold', label: 'Bold', description: 'Confident, with a point of view about their market.' },
 ];
 
 /**
@@ -723,6 +723,11 @@ export function withIdentity<T extends PromptConfig>(
     ...(dm ? { systemPrompt: buildSystemPrompt(identity) } : {}),
     ...(reply ? { replySystemPrompt: buildReplySystemPrompt(identity) } : {}),
   };
+}
+
+/** Whether the DM prompt still follows the identity on its config, rather than words typed over it. */
+export function dmFollowsIdentity(config: PromptConfig): boolean {
+  return builtFrom(config.systemPrompt, identityOf(config), buildSystemPrompt);
 }
 
 /** Whether the reply persona still follows the identity on its config, rather than words typed over it. */

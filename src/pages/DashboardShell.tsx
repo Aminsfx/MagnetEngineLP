@@ -620,9 +620,14 @@ const DashboardShell: React.FC = () => {
     ),
 
     '/settings': (
-      <div className="px-4 py-6 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full">
-        <h1 className="text-2xl font-semibold text-white tracking-tight mb-6">Settings</h1>
-        <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} />
+      <div className="px-4 py-6 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Settings</h1>
+          <p className="text-neutral-400 text-sm mt-1.5">
+            Who your DMs come from, what they may say and who they go to. Changes save as you type.
+          </p>
+        </div>
+        <SettingsPanel config={config} onUpdateConfig={handleUpdateConfig} isOwner={isAdminEmail(user?.email)} />
       </div>
     ),
 
