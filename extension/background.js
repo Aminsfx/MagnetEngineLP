@@ -2,8 +2,9 @@
 
 // The wire protocol is defined once, in protocol.js, and shared with the
 // content script (loaded first in content_scripts) and the app (which has a
-// typed adapter asserted to match).
-importScripts('protocol.js');
+// typed adapter asserted to match). igsend.js knows Instagram's profile page:
+// the URL every profile opens at, and when a run of skips means stop.
+importScripts('protocol.js', 'igsend.js');
 const { APP_TO_EXT, EXT_TO_APP, RUNTIME, APP_HOSTS } = MAGNET_PROTOCOL;
 
 // Fallbacks used only if the web app didn't send a value with the campaign.
@@ -55,6 +56,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 isPaused:      false,
                 failedCount:   0,
                 lastFailure:   null,
+                noButtonHeld:  [],
             }, () => {
                 processNextLead();
                 sendResponse({ status: 'queued', count: leads.length });
@@ -90,7 +92,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Task completed by content script ──────────────────────────
     if (kind === RUNTIME.TASK_COMPLETE) {
-        completeTask(request.result, request.handle, request.reason);
+        completeTask(request.result, request.handle, request.reason, request.code);
         sendResponse({ status: 'acknowledged' });
         return true;
     }
@@ -227,6 +229,7 @@ function clearCampaign() {
         originalTotal: 0,
         failedCount:   0,
         lastFailure:   null,
+        noButtonHeld:  [],
     }, closeSenderTab);
 }
 
@@ -234,9 +237,10 @@ function clearCampaign() {
 // Ignores a report for anything but the task in flight, so a late report
 // after the send timeout already settled it can't count a send twice.
 // `reason` (why it wasn't sent) is kept as `lastFailure` for the popup and overlay.
-function completeTask(outcome, handle, reason) {
+// `code` is what the worker acts on: see the no-Message-button stop below.
+function completeTask(outcome, handle, reason, code) {
     chrome.storage.local.get(
-        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles', 'lastFailure'],
+        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles', 'lastFailure', 'noButtonHeld'],
         (result) => {
             const task = result.currentTask;
             if (!result.isExecuting || !task || (handle && task.handle !== handle)) return;
@@ -255,6 +259,33 @@ function completeTask(outcome, handle, reason) {
                     isExecuting:   false,
                     isPaused:      true,
                     nextAlarmTime: null,
+                }, releaseSenderTab);
+                return;
+            }
+
+            // Profile after profile with no Message button is not that many
+            // people turning messages off: it is Instagram's page changing
+            // under the extension (on 2026-11-07, a page in French used up a
+            // whole queue overnight this way). After NO_BUTTON_LIMIT in a row,
+            // stop: those DMs go back to the front of the queue, unsent and
+            // unskipped, and the campaign pauses with what Instagram showed.
+            const streak = MagnetSend.noButtonStreak(result.noButtonHeld, stripDispatch(task), outcome, code);
+            if (streak.trip) {
+                chrome.alarms.clear('dripEngine');
+                chrome.storage.local.set({
+                    campaignQueue: [...streak.held, ...queue],
+                    currentTask:   null,
+                    isExecuting:   false,
+                    isPaused:      true,
+                    nextAlarmTime: null,
+                    noButtonHeld:  [],
+                    lastFailure:   {
+                        handle: task.handle,
+                        reason: `${streak.held.length} profiles in a row showed no Message button, so Instagram has probably changed its page. `
+                            + `Sending is paused and those ${streak.held.length} DMs are back in the queue, not skipped. `
+                            + `Last one: ${reason || 'no reason given.'}`,
+                        at: Date.now(),
+                    },
                 }, releaseSenderTab);
                 return;
             }
@@ -294,6 +325,7 @@ function completeTask(outcome, handle, reason) {
                 lastFailure:    lastFailure,
                 sentLog:        sentLog,
                 sentHandles:    sentHandles,
+                noButtonHeld:   streak.held,
                 isExecuting:    false,
                 currentTask:    null,
             }, () => {
@@ -534,7 +566,7 @@ function processNextLead() {
                 isExecuting:   true,
             }, () => {
                 chrome.alarms.create('sendWatchdog', { delayInMinutes: SEND_TIMEOUT_MINUTES });
-                openInSenderTab(`https://www.instagram.com/${nextLead.handle}/`);
+                openInSenderTab(MagnetSend.profileUrl(nextLead.handle));
             });
         }
     );

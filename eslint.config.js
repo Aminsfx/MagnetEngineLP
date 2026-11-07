@@ -93,6 +93,10 @@ export default tseslint.config(
         readSendSettings: 'readonly',
         readSession: 'readonly',
         describeExtension: 'readonly',
+        // The same goes for igparse.js (content.js) and igsend.js (content.js
+        // and background.js).
+        parseSlideInbox: 'readonly',
+        MagnetSend: 'readonly',
         importScripts: 'readonly',
       },
     },

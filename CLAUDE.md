@@ -73,6 +73,7 @@ src/
     filters.ts                   # filterLeads() + calculateStats()
 extension/
   protocol.js                    # Wire protocol — shared by worker, content script, popup
+  igsend.js                      # Reading IG's profile + chat to send a DM, in any language (tested by src/lib/igsend.test.ts)
   background.js / content.js / popup.js
 supabase/
   functions/_shared/             # http.ts (servePost), ai.ts (providers), completion.ts (output cleanup), hiker.ts (sources + parsing), emails.ts
@@ -97,6 +98,13 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   `void`: check `delivered` and show `reason` — never report success for a
   handoff an old or missing extension will ignore, and never stamp a Lead
   (`followedUp`, an outbound Message) off a refused one.
+- **Reading Instagram's page to send** — only through `MagnetSend` (`extension/igsend.js`),
+  never an English string in content.js. On 2026-11-07 a campaign ran from an account shown in
+  French ("Envoyer un message"), and the English-only lookup reported all 85 profiles as having
+  no Message button. So every profile opens at `profileUrl` (`?hl=en`), labels are matched in
+  many languages, login and not-found are read from the page's links, and the "no Message
+  button" reason carries what the page showed (`describePage`). Three of those in a row
+  (`noButtonStreak`) pause the campaign and put those DMs back at the front of the queue.
 - **Who the extension works for** — `AuthProvider` calls `shareSession` (protocol 4,
   `MAGNET_ENGINE_SESSION`) once auth has resolved. Until the extension hears a
   session its popup shows only Sign in / Create account and the Instagram inbox

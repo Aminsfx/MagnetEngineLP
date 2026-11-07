@@ -528,31 +528,22 @@ if (window.location.hostname.includes("instagram.com")) {
         });
     }
 
-    // ── Utility: TreeWalker to find visible element by exact text ─
-    function findByExactText(text) {
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-            if (node.nodeValue && node.nodeValue.trim() === text) {
-                let el = node.parentElement;
-                while (el && el.offsetHeight === 0 && el.parentElement) el = el.parentElement;
-                if (el && el.offsetHeight > 0) return el;
-            }
-        }
-        return null;
-    }
-
-    // ── Utility: Find the Send button ───────────────────────────
-    // Only the button Instagram itself labels "Send". There used to be a
-    // "any small icon button near the textbox" fallback; on today's profile
+    // ── Reading Instagram's page ────────────────────────────────
+    // Message button, Send button, logged out, not found: all in igsend.js,
+    // loaded before this file, and none of them tied to one language.
+    // Only the control Instagram itself labels Send counts. There used to be
+    // an "any small icon button near the textbox" fallback; on the profile
     // chat popup that is the floating Messages bubble, which it clicked and
     // then reported as a sent DM.
-    function findSendButton() {
-        const labelled = document.querySelector('div[role="button"][aria-label="Send"]');
-        if (labelled && labelled.offsetHeight > 0) return labelled;
-        const svg = document.querySelector('div[role="button"] svg[aria-label="Send"]');
-        if (svg) return svg.closest('div[role="button"]');
-        return findByExactText("Send");
+    const Page = globalThis.MagnetSend;
+
+    // Polls until `find` returns something, or the time is up.
+    async function waitFor(find, timeout, every = 500) {
+        for (let waited = 0; ; waited += every) {
+            const hit = find();
+            if (hit || waited >= timeout) return hit || null;
+            await sleep(every);
+        }
     }
 
     const composerText = () => {
@@ -595,25 +586,20 @@ if (window.location.hostname.includes("instagram.com")) {
         }
     }
 
-    // ── Utility: Check if logged into Instagram ─────────────────
-    function isLoggedIn() {
-        // Instagram shows a Log In button or login form when not authenticated
-        const loginButton = findByExactText("Log in") || findByExactText("Log In");
-        const loginForm = document.querySelector('input[name="username"]');
-        return !loginButton && !loginForm;
-    }
-
     // ── Signal task completion to background ─────────────────────
     // The worker clears the task and decides what the tab does next; the page
     // never closes itself any more — it is the next DM's tab too.
     // `reason` is shown to the Operator (overlay + popup) when it wasn't sent.
-    function reportComplete(result, handle, reason) {
+    // `code` names a failure the worker acts on rather than just shows
+    // ('no_message_button' counts toward pausing the campaign).
+    function reportComplete(result, handle, reason, code) {
         console.log(`[MagnetEngine] Reporting ${result} for @${handle}${reason ? ` — ${reason}` : ''}`);
         chrome.runtime.sendMessage({
             action: RUNTIME.TASK_COMPLETE,
             result: result, // 'success' | 'failed' | 'skipped' | 'logged_out'
             handle: handle,
             reason: reason || null,
+            code: code || null,
         }, () => void chrome.runtime.lastError);
     }
 
@@ -623,13 +609,24 @@ if (window.location.hostname.includes("instagram.com")) {
         console.log("[MagnetEngine] Target: @" + task.handle);
 
         try {
-            // ── STEP 1: Wait for page load ──────────────────────
-            await sleep(5000);
+            // ── STEP 1: Wait for the profile to render ──────────
+            // The Sender Tab is usually in the background, where Chrome slows
+            // everything down, so the profile's buttons can arrive well after
+            // the page itself. Wait for one of the things this step decides
+            // on rather than for a fixed time, then give the header a moment
+            // to finish so a Follow button that lands first can't end the wait
+            // before the Message button beside it.
+            await sleep(2500);
+            const settled = await waitFor(
+                () => Page.findMessageButton(document) || Page.isUnavailable(document) || Page.isLoggedOut(document),
+                20000,
+            );
+            if (settled) await sleep(1000);
 
             // ── STEP 1.5: Check login state ─────────────────────
             // Logged out, every DM would fail the same way. The worker puts this
             // one back, pauses, and hands the tab over so the Operator can log in.
-            if (!isLoggedIn()) {
+            if (Page.isLoggedOut(document)) {
                 console.error("[MagnetEngine] ABORT: Not logged into Instagram.");
                 reportComplete('logged_out', task.handle);
                 return;
@@ -638,16 +635,19 @@ if (window.location.hostname.includes("instagram.com")) {
             // ── STEP 2: Find and click "Message" button ─────────
             // A deleted or renamed account (or one that blocked the Operator)
             // serves Instagram's "page isn't available" page instead.
-            if (findByExactText("Sorry, this page isn't available.")) {
+            if (Page.isUnavailable(document)) {
                 console.error("[MagnetEngine] ABORT: profile doesn't exist.");
                 reportComplete('skipped', task.handle, "this profile doesn't exist any more (deleted, renamed, or it blocked you).");
                 return;
             }
 
-            const messageBtn = findByExactText("Message");
+            const messageBtn = Page.findMessageButton(document);
             if (!messageBtn) {
-                console.error("[MagnetEngine] ABORT: 'Message' button not found.");
-                reportComplete('skipped', task.handle, 'no Message button on their profile (private, restricted, or messages turned off).');
+                const seen = Page.describePage(document);
+                console.error(`[MagnetEngine] ABORT: 'Message' button not found (${seen}).`);
+                reportComplete('skipped', task.handle,
+                    `no Message button on their profile (private, restricted, or messages turned off). Instagram showed: ${seen}.`,
+                    'no_message_button');
                 return;
             }
             messageBtn.click();
@@ -684,7 +684,7 @@ if (window.location.hostname.includes("instagram.com")) {
             // Try up to 3 times with delays (button may take time to activate)
             let sendBtn = null;
             for (let attempt = 1; attempt <= 3; attempt++) {
-                sendBtn = findSendButton();
+                sendBtn = Page.findSendButton(document);
                 if (sendBtn) break;
                 await sleep(2000);
             }
