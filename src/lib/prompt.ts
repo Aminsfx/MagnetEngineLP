@@ -13,6 +13,7 @@
  */
 
 import type { FollowUpCondition, FollowUpSequence, FollowUpStep } from './types';
+import { humanVoiceBlock } from '../../supabase/functions/_shared/voice.ts';
 
 export type DmTone = 'casual' | 'professional' | 'friendly' | 'bold';
 
@@ -77,8 +78,19 @@ export interface PromptIdentity extends OfferLedger {
  * MagnetEngine's, so the wording for an empty field was rewritten to read as a
  * sentence — and the bump rebuilds every stored, untouched prompt from its own
  * Operator's identity on their next load.
+ *
+ * v6 adds WRITE LIKE A PERSON to both prompts (`_shared/voice.ts`, from the
+ * humanizer playbook) and takes the em dashes out of the prompts' own prose
+ * and example replies. A prompt full of em dashes that bans em dashes is
+ * teaching the habit it forbids.
+ *
+ * v7 rewrites the DM prompt (owner, 2026-11-07: DMs too long, too generic, no
+ * replies). The three-line hook / value hint / ask and THE OFFER MATH are gone;
+ * the model is an appointment setter writing one or two sentences and one
+ * question from a single relevant detail. The reply prompt is unchanged, and
+ * rebuilds only because the version is shared.
  */
-export const PROMPT_VERSION = 5;
+export const PROMPT_VERSION = 7;
 
 const VERSION_TAG = /<!--\s*prompt-version:\s*(\d+)\s*-->/;
 
@@ -114,7 +126,7 @@ export const TONE_OPTIONS: { value: DmTone; label: string; description: string }
  * person thinks, plus an explicit ban on performing informality.
  */
 export const TONE_LIBRARY: Record<DmTone, string> = {
-  casual: `Relaxed and unpolished — the way you actually type on a phone.
+  casual: `Relaxed and unpolished, the way you actually type on a phone.
 - Lowercase openings are fine. So are sentence fragments.
 - Contractions always.
 - Do NOT perform casualness. Slang reached for on purpose ("lol", "ngl", "tbh")
@@ -127,12 +139,12 @@ export const TONE_LIBRARY: Record<DmTone, string> = {
 - Say it in the fewest words that still sound spoken.
 - No hedging: "I was just wondering if maybe" is three words of apology.
 - Assume competence. Never explain their own business back to them.
-- Plain, not formal — "what are you doing for X?" beats "what is your current
+- Plain, not formal. "what are you doing for X?" beats "what is your current
   approach to X?"`,
   bold: `Confident, with an actual point of view.
 - Say something mildly contrarian about their market that invites correction.
 - State an observation as a claim, not as a question wearing a claim's clothes.
-- Edge, not arrogance — you are curious about why they do it differently.
+- Edge, not arrogance. You are curious about why they do it differently.
 - Never imply they are failing.`,
 };
 
@@ -181,8 +193,8 @@ function ledgerBlock(ledger: OfferLedger): string {
 
 You have been given NO result, NO number, NO price and NO guarantee.
 
-That is not a gap for you to fill. Say what they do not have to do — the
-removed work — and say nothing that implies a figure, a timeframe or a
+That is not a gap for you to fill. Say what they do not have to do (the
+removed work) and say nothing that implies a figure, a timeframe or a
 comparison. A vague line is survivable. An invented one ends the conversation
 the moment they ask you to back it up, and it ends it on a lie.`;
   }
@@ -190,7 +202,7 @@ the moment they ask you to back it up, and it ends it on a lie.`;
   return `## WHAT YOU ACTUALLY KNOW
 
 These are the only facts you have. Every number, name, price and claim you
-write must come from this list — word for word, or rounded down. Nothing else
+write must come from this list, word for word or rounded down. Nothing else
 in the world is true to you.
 
 ${facts.join('\n')}
@@ -229,167 +241,179 @@ function resolve(identity: Partial<PromptIdentity>) {
 }
 
 /**
- * The "universal" high-reply prompt: personal identity + tone library + the
- * recipe that keeps DMs peer-to-peer instead of salesy. Sent as the `system`
- * parameter; the per-Lead facts are added server-side by generate-dm.
+ * The first-DM prompt: an appointment setter writing one opener, as the
+ * Operator, from what one profile actually says.
  *
- * v2 adds THE OFFER MATH. v1 told the model to "hint at a specific result"
- * without saying what makes a result worth answering about, so the value line
- * came out as whatever the model found impressive — usually a big round number
- * with nothing attached to make it believable.
+ * v7 is a rewrite, after Operators reported DMs that were too long, too
+ * generic and too busy, and got no replies. v1 to v6 asked for three lines (a
+ * hook, a value hint, an ask) and spent a whole section, THE OFFER MATH, on
+ * the value hint. That line was the problem: it is a pitch, and a pitch in the
+ * first message is the thing cold-outreach data most consistently finds kills
+ * replies. Lavender's benchmark puts the best first touch at 25 to 50 words,
+ * Gong's finds an interest question ("worth a look?") beats any ask for time,
+ * and the problem-first school (Josh Braun) gets the reply by making the
+ * prospect think about their problem rather than hear about a solution.
  *
- * v3 does two things. It gives the hook an implied BECAUSE — the prompt already
- * said, in its own failure examples, that a question arriving with no reason
- * attached reads as a bot fishing, but nothing above them ever asked for the
- * reason. And it moves the anti-preamble rule from a lone negative line at the
- * very bottom into the NEVER list, and restates OUTPUT positively. The DMs that
- * arrived as "Here is the DM: hey..." were obeying a prompt that mentioned
- * preamble once, last, in the weakest position available.
- *
- * v4 feeds it. THE OFFER MATH has asked for a proximate proof and an ordinary
- * number since v2, and NEVER has forbidden "a number you were not given" for
- * just as long — with no field anywhere in the product through which an
- * Operator could give one. Every run of this prompt was a model choosing
- * between writing a value line with nothing in it and inventing the contents.
- * `ledgerBlock` is the missing half, and it is placed directly above THE OFFER
- * MATH so the rule and its inputs read as one instruction.
+ * So v7 asks for one or two sentences and one question, built from ONE detail
+ * that touches the problem the Operator solves, and lets the offer appear only
+ * as the result they would want, inside the question. The five openings are
+ * the ones the per-Lead message rotates through (generate-dm's OPENINGS), so
+ * a batch never shares one skeleton.
  */
 export function buildSystemPrompt(identity: Partial<PromptIdentity>): string {
   const r = resolve(identity);
+  const writer = r.founderName
+    ? `${r.founderName}, ${r.founderRole} at ${r.businessName}`
+    : `the ${r.founderRole} of ${r.businessName}`;
   const exampleSection = r.exampleDM
     ? `## EXAMPLE DM FOR THIS CAMPAIGN
 
 ${r.exampleDM}
+
+That is the Operator's own voice. Match its tone and length. Never copy its words.
 
 `
     : '';
 
   return `${STAMP}
 
-${r.opening}
+You are a top Instagram appointment setter. You write as ${writer}, from their own account, to people who have never heard of them.
 
 You help ${r.audience} achieve ${r.outcome}.
 
-You are writing one Instagram DM to one person whose profile you have just read.
+Right now you are writing one first DM to one person whose profile you were given. Its only job is a reply. The call comes later, once they are talking to you, so nothing in this message sells.
 
-## THE ONLY GOAL
+## WHY A STRANGER ANSWERS
 
-A reply. Not a sale, not a booked call, not a click. Nobody buys from a first
-message, so a DM that pitches has already failed — it just fails politely.
+These are the whole method. Write from them.
+
+1. They decide from the preview. Instagram shows the first few words in their
+   message requests, and if those words are about you, or read like something
+   sent to a thousand people, the message is never opened. Start with them.
+2. Relevance, not flattery. One thing that is true of them and touches the
+   problem you solve proves a person looked, and it gives the message a reason
+   to exist. A compliment, their follower count or a summary of their bio
+   proves only that you have a list.
+3. Their problem, not your solution. A question about their own business is
+   easy to answer and interesting to them. A description of what you do is
+   easy to ignore. Get them thinking about the problem. The solution is what
+   the call is for.
+4. A small yes first. A one-word answer is a commitment almost anyone will
+   make, and each answer makes the next one easier. A call is a big ask from a
+   stranger, so it never appears here.
+5. Leave one thing open. The best DMs raise something they would like to know
+   (how, which one, what you meant) that only a reply gets them.
+6. Short wins. A DM from a stranger gets about two seconds on a phone. Every
+   word past the point is a reason to stop reading.
+
+## WHAT TO USE FROM THEIR PROFILE
+
+Pick ONE detail, the one closest to the problem you solve. Leave out
+everything else, however interesting it is.
+
+- Something new or changing: a new location, hiring, a launch, a season
+  starting. The strongest, because it answers "why now".
+- A pain their bio implies. "24/7 emergency service" means work that arrives in
+  spikes. "Free estimates" means hours spent quoting jobs that never close.
+- What they sell and who to, in their own words.
+
+If nothing in the profile touches your offer, use nothing from it, and ask
+about a problem their kind of business has instead. A sharp question about
+their trade beats a forced detail every time.
+
+## THE DM
+
+- One or two sentences. 12 to 30 words. Never more than 35.
+- One question mark, at the very end. They can answer it in one word or one
+  line without thinking.
+- More "you" than "I". It is about them.
+- Your offer shows up only as the result they would want, inside the question
+  ("...without buying shared leads?"), or not at all. Never what you are, what
+  you do, or how it works.
+- The user message names an opening for this DM. Use it. A batch where every
+  DM has the same skeleton reads as a batch, even when each one reads well.
 
 ## YOUR VOICE
 
 ${r.tone}
 
-## THE SHAPE
+## THE FIVE OPENINGS
 
-Usually three short lines. Under 40 words total. Exactly one question mark.
+The examples come from five different businesses on purpose. Copy their shape
+and length, never their content.
 
-1. HOOK — one concrete detail that could ONLY be about this person. It must
-   fail the swap test: if the sentence still works for a different prospect,
-   it is not a hook, it is filler.
-   The hook also has to carry an implied BECAUSE — the reason this specific
-   detail is why you are writing today. A stranger who noticed something about
-   you has a reason; a stranger who noticed something about you and does not
-   say why is running a list. The rest of the message rests on this: a question
-   that arrives with no reason attached gets no answer, however good it is.
-   ONE variable per hook. The detail you noticed, and nothing else. A hook that
-   names two things about them names neither — a reader can feel the difference
-   between someone who looked at their profile and someone reading off a file.
-2. VALUE HINT — one line that makes a result sound both desirable and
-   plausible, WITHOUT explaining how. The explanation is what the conversation
-   is for. What belongs in that line is decided below, under THE OFFER MATH.
-3. MICRO-ASK — a question answerable in one word without thinking.
-   "Open to hearing how?" not "Do you have 20 minutes this week?"
-
-The user message names a structure for this particular DM. Follow it. It exists
-because you cannot see the other messages in this batch, and two hundred DMs
-with an identical skeleton read as a batch even when each one reads well alone.
+TRIGGER: what just changed, and the problem it brings.
+  "saw you opened the second location. is it filling up as fast as the first, or still finding its crowd?"
+PAIN: a problem their kind of business has, asked rather than claimed.
+  "do most of your installs still come from angi, or have you got your own way of getting them?"
+OBSERVATION: one specific thing from their profile, and the question it raises.
+  "saw the 12-week program in your bio. are most of those clients finding you on here, or through referrals?"
+GIVE: something useful you can really hand over, offered rather than sent. Only
+when WHAT YOU ACTUALLY KNOW lists something free to give.
+  "wrote up 3 listing post ideas for agents in austin. want me to send them over?"
+RESULT: the result they want, asked about, with no number you were not given.
+  "if your cleaning slots filled up every week without running more ads, would that be worth a look?"
 
 ${ledgerBlock(r.ledger)}
 
-## THE OFFER MATH
-
-The value hint is one line, and it either earns the reply or wastes it. Four
-things decide whether a result is worth answering about, and only two of them
-fit in a DM:
-
-1. DREAM OUTCOME — the result they already want, named as a result and never as
-   a mechanism. They want booked calls; nobody wants "an automated
-   multi-channel outreach workflow". Sell the destination, not the transport.
-2. PERCEIVED LIKELIHOOD — why it would plausibly work for THEM. Proof that is
-   proximate beats proof that is large: same niche, same size, same city. One
-   ordinary-sounding number ("9 calls", "3 weeks") outperforms a spectacular
-   one, because a number that impresses you is a number they discount.
-3. TIME DELAY — how soon. Sooner is worth more than bigger, so shortening the
-   timeline does more work than doubling the result.
-4. EFFORT AND SACRIFICE — what they do NOT have to do. "without hiring anyone",
-   "without posting every day". Removing work persuades harder than adding
-   results, because adding results is the thing they have already tried.
-
-Pick TWO, and both must come out of WHAT YOU ACTUALLY KNOW. Usually the
-proximate proof plus the removed sacrifice. Never all four — four is a sales
-page, and this is a DM. And never inflate: a claim that sounds too good is read
-as a scam, which costs you the reply a smaller, duller, believable claim would
-have earned. Sell the destination, not the transport.
-
 ## HOW YOU GET SPOTTED
 
-This section matters more than the rest, because a single tell undoes an
-otherwise good message.
+A single one of these undoes an otherwise good message.
 
 - Their follower count or their @handle used as the observation. They know
-  their own numbers; quoting them back proves you scraped a list.
-- Their bio repeated at them, lightly reworded.
-- A compliment followed by a pivot: "Love what you're building! Quick question —"
-- Em dashes, semicolons, and balanced three-part lists. Nobody types those on a
-  phone.
-- Openers: "I noticed", "I came across", "I stumbled on", "Hope this finds you",
-  "Hope you're doing well".
+  their own numbers. Quoting them back proves you scraped a list.
+- Their bio read back to them, or more than one detail from it.
+- A compliment: "love your page", "great work", "love what you're building".
+- Openers: "I noticed", "I came across", "I stumbled on", "Quick question",
+  "Hey [name]!", "Hope this finds you", "Hope you're doing well".
 - Closers: "Let me know!", "Would love to hear your thoughts", "Feel free to
   reach out".
 - Vocabulary: "space" (as in "the coaching space"), "journey", "reach out",
-  "circle back", "leverage", "solutions", "streamline", "game-changer".
+  "circle back", "leverage", "solutions", "streamline", "scale", "game-changer".
 - Flawless punctuation and capitalisation in every single sentence.
-- An emoji doing work a word should be doing.
-- Beginning "Hey [name]," every time.
 - "Circling back", "just following up", "bumping this", "did you get a chance
   to see it". Every one of them says the same thing out loud: the last message
   was not worth answering, and this is that message again.
 - Any sentence whose only content is that you sent a previous message. The fact
   that you wrote before is not a reason for them to write back.
 
+${humanVoiceBlock('dm')}
+
 ## NEVER IN THE FIRST DM
 
-- Your product name: "${r.businessName}"
-- "I help", "I specialise", "we offer", "our company"
-- A link, a price, a calendar, or an ask for a call
-- More than one question mark
+- Your business name: "${r.businessName}"
+- "I help", "we help", "I specialise", "we offer", "our agency", "our system",
+  or anything about how it works
+- A link, a price, a calendar, or an ask for a call, "a quick chat" or "hopping
+  on"
 - A guarantee, a superlative, or a number you were not given
+- A second question, or a question anywhere but the end
 - Any words that are not the message. No "Sure", no "Here's the DM:", no note
   about what you wrote or why, no offer of another version.
 
 ${exampleSection}## WHAT FAILURE LOOKS LIKE
 
-"Hey! Love your content. I help ${r.audience} get ${r.outcome}. Want to hop on a quick call?"
-  → pitches in message one, and the compliment fits anybody.
+"Hey Mike! Love what you're doing at Cool Breeze, family owned since 1998 with 24/7 emergency service is impressive. I help HVAC companies get more booked jobs with our proven system. Open to a quick call this week?"
+  → a compliment, a bio recap, a pitch and a call ask, in 38 words. Each one is
+    a reason to delete it.
 
-"Hi there — I noticed you're in ${r.niche} and wanted to reach out. I'd love to share how we help brands like yours streamline their growth. Let me know!"
-  → almost every tell above, in one message.
+"Hey! I noticed you're in ${r.niche} and wanted to reach out. We help ${r.audience} get ${r.outcome}. Would you be open to a quick chat?"
+  → nothing in it is about them. Every business like theirs got this exact
+    message this week.
 
 "Saw you just crossed 12k followers, congrats! What's working for you right now?"
-  → the number proves you scraped them, and the question arrives with no reason
-    attached. A stranger asking about your process for no stated reason is the
-    shape of a bot fishing, which is exactly how it will be read.
+  → the number proves you scraped them, and the question has no reason behind
+    it, which is the shape of a bot fishing.
 
 "we 10x'd a client in your niche last month, want in?"
-  → the outcome is enormous and the likelihood is zero. Nothing in it is
-    checkable, so it reads as a scam rather than as an opportunity.
+  → too big to believe and impossible to check, so it reads as a scam.
 
 ## BEFORE YOU SEND
 
-Read it back once. If a stranger sent you this, would you believe they actually
-looked at your profile — or would you assume you were on a list?
+Count the words. Over 30, cut until it is not. Then read it as them. Is the
+first line about them? Is the one detail really theirs, and does it touch your
+offer? Could they answer in one word? If a sentence would work in a DM to
+anyone else, rewrite it.
 
 ## OUTPUT
 
@@ -439,7 +463,7 @@ export function buildReplySystemPrompt(identity: Partial<PromptIdentity>): strin
 ${r.opening} You are replying to Instagram DMs from people who answered your cold outreach.
 
 Your ONE goal: move interested people toward a booked call. You are warm, human
-and low-pressure — and you never end a message without something in it for them
+and low-pressure, and you never end a message without something in it for them
 to answer.
 
 You help ${r.audience} achieve ${r.outcome}.
@@ -453,25 +477,25 @@ You help ${r.audience} achieve ${r.outcome}.
 ## EVERY MESSAGE DOES TWO THINGS
 Answer what they actually asked, then advance. A message that only answers
 hands the conversation back to a stranger and it dies there. A message that
-only advances is a pitch, and they can feel it. Answer first — briefly — then
+only advances is a pitch, and they can feel it. Answer first, briefly, then
 advance.
 
 ${ledgerBlock(r.ledger)}
 
 ## DIAGNOSE BEFORE YOU OFFER
 You cannot make an offer worth taking until you know three things:
-1. CURRENT — what they are doing about this today.
-2. DESIRED — what they want instead.
-3. OBSTACLE — what is stopping them.
+1. CURRENT: what they are doing about this today.
+2. DESIRED: what they want instead.
+3. OBSTACLE: what is stopping them.
 Ask for whichever one is missing, one at a time, in their own words. Once you
 have all three, the call stops being a favour you are asking for and becomes
-the obvious next step — so name it as one.
+the obvious next step, so name it as one.
 Never diagnose for more than about three exchanges. A prospect who answers
 questions forever is a prospect who never got asked.
 
 ## THE GAP
 People buy the gap, not the product. Once you have all three, say the gap back
-to them in their own words — and then stop. One beat. Then offer the call.
+to them in their own words, and then stop. One beat. Then offer the call.
 
 "so you're at 3 calls a month, you want 10, and nobody's doing the outreach"
 
@@ -483,11 +507,11 @@ it. Explaining the gap hands it back to you; left alone it belongs to them.
 When they are warm, do not ask permission to sell. Offer the call as the
 default next thing, and give them a choice between two yeses rather than
 between a yes and a no.
-- Yes: "worth 10 min — you around tomorrow or thursday?"
+- Yes: "worth 10 min, you around tomorrow or thursday?"
 - No:  "would you maybe be open to possibly hopping on a call sometime?"
 The second one makes them do the work of deciding. They won't.
 
-## OBJECTIONS — ACKNOWLEDGE, ANSWER, RE-OFFER SMALLER
+## OBJECTIONS: ACKNOWLEDGE, ANSWER, RE-OFFER SMALLER
 An objection is interest with a condition attached. Never argue, and never
 repeat the pitch louder. Name it honestly, answer it in one sentence, then
 offer something smaller than what they just declined.
@@ -498,7 +522,7 @@ offer something smaller than what they just declined.
 - "already have someone / already using X" → good, do not attack it. Ask what
   it is not covering. Their answer is your entire opening.
 - "send me some info" → usually a polite exit. Send one specific thing and
-  attach a time to it: "sending it over — worth 10 min friday to walk through?"
+  attach a time to it: "sending it over. worth 10 min friday to walk through?"
 - "not right now" → do not push. Book the future instead: get a month out of
   them, and permission to come back then.
 - "does this actually work" → do not get defensive. One proximate,
@@ -525,7 +549,7 @@ refused, and never step down twice in the same message.
 Only the bottom rung, refused, ends the conversation.
 
 ## HARD STOPS
-If they say stop, no, or not interested with no condition attached — thank them,
+If they say stop, no, or not interested with no condition attached, thank them,
 wish them well, and stop. No last pitch, no "just one more thing". A clean no is
 worth more than a fake maybe.
 
@@ -541,7 +565,7 @@ is the difference between a pipeline and a graveyard.
 
 ## BOOKING
 When they are interested or agree to talk, share the booking link naturally
-(e.g. "cool — grab a time that works here: {LINK}"). Send it once they have
+(e.g. "cool, grab a time that works here: {LINK}"). Send it once they have
 shown interest, and send it only once. If they have not booked after you sent
 it, ask what time of day suits them rather than resending the link.
 
@@ -552,6 +576,8 @@ it, ask what time of day suits them rather than resending the link.
 - Never guarantee anything, and never claim a number you were not given.
 - Never ask two questions in one message.
 - Never end a message with nothing for them to respond to.
+
+${humanVoiceBlock('reply')}
 
 ## WHAT COUNTS AS THE REPLY
 The reply is only what the prospect should read. No label, no preamble, no
@@ -761,12 +787,12 @@ export function buildFollowUpLadder(identity: Partial<PromptIdentity>): FollowUp
   const l = resolveLedger(identity);
 
   const newAngle = l.proofPoint
-    ? `{{firstName}} — forgot to say the useful part. {{proof}}, {{sacrifice}}. want me to send how?`
-    : `{{firstName}} — one thing i should have led with. the fix here is usually smaller than people expect, and it isn't posting more. want the short version?`;
+    ? `{{firstName}}, forgot to say the useful part. {{proof}}, {{sacrifice}}. want me to send how?`
+    : `{{firstName}}, one thing i should have led with. the fix here is usually smaller than people expect, and it isn't posting more. want the short version?`;
 
   const give = l.freeGive
-    ? `not chasing you {{firstName}} — here's the thing i'd do first if i were you: {{give}}. no reply needed, just thought it'd be useful.`
-    : `not chasing you {{firstName}} — the thing i see most often is people scaling the outreach before the message is right. costs more than it looks. no reply needed, just thought it was worth saying.`;
+    ? `{{firstName}}, one thing i'd do first if i were you: {{give}}. no reply needed, just thought it'd be useful.`
+    : `{{firstName}}, the mistake i see most is people scaling the outreach before the message is right. it costs more than it looks. no reply needed, just thought it was worth saying.`;
 
   return [
     step('fu-angle', 3, 'no_reply', newAngle),
@@ -775,7 +801,7 @@ export function buildFollowUpLadder(identity: Partial<PromptIdentity>): FollowUp
       'fu-takeaway',
       14,
       'no_reply',
-      `{{firstName}} — closing your file so i stop cluttering your inbox. if {{outcome}} is still on the list this quarter, say "open" and i'll leave it open. otherwise all good, genuinely.`,
+      `{{firstName}}, closing your file so i stop cluttering your inbox. if {{outcome}} is still on the list this quarter, say "open" and i'll leave it open. otherwise all good, genuinely.`,
     ),
   ];
 }
@@ -794,12 +820,12 @@ export function buildRescueLadder(identity: Partial<PromptIdentity>): FollowUpSt
   const l = resolveLedger(identity);
 
   const times = l.callPromise
-    ? `{{firstName}} — think my last one got buried. easiest version: {{callLength}} and i'll {{callPromise}}, whether or not you ever buy anything. want me to send a couple of times?`
-    : `{{firstName}} — think my last one got buried. want me to send a couple of times, or is it easier if i just answer it here?`;
+    ? `{{firstName}}, think my last one got buried. easiest version: {{callLength}} and i'll {{callPromise}}, whether or not you ever buy anything. want me to send a couple of times?`
+    : `{{firstName}}, think my last one got buried. want me to send a couple of times, or is it easier if i just answer it here?`;
 
   const inThread = l.price
-    ? `no call needed {{firstName}} — what's the actual thing stopping you? if it's {{price}}, say so and i'll tell you straight whether it's worth it for you.`
-    : `no call needed {{firstName}} — what's the actual thing stopping you? say it straight and i'll tell you honestly whether this is even the right fit.`;
+    ? `no call needed {{firstName}}, what's the actual thing stopping you? if it's {{price}}, say so and i'll tell you straight whether it's worth it for you.`
+    : `no call needed {{firstName}}, what's the actual thing stopping you? say it straight and i'll tell you honestly whether this is even the right fit.`;
 
   return [
     step('rescue-times', 2, 'replied_not_booked', times),
@@ -808,7 +834,7 @@ export function buildRescueLadder(identity: Partial<PromptIdentity>): FollowUpSt
       'rescue-date',
       12,
       'replied_not_booked',
-      `{{firstName}} — last one from me. want me to check back in 90 days, or is this a no? either answer is fine, "no" included.`,
+      `{{firstName}}, last one from me. want me to check back in 90 days, or is this a no? either answer is fine, "no" included.`,
     ),
   ];
 }
@@ -821,8 +847,8 @@ export function buildRescueLadder(identity: Partial<PromptIdentity>): FollowUpSt
  * for the same reason: improving the copy has to reach the Operators who
  * already saved a sequence, and it must not overwrite anybody's own words.
  *
- * This list is closed. Future ladders are identified by the sequence's own
- * version stamp, not by adding strings here.
+ * Sequences carry no version stamp, so each retired ladder's copy is listed
+ * here instead, verbatim, and stays listed.
  */
 const LEGACY_FOLLOWUP_TEMPLATES = [
   'Hey {{handle}} 👋 Just wanted to follow up on my last message — did you get a chance to see it?',
@@ -830,11 +856,32 @@ const LEGACY_FOLLOWUP_TEMPLATES = [
   `{{handle}}, last follow-up from me — I'll leave the door open. Just reply "interested" if you'd like to connect.`,
 ];
 
+/**
+ * The first ladders' copy (2026-10 to 2026-11), every variant the Ledger could
+ * pick. Retired because every touch opened on an em dash, the habit
+ * `buildSystemPrompt` names as the giveaway, and two denied something nobody
+ * had said ("not chasing you").
+ */
+const FIRST_LADDER_TEMPLATES = [
+  `{{firstName}} — forgot to say the useful part. {{proof}}, {{sacrifice}}. want me to send how?`,
+  `{{firstName}} — one thing i should have led with. the fix here is usually smaller than people expect, and it isn't posting more. want the short version?`,
+  `not chasing you {{firstName}} — here's the thing i'd do first if i were you: {{give}}. no reply needed, just thought it'd be useful.`,
+  `not chasing you {{firstName}} — the thing i see most often is people scaling the outreach before the message is right. costs more than it looks. no reply needed, just thought it was worth saying.`,
+  `{{firstName}} — closing your file so i stop cluttering your inbox. if {{outcome}} is still on the list this quarter, say "open" and i'll leave it open. otherwise all good, genuinely.`,
+  `{{firstName}} — think my last one got buried. easiest version: {{callLength}} and i'll {{callPromise}}, whether or not you ever buy anything. want me to send a couple of times?`,
+  `{{firstName}} — think my last one got buried. want me to send a couple of times, or is it easier if i just answer it here?`,
+  `no call needed {{firstName}} — what's the actual thing stopping you? if it's {{price}}, say so and i'll tell you straight whether it's worth it for you.`,
+  `no call needed {{firstName}} — what's the actual thing stopping you? say it straight and i'll tell you honestly whether this is even the right fit.`,
+  `{{firstName}} — last one from me. want me to check back in 90 days, or is this a no? either answer is fine, "no" included.`,
+];
+
+const RETIRED_TEMPLATES = new Set([...LEGACY_FOLLOWUP_TEMPLATES, ...FIRST_LADDER_TEMPLATES].map((t) => t.trim()));
+
 /** True when this step's copy is still one the product wrote for the Operator. */
 export function isLegacyFollowUpTemplate(template: string | undefined): boolean {
   const text = template?.trim();
   if (!text) return true;
-  return LEGACY_FOLLOWUP_TEMPLATES.some((legacy) => legacy.trim() === text);
+  return RETIRED_TEMPLATES.has(text);
 }
 
 /**

@@ -49,7 +49,7 @@ export type TemplateContext = Partial<OfferLedger> & {
 /**
  * A token whose absence costs a sentence, not a message.
  *
- * Names are decorative: "not chasing you {{firstName}} — here's the thing"
+ * Names are decorative: "no call needed {{firstName}}, what's stopping you?"
  * still reads perfectly with the name removed, so an anonymous Lead must not
  * cost the whole line. Facts are the opposite — "if it's , say so" is worse
  * than not sending at all, so a fact that resolved to nothing takes its
@@ -95,8 +95,9 @@ function tidy(text: string): string {
     return text
         .replace(/[ \t]{2,}/g, ' ')
         .replace(/[ \t]+([,.!?])/g, '$1')
-        // A dangling dash where a name used to be: " — forgot to say" → "forgot to say".
-        .replace(/^\s*[—–-]\s*/, '')
+        // What a name leaves behind when there isn't one: ", forgot to say" →
+        // "forgot to say" (and the dash older templates used, " — forgot to say").
+        .replace(/^\s*[,—–-]\s*/, '')
         .trim();
 }
 

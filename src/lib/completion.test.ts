@@ -69,7 +69,7 @@ describe('what must never be touched', () => {
   });
 
   it('keeps a noun from the label list used as a real word', () => {
-    const line = 'quick note on your pricing page — the tiers read backwards';
+    const line = 'quick note on your pricing page, the tiers read backwards';
     expect(dm(line)).toBe(line);
   });
 
@@ -86,7 +86,7 @@ describe('what must never be touched', () => {
   });
 
   it('keeps a lone asterisk that is arithmetic, not emphasis', () => {
-    const line = 'you post 5 * 3 shoots a week — who edits them?';
+    const line = 'you post 5 * 3 shoots a week, who edits them?';
     expect(dm(line)).toBe(line);
   });
 
@@ -163,6 +163,40 @@ describe('the limit', () => {
   });
 });
 
+/**
+ * The em dash is the habit people now name first when a message "sounds like
+ * AI", and the prompts' ban on it is not enough at temperature 0.95. This is
+ * the one rule allowed inside the message, so it may only swap punctuation:
+ * every word the model wrote must survive.
+ */
+describe('em and en dashes', () => {
+  it.each([
+    ['hey sam — saw the second location opened', 'hey sam, saw the second location opened', 'a pause becomes a comma'],
+    ['hey sam—saw the second location opened', 'hey sam, saw the second location opened', 'an unspaced dash'],
+    ['loved the reel — The lighting was perfect', 'loved the reel. The lighting was perfect', 'a dash that starts a sentence'],
+    ['the fix — and it is usually small — is the opener', 'the fix, and it is usually small, is the opener', 'a pair around an aside'],
+    ['really? — yeah, most people miss that', 'really? yeah, most people miss that', 'punctuation already before it'],
+    ['wait —? you run both shops', 'wait? you run both shops', 'punctuation already after it'],
+    ['worth a look —', 'worth a look', 'a trailing dash'],
+    ['hey sam\n— Marcus', 'hey sam\nMarcus', 'a dash opening a line'],
+    ['booking 3–5 calls a week', 'booking 3-5 calls a week', 'a numeric range'],
+    ['open Mon–Fri only?', 'open Mon-Fri only?', 'a word range'],
+    ['hey sam -- saw the post', 'hey sam, saw the post', 'a double hyphen standing in for one'],
+  ])('rewrites %j', (raw, clean) => {
+    expect(dm(raw)).toBe(clean);
+  });
+
+  it('works inside the reply envelope too, where autopilot sends it unread', () => {
+    expect(replyEnvelope('{"reply":"fair — worth 10 min thursday?","intent":"objection"}', { limit: 800 }).reply)
+      .toBe('fair, worth 10 min thursday?');
+  });
+
+  it('leaves the hyphens and ellipses a person types alone', () => {
+    const line = 're-ran the numbers... -50% on the old offer - still want them?';
+    expect(dm(line)).toBe(line);
+  });
+});
+
 describe('cleaning is idempotent', () => {
   // A cleaned message is a valid completion, and cleaning it again must be a
   // no-op. Without this, a rule that fires on its own output would eat a DM one
@@ -172,6 +206,7 @@ describe('cleaning is idempotent', () => {
     'hey saw you run ads for dentists\n\nhow are you handling follow-up?',
     'quick q: what are you using for follow-up?',
     'saw the retreat post\n\nwant me to send over the breakdown?',
+    'the fix — and it is usually small — is the opener. The rest — Mon–Fri — waits',
   ])('leaves %j alone on a second pass', (raw) => {
     const once = dm(raw);
     expect(dm(once)).toBe(once);

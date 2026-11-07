@@ -21,6 +21,7 @@ import {
   type PromptIdentity,
 } from './prompt';
 import { renderTemplate } from './followups';
+import { HUMAN_VOICE_HEADING } from '../../supabase/functions/_shared/voice.ts';
 import type { FollowUpSequence, FollowUpStep, Lead } from './types';
 
 const marcus: PromptIdentity = {
@@ -48,13 +49,15 @@ const stocked: PromptIdentity = {
 };
 
 describe('buildSystemPrompt', () => {
-  it('opens with the Operator, not the product', () => {
-    expect(buildSystemPrompt(marcus)).toContain('You are Marcus, founder at Apex Growth.');
+  it('casts the model as a setter writing as the Operator, not as the product', () => {
+    const prompt = buildSystemPrompt(marcus);
+    expect(prompt).toContain('You are a top Instagram appointment setter.');
+    expect(prompt).toContain('You write as Marcus, founder at Apex Growth, from their own account');
   });
 
   it('drops the name from the opening when there is none', () => {
     expect(buildSystemPrompt({ ...marcus, founderName: '' }))
-      .toContain('You are the founder of Apex Growth.');
+      .toContain('You write as the founder of Apex Growth, from their own account');
   });
 
   it('injects the chosen tone and no other', () => {
@@ -71,18 +74,19 @@ describe('buildSystemPrompt', () => {
   it('names the business in the do-not-mention list', () => {
     // The whole point of the first DM is that it never pitches, so the business
     // name has to reach the prompt as something to avoid saying.
-    expect(buildSystemPrompt(marcus)).toContain('Your product name: "Apex Growth"');
+    expect(buildSystemPrompt(marcus)).toContain('Your business name: "Apex Growth"');
   });
 
   it('includes the example DM section only when one is given', () => {
     expect(buildSystemPrompt(marcus)).not.toContain('EXAMPLE DM FOR THIS CAMPAIGN');
     const withExample = buildSystemPrompt({ ...marcus, exampleDM: '  hey, saw your ad  ' });
     expect(withExample).toContain('## EXAMPLE DM FOR THIS CAMPAIGN\n\nhey, saw your ad');
+    expect(withExample).toContain('Never copy its words.');
   });
 
   it('substitutes placeholders for every blank field', () => {
     const prompt = buildSystemPrompt({});
-    expect(prompt).toContain('You are the founder of our business.');
+    expect(prompt).toContain('You write as the founder of our business,');
     // Each fallback reads as a sentence where it lands — a new Operator's
     // prompts are built from an empty identity until they fill the wizard.
     expect(prompt).toContain('You help potential clients achieve real growth in their business.');
@@ -102,10 +106,6 @@ describe('buildSystemPrompt', () => {
     // things never to do. DMs arrived reading "Here is the DM: hey...".
     const never = buildSystemPrompt(marcus).split('## NEVER IN THE FIRST DM')[1];
     expect(never).toContain('Any words that are not the message.');
-  });
-
-  it('asks the hook to carry a reason for the message existing', () => {
-    expect(buildSystemPrompt(marcus)).toContain('implied BECAUSE');
   });
 });
 
@@ -176,25 +176,69 @@ describe('buildReplySystemPrompt', () => {
   });
 });
 
-describe('the offer math', () => {
-  it('tells the DM which two levers to pull', () => {
-    // v1 said "hint at a specific result" and left the model to decide what
-    // made a result compelling. It reliably chose "large".
+describe('the shape of a first DM', () => {
+  // v7 (owner, 2026-11-07): DMs were too long, too generic and too busy, and
+  // got no replies. The cure is structural, so these pin the structure.
+
+  it('is one or two sentences and one question, with a hard ceiling', () => {
+    const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toContain('One or two sentences. 12 to 30 words. Never more than 35.');
+    expect(flat).toContain('One question mark, at the very end.');
+    expect(flat).toContain('Count the words. Over 30, cut until it is not.');
+  });
+
+  it('uses one detail from the profile, and only one that touches the offer', () => {
+    const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toContain('Pick ONE detail, the one closest to the problem you solve.');
+    expect(flat).toContain('Their bio read back to them, or more than one detail from it.');
+    expect(flat).toContain('If nothing in the profile touches your offer, use nothing from it');
+  });
+
+  it('never pitches: the offer appears only as the result, inside the question', () => {
     const prompt = buildSystemPrompt(marcus);
-    expect(prompt).toContain('## THE OFFER MATH');
-    expect(prompt).toMatch(
-      /DREAM OUTCOME[\s\S]*PERCEIVED LIKELIHOOD[\s\S]*TIME DELAY[\s\S]*EFFORT AND SACRIFICE/,
-    );
-    expect(prompt).toContain('Pick TWO');
-    // v4: both levers must come out of the Ledger, which is what stops the
-    // model supplying its own proof when the Operator supplied none.
-    expect(prompt.replace(/\s+/g, ' ')).toContain('Pick TWO, and both must come out of WHAT YOU ACTUALLY KNOW');
+    expect(prompt.replace(/\s+/g, ' ')).toContain('Your offer shows up only as the result they would want, inside the question');
+    // The value line was the pitch. v1 to v6 had a section to build it.
+    expect(prompt).not.toContain('## THE OFFER MATH');
+    expect(prompt).not.toContain('VALUE HINT');
+    const never = prompt.split('## NEVER IN THE FIRST DM')[1].replace(/\s+/g, ' ');
+    expect(never).toContain('"I help", "we help"');
+    expect(never).toContain('an ask for a call, "a quick chat" or "hopping on"');
+  });
+
+  it('names the five openings generate-dm rotates through', () => {
+    // generate-dm's OPENINGS spell each one out too, for hand-edited prompts;
+    // the names here are what an untouched prompt shares with them.
+    expect(buildSystemPrompt(marcus)).toMatch(/TRIGGER:[\s\S]*PAIN:[\s\S]*OBSERVATION:[\s\S]*GIVE:[\s\S]*RESULT:/);
+  });
+
+  it('offers a free give only when the Ledger holds one', () => {
+    expect(buildSystemPrompt(marcus).replace(/\s+/g, ' '))
+      .toContain('Only when WHAT YOU ACTUALLY KNOW lists something free to give.');
   });
 
   it('bans the claim that is too big to be believed', () => {
     const prompt = buildSystemPrompt(marcus);
     expect(prompt).toContain('A guarantee, a superlative, or a number you were not given');
     expect(prompt).toContain("we 10x'd a client in your niche last month, want in?");
+  });
+
+  it('keeps the Ledger, which is still the only source of a number', () => {
+    expect(buildSystemPrompt(marcus).replace(/\s+/g, ' '))
+      .toContain('You have been given NO result, NO number, NO price and NO guarantee');
+    expect(buildSystemPrompt(stocked)).toContain(stocked.freeGive!);
+  });
+
+  it('writes its own examples the way it asks the DM to be written', () => {
+    // Every quoted good example: one question, at the end, under 30 words.
+    const openings = buildSystemPrompt(marcus).split('## THE FIVE OPENINGS')[1].split('## WHAT YOU ACTUALLY KNOW')[0];
+    const examples = [...openings.matchAll(/^ {2}"(.+)"$/gm)].map((m) => m[1]);
+    expect(examples).toHaveLength(5);
+    for (const dm of examples) {
+      expect(dm.split(/\s+/).length).toBeLessThanOrEqual(30);
+      expect(dm.match(/\?/g)).toHaveLength(1);
+      expect(dm.trimEnd().endsWith('?')).toBe(true);
+      expect(dm).not.toMatch(/[—–;]/);
+    }
   });
 });
 
@@ -321,7 +365,7 @@ describe('migrateStoredPrompts', () => {
     const migrated = migrateStoredPrompts({ ...marcus, systemPrompt: legacy });
 
     expect(migrated.systemPrompt).toBe(buildSystemPrompt(marcus));
-    expect(migrated.systemPrompt).toContain('You are Marcus, founder at Apex Growth.');
+    expect(migrated.systemPrompt).toContain('You write as Marcus, founder at Apex Growth,');
     // The whole point: the tells the rewrite removed are gone.
     expect(migrated.systemPrompt).not.toContain('## WHAT MAKES YOUR DMs WORK');
     expect(migrated.systemPrompt).toContain('## HOW YOU GET SPOTTED');
@@ -491,6 +535,35 @@ describe('the ladders do not undo the opener', () => {
     const templates = [...buildFollowUpLadder(stocked), ...buildRescueLadder(stocked)];
     for (const step of templates) expect(step.messageTemplate).not.toContain('{{handle}}');
   });
+
+  // The first ladders opened every touch on an em dash while this prompt named
+  // the em dash as the giveaway: the same drift as "circle back", one character long.
+  it('bans the em dash in the DM prompt, and no follow-up uses one, whatever the Ledger holds', () => {
+    expect(buildSystemPrompt(marcus)).toContain('No em dashes');
+    const ladders = [stocked, marcus].flatMap((who) => [...buildFollowUpLadder(who), ...buildRescueLadder(who)]);
+    for (const step of ladders) expect(step.messageTemplate).not.toMatch(/[–—]/);
+  });
+});
+
+describe('write like a person', () => {
+  it('puts the humanizer rules in both prompts', () => {
+    expect(buildSystemPrompt(marcus)).toContain(HUMAN_VOICE_HEADING);
+    expect(buildReplySystemPrompt(marcus)).toContain(HUMAN_VOICE_HEADING);
+  });
+
+  it('gives the reply setter the rules a chatbot breaks most', () => {
+    const reply = buildReplySystemPrompt(marcus);
+    expect(reply).toContain('Never open on an acknowledgement');
+    expect(reply).toContain('Do not repeat their message back');
+  });
+
+  it('keeps the em dash out of every example the reply persona is told to copy', () => {
+    expect(buildReplySystemPrompt(stocked)).not.toMatch(/[–—]/);
+  });
+
+  it('still ends the DM prompt on the output rule', () => {
+    expect(buildSystemPrompt(marcus).trimEnd().endsWith('You are writing to them.')).toBe(true);
+  });
 });
 
 describe('migrateSequence', () => {
@@ -540,5 +613,23 @@ describe('migrateSequence', () => {
   it('is idempotent', () => {
     const once = migrateSequence(seq([step(legacy)]), stocked);
     expect(migrateSequence(once, stocked)).toBe(once);
+  });
+
+  it('brings a saved copy of the first, em-dashed ladders forward', () => {
+    // Copied from the ladders as they shipped before v6, the stocked variants.
+    const cold = [
+      `{{firstName}} — forgot to say the useful part. {{proof}}, {{sacrifice}}. want me to send how?`,
+      `not chasing you {{firstName}} — here's the thing i'd do first if i were you: {{give}}. no reply needed, just thought it'd be useful.`,
+      `{{firstName}} — closing your file so i stop cluttering your inbox. if {{outcome}} is still on the list this quarter, say "open" and i'll leave it open. otherwise all good, genuinely.`,
+    ];
+    const rescue = [
+      `{{firstName}} — think my last one got buried. easiest version: {{callLength}} and i'll {{callPromise}}, whether or not you ever buy anything. want me to send a couple of times?`,
+      `no call needed {{firstName}} — what's the actual thing stopping you? if it's {{price}}, say so and i'll tell you straight whether it's worth it for you.`,
+      `{{firstName}} — last one from me. want me to check back in 90 days, or is this a no? either answer is fine, "no" included.`,
+    ];
+    expect(migrateSequence(seq(cold.map((t) => step(t))), stocked).steps.map((s) => s.messageTemplate))
+      .toEqual(buildFollowUpLadder(stocked).map((s) => s.messageTemplate));
+    expect(migrateSequence(seq(rescue.map((t) => step(t, 'replied_not_booked'))), stocked).steps.map((s) => s.messageTemplate))
+      .toEqual(buildRescueLadder(stocked).map((s) => s.messageTemplate));
   });
 });

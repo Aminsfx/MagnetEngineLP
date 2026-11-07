@@ -288,6 +288,44 @@ function salvageTruncated(text: string): string {
   return cut > 0 ? text.slice(0, cut + 1).trim() : '';
 }
 
+/**
+ * Em and en dashes, rewritten as the punctuation a phone keyboard has.
+ *
+ * The em dash is the habit people now name first when they say a message
+ * "sounds like ChatGPT", and the prompts' ban on it is not enough on its own:
+ * at temperature 0.95 a model still writes one now and then, and the queue
+ * renders `dmContent` verbatim. This is the one rule in the file that changes
+ * text inside the message, which is why it may only swap punctuation and
+ * never remove a word: a comma where a dash was reads as a person typing fast.
+ * An eaten clause would read as nothing at all.
+ *
+ *   "3–5 calls", "Mon–Fri"       → hyphen (a range, not a pause)
+ *   "loved the reel — The light" → full stop (the dash started a sentence)
+ *   "hey sam — saw your post"    → comma
+ *   "really? — yeah", "wait —?"  → nothing (the punctuation is already there)
+ *   a dash opening or ending a line → nothing (a sign-off, a bullet, a trail)
+ *   " -- " between words         → treated as the dash it stands for
+ *
+ * Each dash is decided from the characters either side of it, never by a
+ * clean-up pass over the whole message afterwards, so nothing the model wrote
+ * apart from the dash itself can change. A plain hyphen is never touched:
+ * "-50%", "re-run" and " - " are what a person actually types.
+ */
+function undash(text: string): string {
+  return text
+    .replace(/(\w)–(\w)/g, '$1-$2')
+    .replace(/(\d)[ \t]*[–—][ \t]*(\d)/g, '$1-$2')
+    .replace(/[ \t]+--[ \t]+/g, ' — ')
+    .replace(/[ \t]*[–—]+[ \t]*/g, (dash, at: number, whole: string) => {
+      const before = at === 0 ? '\n' : whole[at - 1];
+      const after = whole[at + dash.length] ?? '\n';
+      if (before === '\n' || after === '\n') return '';
+      if (/[.!?…,:;]/.test(before)) return ' ';
+      if (/[.!?…,:;)]/.test(after)) return '';
+      return /\p{Lu}/u.test(after) ? '. ' : ', ';
+    });
+}
+
 export interface CleanOptions {
   /** Hard character ceiling — 1000 for a DM, 800 for an inbox reply. */
   limit: number;
@@ -325,6 +363,10 @@ export function cleanCompletion(raw: string, { limit, truncated }: CleanOptions)
   text = dropTrailingChatter(text);
 
   if (truncated) text = salvageTruncated(text);
+
+  // Last, so every label rule above has already seen the text as the model
+  // wrote it (ACK_LINE and the separator rule both look for dashes).
+  text = undash(text);
 
   text = text.replace(/\n{3,}/g, '\n\n').trim().slice(0, limit).trim();
 

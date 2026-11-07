@@ -73,6 +73,13 @@ describe('renderTemplate', () => {
       .toBe('forgot the useful part.');
   });
 
+  it('tidies the comma a removed name leaves, front and middle', () => {
+    expect(renderTemplate('{{firstName}}, forgot the useful part.', lead({ name: undefined }), {}))
+      .toBe('forgot the useful part.');
+    expect(renderTemplate("no call needed {{firstName}}, what's stopping you?", lead({ name: undefined }), {}))
+      .toBe("no call needed, what's stopping you?");
+  });
+
   it('leaves an unknown token visible rather than silently eating a sentence', () => {
     expect(renderTemplate('hey {{nonsense}} there.', lead(), stocked)).toBe('hey {{nonsense}} there.');
   });
