@@ -16,6 +16,8 @@ import { NICHE_PRESETS } from '../../lib/presets';
 import { TRIAL_ALLOWANCE, isTrialLimit } from '../../lib/trial';
 import { PLAN_LIMITS } from '../../lib/plans';
 import type { SearchAllowance } from '../../lib/useOutreach';
+import { campaignNamed, type Campaign } from '../../lib/queue';
+import { storage } from '../../lib/storage';
 import { CsvImport } from './CsvImport';
 import { CHANNEL, alpha } from '../../lib/theme';
 import { posthogCapture } from '../../lib/posthog';
@@ -29,6 +31,13 @@ interface CampaignBuilderProps {
      * in the queue, and the exclude keywords (`outreach.searchAllowance`).
      */
     onBeforeSearch?: () => Promise<SearchAllowance>;
+    /**
+     * The workspace's campaigns (`campaignsOf`). A search added under one of
+     * their names joins that campaign instead of starting another.
+     */
+    campaigns?: Campaign[];
+    /** Whose remembered campaign name to show in the name field. */
+    userId?: string | null;
 }
 
 interface SourceOption {
@@ -173,9 +182,18 @@ function formatFollowers(n: number): string {
 
 const FIELD = 'w-full bg-surface border border-white/8 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors';
 
-export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped, onTrialLimit, onBeforeSearch }) => {
+export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped, onTrialLimit, onBeforeSearch, campaigns = [], userId }) => {
     const [tab, setTab] = useState<'find' | 'import'>('find');
-    const [campaignName, setCampaignName] = useState('');
+    // The name stays in the field after a search is added, and across visits:
+    // it is what keeps every search under it in one campaign.
+    const [campaignName, setCampaignNameState] = useState(() => storage.getCampaignName(userId));
+    const setCampaignName = (name: string) => {
+        setCampaignNameState(name);
+        storage.setCampaignName(name, userId);
+    };
+    // The campaign this name already belongs to, if there is one.
+    const joining = campaignNamed(campaigns, campaignName);
+    const namedCampaigns = campaigns.filter(b => b.name);
 
     // ── Source + inputs ──────────────────────────────────────────
     const [kind, setKind]       = useState<SourceKind>('keyword');
@@ -242,8 +260,9 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         } catch {
             allowance = undefined;
         }
-        if (allowance?.campaignsLeft === 0) {
-            setError(`You've used all ${PLAN_LIMITS.maxCampaignsPerMonth} campaigns this month, so a new search couldn't be added to your queue. They reset on the 1st.`);
+        // Adding to a campaign that already exists does not open a new one.
+        if (allowance?.campaignsLeft === 0 && !joining) {
+            setError(`You've used all ${PLAN_LIMITS.maxCampaignsPerMonth} campaigns this month, so a new campaign can't be started. They reset on the 1st. You can still add to a campaign you already have: type its name above.`);
             return;
         }
         if (allowance?.leadsLeft === 0) {
@@ -314,7 +333,7 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
         }
     // resetRun and source are derived from the deps below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [kind, raw, perQuery, enrich, onTrialLimit, onBeforeSearch]);
+    }, [kind, raw, perQuery, enrich, onTrialLimit, onBeforeSearch, joining?.id]);
 
     const handlePause = () => {
         controlRef.current?.pause();
@@ -355,19 +374,27 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
             return;
         }
 
-        // Default a name if the user left it blank, so campaigns stay trackable.
+        // A name the workspace already has files these Leads into that
+        // campaign, whichever source found them. A new name starts one, and a
+        // blank one gets a name from the search, so campaigns stay trackable.
         const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const first = queries[0] ? source.campaign(queries[0]) : 'Campaign';
         const more = !isList && queries.length > 1 ? ` +${queries.length - 1}` : '';
-        const name = campaignName.trim() || `${first}${more} · ${date}`;
-        const toAdd = picked.map(l => ({ ...l, campaignName: name }));
+        const name = joining?.name ?? (campaignName.trim() || `${first}${more} · ${date}`);
+        const toAdd = picked.map(l => (joining
+            ? { ...l, campaignId: joining.id, campaignName: joining.name }
+            : { ...l, campaignName: name }));
 
         await onLeadsScraped(toAdd);
         posthogCapture('leads_added_to_queue', {
             source_kind: kind,
             lead_count: toAdd.length,
+            joined_campaign: Boolean(joining),
         });
-        showToast(`${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''} added as their own campaign, "${name}". It opens first in the Approval Queue.`);
+        const count = `${toAdd.length} lead${toAdd.length !== 1 ? 's' : ''}`;
+        showToast(joining
+            ? `${count} added to your "${name}" campaign. It opens first in the Approval Queue.`
+            : `${count} added as a new campaign, "${name}". It opens first in the Approval Queue.`);
         setResults([]);
         setSelected(new Set());
         setProgress(null);
@@ -440,15 +467,29 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onLeadsScraped
                     <div>
                         <label htmlFor="campaignbu-campaign-name" className="block text-xs text-neutral-400 mb-1.5 font-medium">
                             Campaign name
-                            <span className="ml-2 text-neutral-400 font-normal">so you can find this campaign later — optional</span>
+                            <span className="ml-2 text-neutral-400 font-normal">optional, every search under one name goes into one campaign</span>
                         </label>
                         <input id="campaignbu-campaign-name"
                             type="text"
                             value={campaignName}
                             onChange={e => setCampaignName(e.target.value)}
-                            placeholder="e.g. Miami coaches — Jan"
+                            placeholder="e.g. Miami coaches, Jan"
+                            list={namedCampaigns.length > 0 ? 'campaignbu-campaigns' : undefined}
+                            aria-describedby="campaignbu-campaign-status"
                             className="w-full max-w-md bg-surface border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/50 focus:border-white/30 transition-colors"
                         />
+                        {namedCampaigns.length > 0 && (
+                            <datalist id="campaignbu-campaigns">
+                                {namedCampaigns.map(b => <option key={b.id} value={b.name} />)}
+                            </datalist>
+                        )}
+                        <p id="campaignbu-campaign-status" className="mt-1.5 text-xs text-neutral-400">
+                            {joining
+                                ? <>Adding to <span className="text-white font-medium">{joining.name}</span>, {joining.size.toLocaleString('en-US')} lead{joining.size !== 1 ? 's' : ''} so far. Type a different name to start a new campaign.</>
+                                : campaignName.trim()
+                                    ? 'A new campaign. Every search you add under this name goes into it.'
+                                    : 'Left blank, each search becomes its own campaign, named for what you searched.'}
+                        </p>
                     </div>
 
                     <div className="bg-surface-raised border border-white/5 rounded-2xl p-6 space-y-5">

@@ -174,6 +174,35 @@ describe('addLeads', () => {
     expect(db.getMonthlyCount).not.toHaveBeenCalled();
     expect(result.current.leads).toHaveLength(1);
   });
+
+  it('adds a search to a campaign it already has without spending a campaign, even with none left', async () => {
+    vi.mocked(db.getMonthlyCount).mockImplementation(async (kind) =>
+      kind === 'campaigns' ? PLAN_LIMITS.maxCampaignsPerMonth : 0,
+    );
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('x', { campaignId: 'miami' })], 0));
+
+    await act(() => result.current.addLeads([lead('a', { campaignId: 'miami' }), lead('b', { campaignId: 'miami' })]));
+
+    expect(result.current.leads.map((l) => l.campaignId)).toEqual(['miami', 'miami', 'miami']);
+    expect(db.incrementMonthlyCount).toHaveBeenCalledWith('leads', 2);
+    expect(db.incrementMonthlyCount).not.toHaveBeenCalledWith('campaigns', expect.anything());
+  });
+
+  it('counts a search that starts a campaign, and refuses one when none are left', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('x', { campaignId: 'miami' })], 0));
+
+    await act(() => result.current.addLeads([lead('a', { campaignId: 'dubai' })]));
+    expect(db.incrementMonthlyCount).toHaveBeenCalledWith('campaigns', 1);
+
+    vi.mocked(db.getMonthlyCount).mockImplementation(async (kind) =>
+      kind === 'campaigns' ? PLAN_LIMITS.maxCampaignsPerMonth : 0,
+    );
+    await act(() => result.current.addLeads([lead('b', { campaignId: 'leeds' })]));
+    expect(result.current.leads.map((l) => l.id)).toEqual(['x', 'a']);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('campaigns this month'));
+  });
 });
 
 describe('generateDMs', () => {

@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { CampaignBuilder } from './CampaignBuilder';
 import { invokeFunction } from '../../lib/functions';
 import { demoScrape } from '../../lib/scrapeDemo';
+import { campaignsOf } from '../../lib/queue';
+import type { Lead } from '../../lib/types';
 
 /**
  * The Campaign Builder driven the way an Operator drives it, against the demo
@@ -16,6 +18,8 @@ vi.mock('../../lib/functions', async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+    // The campaign name is remembered in the browser; each test starts blank.
+    localStorage.clear();
     vi.mocked(invokeFunction).mockReset();
     vi.mocked(invokeFunction).mockImplementation(async (_name, body) => demoScrape(body, { delayMs: 0 }));
 });
@@ -152,6 +156,61 @@ describe('CampaignBuilder', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "@shy_private is private — Instagram doesn't show its followers list to anyone.",
         );
+    });
+
+    it('keeps every search under one name in one campaign, and keeps the name', async () => {
+        const user = userEvent.setup();
+        const onLeadsScraped = vi.fn();
+        const { rerender, unmount } = render(<CampaignBuilder onLeadsScraped={onLeadsScraped} campaigns={[]} />);
+
+        await user.type(screen.getByLabelText(/^Campaign name/), 'Miami coaches');
+        expect(screen.getByText(/A new campaign\./)).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: /^Handle list/ }));
+        await user.type(screen.getByLabelText(/^Usernames/), 'jane.coaching{enter}miami_realtor');
+        await user.click(screen.getByRole('button', { name: /^Look up$/ }));
+        await user.click((await screen.findAllByRole('button', { name: /Add 2 to Queue/ }))[0]);
+
+        const first = onLeadsScraped.mock.calls[0][0] as Lead[];
+        expect(first.every(l => l.campaignName === 'Miami coaches')).toBe(true);
+
+        // The shell hands the new campaign back. The name is still in the field,
+        // so the next search, from another source, joins it.
+        rerender(<CampaignBuilder onLeadsScraped={onLeadsScraped} campaigns={campaignsOf(first)} />);
+        expect(screen.getByLabelText(/^Campaign name/)).toHaveValue('Miami coaches');
+        expect(screen.getByText(/2 leads so far/)).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /^Following/ }));
+        await user.type(screen.getByLabelText(/^Accounts/), '@competitor');
+        await user.selectOptions(screen.getByLabelText(/^Profiles per account/), '50');
+        await user.click(screen.getByRole('button', { name: /Start scrape/ }));
+        await user.click((await screen.findAllByRole('button', { name: /Add 50 to Queue/ }, { timeout: 5000 }))[0]);
+
+        const second = onLeadsScraped.mock.calls[1][0] as Lead[];
+        expect(new Set(second.map(l => l.campaignId))).toEqual(new Set([first[0].campaignId]));
+        expect(second.every(l => l.campaignName === 'Miami coaches')).toBe(true);
+
+        // And it is still there after leaving the page.
+        unmount();
+        render(<CampaignBuilder onLeadsScraped={onLeadsScraped} campaigns={campaignsOf([...first, ...second])} />);
+        expect(screen.getByLabelText(/^Campaign name/)).toHaveValue('Miami coaches');
+    }, 15_000);
+
+    it("lets a search join a campaign it already has when the month's campaigns are used up", async () => {
+        const user = userEvent.setup();
+        const existing = campaignsOf([{
+            id: 'x', campaignId: 'miami', campaignName: 'Miami coaches', handle: 'x', name: 'x',
+            followers: 0, isPrivate: false, status: 'cold', dmSent: false, replied: false,
+        }]);
+        const onBeforeSearch = vi.fn(async () => ({ known: new Set<string>(), exclude: [], leadsLeft: 300, campaignsLeft: 0 }));
+        render(<CampaignBuilder onLeadsScraped={vi.fn()} onBeforeSearch={onBeforeSearch} campaigns={existing} />);
+
+        await user.type(screen.getByLabelText(/^Campaign name/), 'miami coaches');
+        await user.click(screen.getByRole('button', { name: /^Handle list/ }));
+        await user.type(screen.getByLabelText(/^Usernames/), 'jane.coaching');
+        await user.click(screen.getByRole('button', { name: /^Look up$/ }));
+
+        expect((await screen.findAllByRole('button', { name: /Add 1 to Queue/ })).length).toBeGreaterThan(0);
+        expect(screen.queryByText(/used all 6 campaigns/)).not.toBeInTheDocument();
     });
 
     it('looks up a pasted handle list in full', async () => {

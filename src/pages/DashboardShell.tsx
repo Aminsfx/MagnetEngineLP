@@ -21,6 +21,7 @@ import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { readOutcome } from '../lib/outcome';
+import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
 import { todayCounts, headline } from '../lib/today';
 import {
@@ -115,6 +116,8 @@ const DashboardShell: React.FC = () => {
   // interface with two ports (the store, and the extension protocol). This used
   // to be seventeen callbacks and six mirror refs inlined here.
   const outreach = useOutreach({ store, config, limits, toast, onTrialLimit: toTrialUpgrade });
+  // What the Campaign Builder files a named search into.
+  const campaigns = useMemo(() => campaignsOf(outreach.leads), [outreach.leads]);
 
   const [dataLoading, setDataLoading] = useState(true);
   // Real per-day sent count reported by the extension (source of truth for what
@@ -176,7 +179,12 @@ const DashboardShell: React.FC = () => {
       store.loadConfig(),
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
-      outreach.hydrate(savedLeads ?? [], dmUsage.used);
+      // Campaigns typed with the same name before names joined campaigns are
+      // one campaign now. Only the Leads that moved are saved, and once they
+      // have been, this finds nothing to do.
+      const { leads, changed } = foldNamedCampaigns(savedLeads ?? []);
+      outreach.hydrate(leads, dmUsage.used);
+      if (changed.length > 0) store.saveLeads(changed).catch(console.error);
       // The DM prompt is a string saved on the config, not read from `prompt.ts`
       // at send time — so improving the recipe reaches new sign-ups and nobody
       // else unless stored copies are brought forward. Only prompts the wizard
@@ -530,7 +538,13 @@ const DashboardShell: React.FC = () => {
           <h1 className="text-2xl font-semibold text-white tracking-tight">Campaign Builder</h1>
           <p className="text-neutral-400 text-sm mt-1.5">Search Instagram for leads and add them to your Approval Queue.</p>
         </div>
-        <CampaignBuilder onLeadsScraped={outreach.addLeads} onBeforeSearch={outreach.searchAllowance} onTrialLimit={toTrialUpgrade} />
+        <CampaignBuilder
+          onLeadsScraped={outreach.addLeads}
+          onBeforeSearch={outreach.searchAllowance}
+          onTrialLimit={toTrialUpgrade}
+          campaigns={campaigns}
+          userId={user?.id ?? null}
+        />
       </div>
     ),
 

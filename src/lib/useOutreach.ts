@@ -237,6 +237,12 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     let toAdd = fresh;
     let quotaCapped = 0;
 
+    // A search added under a name the workspace already has carries that
+    // campaign's id (`campaignNamed`). It joins a campaign rather than opening
+    // one, so the month's campaign quota neither counts it nor refuses it.
+    const campaignIds = new Set(leadsRef.current.map((l) => l.campaignId).filter(Boolean));
+    const opensCampaign = !fresh.every((l) => l.campaignId && campaignIds.has(l.campaignId));
+
     // Advisory quotas: they bound the Operator's own workspace, not the Owner's
     // spend, and Leads are written to Postgres by the client, so there is no
     // server chokepoint to meter them at.
@@ -245,7 +251,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
         db.getMonthlyCount('campaigns'),
         db.getMonthlyCount('leads'),
       ]);
-      if (campaignsUsed >= limits.maxCampaignsPerMonth) {
+      if (opensCampaign && campaignsUsed >= limits.maxCampaignsPerMonth) {
         toast.error(`You've used all ${limits.maxCampaignsPerMonth} campaigns this month. Resets on the 1st.`);
         return;
       }
@@ -268,12 +274,13 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       added_count: added.length,
       duplicate_count: duplicates,
       quota_capped_count: quotaCapped,
+      joined_campaign: !opensCampaign,
       workspace_persisted: metered,
     });
 
     if (metered) {
       db.incrementMonthlyCount('leads', added.length).catch(console.error);
-      db.incrementMonthlyCount('campaigns', 1).catch(console.error);
+      if (opensCampaign) db.incrementMonthlyCount('campaigns', 1).catch(console.error);
     }
 
     // Only worth a toast when something was left out — a clean add is already

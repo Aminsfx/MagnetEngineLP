@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
     CONFIG: 'magnetengine_config',
     DM_DELAY: 'magnetengine_dm_delay',
     QUEUE_PAGE_SIZE: 'magnetengine_queue_page_size',
+    CAMPAIGN_NAME: 'magnetengine_campaign_name',
 };
 
 /** Random delay (in minutes) the extension waits between each DM. */
@@ -101,5 +102,27 @@ export const storage = {
 
     setQueuePageSize(size: QueuePageSize): void {
         localStorage.setItem(STORAGE_KEYS.QUEUE_PAGE_SIZE, String(size));
+    },
+
+    // The Campaign Builder's name field. Kept between searches, visits and
+    // reloads, because the name is what files a search into its campaign: a
+    // field that emptied itself sent the next search to a new campaign. Keyed
+    // by user, since two accounts can share a browser.
+    getCampaignName(userId?: string | null): string {
+        try {
+            return localStorage.getItem(`${STORAGE_KEYS.CAMPAIGN_NAME}:${userId ?? 'local'}`) ?? '';
+        } catch {
+            return '';
+        }
+    },
+
+    setCampaignName(name: string, userId?: string | null): void {
+        try {
+            const key = `${STORAGE_KEYS.CAMPAIGN_NAME}:${userId ?? 'local'}`;
+            if (name.trim()) localStorage.setItem(key, name);
+            else localStorage.removeItem(key);
+        } catch {
+            // A browser that refuses storage just doesn't remember the name.
+        }
     },
 };

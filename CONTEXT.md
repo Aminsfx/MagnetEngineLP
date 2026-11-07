@@ -20,8 +20,9 @@ Two Leads with the same handle are the same Lead.
 _Avoid_: username, IG name
 
 **Campaign**:
-One batch of Leads gathered together, named by the operator. A grouping for
-review and reporting; it does not own the Leads in it.
+The Leads gathered under one name the operator gives. Every search added under
+that name joins it, whatever the source. A grouping for review and reporting;
+it does not own the Leads in it.
 _Avoid_: batch, list, segment
 
 **Intake**:

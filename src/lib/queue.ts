@@ -6,9 +6,14 @@ import type { Lead } from './types';
  * The queue used to file Leads under six overlapping statuses (Ready, Approved,
  * Sent, Pending, Rejected, All) in one list, so a fresh scrape landed among
  * Leads already written, approved or sent. Now there are three stages of work,
- * in the order it happens, and two places finished Leads go — and every scrape
- * stays its own campaign. One definition each, so the tab counts, the campaign chips
+ * in the order it happens, and two places finished Leads go, and each campaign
+ * is its own chip. One definition each, so the tab counts, the campaign chips
  * and the rows can never disagree.
+ *
+ * A campaign is its name. Every search the Operator adds under a name the
+ * workspace already has joins that campaign (`campaignNamed`), so one name
+ * scraped from followers, a hashtag and a location is one campaign. A search
+ * added with no name is its own campaign, named for its source and the day.
  */
 
 /** The work still to do on a Lead, in order: write its DM, read it, send it. */
@@ -45,13 +50,15 @@ export type ViewCounts = Record<QueueView, number>;
 
 const zero = (): ViewCounts => ({ write: 0, review: 0, send: 0, sent: 0, skipped: 0 });
 
-/** One scrape (or CSV import): the Leads that arrived together. */
+/** The Leads gathered under one name (or one unnamed scrape, or one CSV import). */
 export interface Campaign {
     id: string;
     /** The campaign name the Operator gave it, or '' — see `campaignLabel`. */
     name: string;
     /** When the campaign arrived: its earliest Lead's `createdAt`. */
     createdAt?: string;
+    /** When Leads last joined it: its newest Lead's `createdAt`. */
+    updatedAt?: string;
     counts: ViewCounts;
     size: number;
 }
@@ -61,24 +68,91 @@ const time = (iso?: string) => {
     return Number.isFinite(t) ? t : -Infinity;
 };
 
-/** Every campaign, newest first. A campaign with no date sorts last. */
+/**
+ * Every campaign, the one Leads last joined first, so a search added to an
+ * older campaign brings it back to the front of the queue. A campaign with no
+ * date sorts last.
+ */
 export function campaignsOf(leads: Lead[]): Campaign[] {
     const byId = new Map<string, Campaign>();
     for (const l of leads) {
         const id = campaignIdOf(l);
         let b = byId.get(id);
         if (!b) {
-            b = { id, name: '', createdAt: l.createdAt, counts: zero(), size: 0 };
+            b = { id, name: '', createdAt: l.createdAt, updatedAt: l.createdAt, counts: zero(), size: 0 };
             byId.set(id, b);
         }
         if (!b.name && l.campaignName?.trim()) b.name = l.campaignName.trim();
         if (l.createdAt && (!b.createdAt || time(l.createdAt) < time(b.createdAt))) {
             b.createdAt = l.createdAt;
         }
+        if (l.createdAt && (!b.updatedAt || time(l.createdAt) > time(b.updatedAt))) {
+            b.updatedAt = l.createdAt;
+        }
         b.counts[viewOf(l)]++;
         b.size++;
     }
-    return [...byId.values()].sort((a, b) => time(b.createdAt) - time(a.createdAt));
+    return [...byId.values()].sort((a, b) => time(b.updatedAt) - time(a.updatedAt));
+}
+
+/** Two names are one campaign when they differ only in case and spacing. */
+const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * The campaign already called `name`, which a search added under that name
+ * joins. When two campaigns share it (both made before names joined), the one
+ * Leads last joined wins, so a run keeps landing in one place.
+ */
+export function campaignNamed(campaigns: Campaign[], name: string): Campaign | undefined {
+    const key = nameKey(name);
+    if (!key) return undefined;
+    return campaigns
+        .filter((b) => b.name && nameKey(b.name) === key)
+        // The id settles a tie, so two tabs folding the same Leads agree.
+        .sort((a, b) => time(b.updatedAt) - time(a.updatedAt) || a.id.localeCompare(b.id))[0];
+}
+
+/**
+ * A name the app made up for a search or import added with none: "#smma ·
+ * Nov 6", "Followers of @x +2 · Oct 24", "CSV import · Nov 6". Two of these can
+ * match without the Operator ever meaning them as one campaign (two different
+ * posts' likers on one day are both "Likers of a post · Nov 6").
+ */
+const MADE_UP_NAME = / · [A-Z][a-z]{2} \d{1,2}$/;
+
+/**
+ * Campaigns the Operator gave the same name, folded into one.
+ *
+ * Before names joined campaigns (2026-11-06), the name field emptied itself
+ * between visits and every search became its own campaign, so an Operator who
+ * retyped "Miami coaches" for each source has several campaigns by that name.
+ * Each folds into the one `campaignNamed` picks, which is where the next search
+ * under that name will land anyway. Names the app made up are left apart, as
+ * are Leads from before campaigns were stamped.
+ *
+ * `changed` holds only the Leads that moved, restamped with the campaign's id
+ * and name, for the caller to save. When nothing shares a name, `leads` is the
+ * array passed in and `changed` is empty, so running it on every load is free
+ * once the fold has happened.
+ */
+export function foldNamedCampaigns(leads: Lead[]): { leads: Lead[]; changed: Lead[] } {
+    const named = campaignsOf(leads).filter((b) => b.id !== NO_CAMPAIGN && b.name && !MADE_UP_NAME.test(b.name));
+    const into = new Map<string, Campaign>();
+    for (const b of named) {
+        const keep = campaignNamed(named, b.name);
+        if (keep && keep.id !== b.id) into.set(b.id, keep);
+    }
+    if (into.size === 0) return { leads, changed: [] };
+
+    const changed: Lead[] = [];
+    const folded = leads.map((l) => {
+        const keep = l.campaignId ? into.get(l.campaignId) : undefined;
+        if (!keep) return l;
+        const moved = { ...l, campaignId: keep.id, campaignName: keep.name };
+        changed.push(moved);
+        return moved;
+    });
+    return { leads: folded, changed };
 }
 
 const DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
