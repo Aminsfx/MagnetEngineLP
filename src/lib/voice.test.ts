@@ -21,8 +21,11 @@ describe('withHumanVoice', () => {
     expect(withHumanVoice(handWritten, 'dm')).toContain('follow those');
   });
 
-  it('keeps "the response is only the DM" as the last thing the model reads', () => {
-    expect(withHumanVoice(handWritten, 'dm').trimEnd().endsWith('only the DM.')).toBe(true);
+  it('says nothing about what the response contains', () => {
+    // It used to end "your whole response is still only the DM". The answer
+    // now has fields, laid out by `withDmContract`, which comes after this.
+    expect(withHumanVoice(handWritten, 'dm')).not.toMatch(/whole response|only the DM/);
+    expect(withHumanVoice(handWritten, 'dm').trimEnd().endsWith('follow those.')).toBe(true);
   });
 
   it('never adds the rules twice', () => {

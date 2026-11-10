@@ -22,6 +22,20 @@ export interface Lead {
     approved?: boolean;
     rejected?: boolean;
     /**
+     * Why the DM writer passed over this Lead instead of writing to them: it
+     * saw nothing on the profile that makes them the Operator's kind of
+     * client, or nothing to write from at all. Set together with `rejected`,
+     * shown in the Skipped list, and cleared when the Operator restores them.
+     * A Lead the Operator skipped by hand has none.
+     */
+    skipReason?: string;
+    /**
+     * The Operator restored a Lead the writer passed over. Their word outranks
+     * the writer's, so generate-dm writes to this Lead whatever its profile
+     * holds, where it would otherwise pass over them again.
+     */
+    fitConfirmed?: boolean;
+    /**
      * They asked not to be contacted again — read off the Inbox as an
      * `Outcome`, or set by the Operator. Suppression only: it stops every
      * follow-up condition, fires no webhook and moves no metric. A judgement

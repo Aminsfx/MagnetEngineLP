@@ -267,7 +267,7 @@ describe('generateDMs', () => {
     expect(result.current.leads.every((l) => l.dmContent === undefined || l.dmContent.trim() !== '')).toBe(true);
     expect(saved.flat().map((l) => l.id)).toEqual(['a']);
     // And the Operator is told, rather than being sent to an empty queue.
-    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('empty'));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('no sendable DM'));
   });
 
   it('reports the count the queue will actually show', async () => {
@@ -332,6 +332,65 @@ describe('generateDMs', () => {
     expect(result.current.leads.filter((l) => l.dmContent).map((l) => l.id)).toEqual(['a', 'c']);
     // And the Operator is told which Lead to retry, by name.
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('@b'));
+  });
+
+  it('moves a Lead the writer passed over to Skipped, with its reason, and spends nothing', async () => {
+    // generate-dm answers `skip` for a Lead that is not someone to write to.
+    // It used to have no way to say so, and said it in the DM.
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'a real dm', used: 1, limit: 500 })
+      .mockResolvedValueOnce({ dm: '', skip: true, reason: 'Personal account, nothing about a business.', used: 1, limit: 500 })
+      .mockResolvedValueOnce({ dm: '', skip: true, used: 1, limit: 500 });
+
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    const byId = Object.fromEntries(result.current.leads.map((l) => [l.id, l]));
+    expect(byId.a.dmContent).toBe('a real dm');
+    expect(byId.b).toMatchObject({ rejected: true, skipReason: 'Personal account, nothing about a business.' });
+    expect(byId.b.dmContent).toBeUndefined();
+    // No reason given is still a reason the Skipped list can show.
+    expect(byId.c.rejected).toBe(true);
+    expect(byId.c.skipReason).toMatch(/kind of client/);
+    expect(saved.flat().map((l) => l.id).sort()).toEqual(['a', 'b', 'c']);
+    expect(result.current.dmUsed).toBe(1);
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('2 leads skipped as not a fit'));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('says so plainly when every Lead in the run was passed over', async () => {
+    vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: '', skip: true, reason: 'No business.', used: 0, limit: 500 });
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('No DMs written. 2 leads skipped'));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('writes to a passed-over Lead once the Operator restores it', async () => {
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: '', skip: true, reason: 'No business.', used: 0, limit: 500 })
+      .mockResolvedValueOnce({ dm: 'how is it going?', used: 1, limit: 500 });
+    const { result } = setup();
+    act(() => result.current.hydrate([lead('a')], 0));
+
+    await act(() => result.current.generateDMs());
+    // Skipped Leads are never written to again on their own.
+    await act(() => result.current.generateDMs());
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(1);
+
+    await act(() => result.current.restoreMany(['a']));
+    expect(result.current.leads[0]).toMatchObject({ rejected: false, fitConfirmed: true });
+    expect(result.current.leads[0].skipReason).toBeUndefined();
+
+    await act(() => result.current.generateDMs());
+    // The Lead goes to the writer carrying the Operator's word.
+    expect(vi.mocked(aiAPI.generateDM).mock.calls[1][1]).toMatchObject({ id: 'a', fitConfirmed: true });
+    expect(result.current.leads[0].dmContent).toBe('how is it going?');
   });
 
   it('still stops the batch on a failure that is not about one Lead', async () => {

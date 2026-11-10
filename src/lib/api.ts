@@ -31,7 +31,16 @@ export interface ReplyResult {
 }
 
 export interface DmResult {
+    /** The message, ready to send. Empty when the Lead was passed over. */
     dm: string;
+    /**
+     * The writer passed over this Lead: nothing on their profile makes them
+     * someone to write to. Nothing was spent. An older deployment never sends
+     * it, and answers such a Lead with a DM as it always did.
+     */
+    skip?: boolean;
+    /** One line saying why, for the Skipped list. Present with `skip`. */
+    reason?: string;
     /** DM generations used this month, counted server-side after the call. */
     used: number;
     limit: number;

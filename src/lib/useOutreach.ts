@@ -15,6 +15,7 @@ import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
 import { sendCampaign, type SendReceipt } from './extensionProtocol';
 import { storage } from './storage';
 import { posthogCapture, posthogLogs } from './posthog';
+import { NO_FIT_REASON } from '../../supabase/functions/_shared/dm.ts';
 
 /**
  * The outreach engine: everything that happens to a Lead between arriving and
@@ -355,8 +356,15 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     [patchMany],
   );
 
+  /**
+   * Back into the queue. A Lead the DM writer passed over comes back marked
+   * as a fit on the Operator's word, so writing its DM again produces one
+   * instead of the same verdict.
+   */
   const restoreMany = useCallback(
-    (ids: string[]) => patchMany(ids, (l) => ({ ...l, rejected: false })),
+    (ids: string[]) => patchMany(ids, (l) => (l.skipReason
+      ? { ...l, rejected: false, skipReason: undefined, fitConfirmed: true }
+      : { ...l, rejected: false })),
     [patchMany],
   );
 
@@ -417,8 +425,10 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     setIsGenerating(true);
     setGeneration({ done: 0, total: run.length });
     const dmDate = new Date().toISOString();
-    /** Handles the provider answered for, but with no message in the answer. */
+    /** Handles the writer had no sendable DM for, even after its second attempt. */
     const blank: string[] = [];
+    /** Leads the writer passed over as not a fit, this run. */
+    let passedOver = 0;
     let failure: string | null = null;
     let trialLimited = false;
     let usedAfter: number | null = null;
@@ -428,6 +438,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
 
     for (let start = 0; start < run.length && !failure && !stopRef.current; start += GENERATION_BATCH) {
       const written = new Map<string, string>();
+      /** Lead id to why the writer passed over them. */
+      const passed = new Map<string, string>();
 
       for (const lead of run.slice(start, start + GENERATION_BATCH)) {
         if (stopRef.current) break;
@@ -439,8 +451,12 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
         try {
           // The server meters the quota and returns the authoritative count, so
           // the engine keeps no tally of its own.
-          const { dm, used } = await aiAPI.generateDM(config.selectedAIProvider, now ?? lead, config.systemPrompt);
-          usedAfter = used;
+          const { dm, used, skip, reason } = await aiAPI.generateDM(config.selectedAIProvider, now ?? lead, config.systemPrompt);
+          if (typeof used === 'number') usedAfter = used;
+          // Not someone to write to. That is a verdict, not a failure: the
+          // Lead leaves the queue for Skipped with the reason, and nothing was
+          // spent on it.
+          if (skip) { passed.set(lead.id, (reason || '').trim() || NO_FIT_REASON); continue; }
           // A 200 carrying no message is a failed generation, not a generation.
           // Only a *thrown* error used to count as failure, so a blank was
           // stamped on as `dmContent: ''` — which the queue reads as "no DM yet"
@@ -481,11 +497,22 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
         if (current) landed.push({ ...current, dmContent: text, dmDate });
         else dropped += 1;
       }
-      if (landed.length > 0) {
-        const byId = new Map(landed.map((l) => [l.id, l]));
+      // A Lead the Operator wrote to, approved or skipped by hand while the
+      // batch ran keeps what they did to it.
+      const skipped: Lead[] = [];
+      for (const [id, reason] of passed) {
+        const current = leadsRef.current.find((l) => l.id === id);
+        if (current && !current.dmContent && !current.approved && !current.rejected) {
+          skipped.push({ ...current, rejected: true, skipReason: reason });
+        }
+      }
+      const changed = [...landed, ...skipped];
+      if (changed.length > 0) {
+        const byId = new Map(changed.map((l) => [l.id, l]));
         setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-        await store.saveLeads(landed);
+        await store.saveLeads(changed);
         landedCount += landed.length;
+        passedOver += skipped.length;
       }
     }
 
@@ -499,6 +526,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       attempted_count: attempted,
       generated_count: landedCount,
       empty_completion_count: blank.length,
+      skipped_count: passedOver,
       dropped_count: dropped,
       completed: !failure && !stopped,
     });
@@ -511,11 +539,16 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     }
 
     const count = (n: number) => `${n} DM${n !== 1 ? 's' : ''}`;
+    // Said on every ending, so a run that wrote four DMs out of ten never
+    // looks like six went missing.
+    const skippedNote = passedOver > 0
+      ? ` ${passedOver} lead${passedOver !== 1 ? 's' : ''} skipped as not a fit, with the reason, in Skipped.`
+      : '';
 
     if (failure) {
-      toast.error(landedCount > 0
+      toast.error((landedCount > 0
         ? `Generated ${count(landedCount)}, then stopped: ${failure}`
-        : `DM generation failed: ${failure}`);
+        : `DM generation failed: ${failure}`) + skippedNote);
       // The batch is saved above, so the Operator can go and pay in full.
       if (trialLimited) onTrialLimit?.();
       return;
@@ -524,7 +557,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     // Every Lead the batch touched but did not finish is still pending, so the
     // hint belongs on the error path too. It used to `return` above this line,
     // which meant one fumbled Lead hid the fact that forty more were waiting.
-    const stillPending = pending.length - landedCount;
+    const stillPending = pending.length - landedCount - passedOver;
     const nextBatch = stillPending > 0
       ? options.all
         ? ` ${stillPending} still to write.`
@@ -535,21 +568,28 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     // Operator to a queue that does not hold what the toast just promised.
     if (blank.length > 0 || dropped > 0) {
       const why = [
-        blank.length > 0 ? `the AI returned an empty message for ${nameHandles(blank)}` : '',
+        blank.length > 0 ? `the AI had no sendable DM for ${nameHandles(blank)}` : '',
         dropped > 0 ? `${dropped} left the queue mid-batch` : '',
       ].filter(Boolean).join(', and ');
-      toast.error(`Generated ${count(landedCount)} — ${why}.${nextBatch}`);
+      toast.error(`Generated ${count(landedCount)} — ${why}.${nextBatch}${skippedNote}`);
       return;
     }
 
     if (stopped) {
-      toast.info(`Stopped after ${count(landedCount)}.${nextBatch}`);
+      toast.info(`Stopped after ${count(landedCount)}.${nextBatch}${skippedNote}`);
       return;
     }
 
-    toast.success(stillPending > 0
+    // Every Lead in the run was passed over: there is nothing to review, and
+    // "Generated 0 DMs" would read as a failure.
+    if (landedCount === 0 && passedOver > 0) {
+      toast.info(`No DMs written.${skippedNote}${nextBatch}`);
+      return;
+    }
+
+    toast.success((stillPending > 0
       ? `Generated ${count(landedCount)} —${nextBatch}`
-      : `Generated ${count(landedCount)} — review them in the Approval Queue.`);
+      : `Generated ${count(landedCount)} — review them in the Approval Queue.`) + skippedNote);
   }, [config, filteredLeads, limits, dmUsed, toast, store, onTrialLimit]);
 
   const stopGenerating = useCallback(() => { stopRef.current = true; }, []);

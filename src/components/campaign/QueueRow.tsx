@@ -226,6 +226,12 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
         // Shown in full: approval is the product's one human judgement, and it
         // used to be made on four clamped lines.
         <p className="text-body-sm text-neutral-200 leading-relaxed whitespace-pre-line">{lead.dmContent}</p>
+    ) : lead.skipReason ? (
+        // The DM writer passed over them. Its reason is the whole story of this
+        // row, so it sits where the DM would: Restore writes to them anyway.
+        <p className="text-body-sm text-neutral-300 leading-relaxed">
+            <span className="text-neutral-400">Not a fit: </span>{lead.skipReason}
+        </p>
     ) : (
         <span className="text-meta text-neutral-400">No DM written</span>
     );

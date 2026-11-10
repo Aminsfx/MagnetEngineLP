@@ -54,8 +54,10 @@ drafted DM before it can be sent.
 _Avoid_: review list, drafts, pending
 
 **Skipped**:
-A Lead the operator took out of the Approval Queue without sending it. It waits
-in the Skipped list and can be restored to the stage its DM puts it in.
+A Lead taken out of the Approval Queue without being sent: by the operator, or
+by the DM writer when nothing on the profile makes them someone to write to (it
+says why). It waits in the Skipped list and can be restored to the stage its DM
+puts it in. Restoring one the writer skipped tells the writer to write anyway.
 _Avoid_: rejected (the field's name in code, not the operator's word), archived
 
 **Approved**:

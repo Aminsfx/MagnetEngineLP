@@ -22,6 +22,7 @@ import {
 } from './prompt';
 import { renderTemplate } from './followups';
 import { HUMAN_VOICE_HEADING } from '../../supabase/functions/_shared/voice.ts';
+import { checkDm, DM_MAX_WORDS, OPENINGS, OUTPUT_CONTRACT, withDmContract } from '../../supabase/functions/_shared/dm.ts';
 import type { FollowUpSequence, FollowUpStep, Lead } from './types';
 
 const marcus: PromptIdentity = {
@@ -94,11 +95,14 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('undefined');
   });
 
-  it('ends by stating that the whole response is the DM', () => {
-    // Last position, because it is the one the model reads most recently — and
-    // stated positively, because "no preamble" names the thing it forbids.
-    expect(buildSystemPrompt(marcus).trimEnd())
-      .toMatch(/You are not answering me\. You are writing to them\.$/);
+  it('leaves the layout of the answer, and the checking of it, to generate-dm', () => {
+    // v7 ended on an OUTPUT section and told the model to count its own
+    // words. With one place to write, the counting was done in the DM.
+    const prompt = buildSystemPrompt(marcus);
+    expect(prompt).not.toContain('## OUTPUT');
+    expect(prompt).not.toContain('## BEFORE YOU SEND');
+    expect(prompt).not.toMatch(/count the words/i);
+    expect(prompt).not.toMatch(/entire response/i);
   });
 
   it('bans preamble where the model looks for hard stops', () => {
@@ -180,23 +184,41 @@ describe('the shape of a first DM', () => {
   // v7 (owner, 2026-11-07): DMs were too long, too generic and too busy, and
   // got no replies. The cure is structural, so these pin the structure.
 
-  it('is one or two sentences and one question, with a hard ceiling', () => {
+  it('is one question, with the ceiling the gate enforces', () => {
     const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
-    expect(flat).toContain('One or two sentences. 12 to 30 words. Never more than 35.');
-    expect(flat).toContain('One question mark, at the very end.');
-    expect(flat).toContain('Count the words. Over 30, cut until it is not.');
+    expect(flat).toContain(`- ${DM_MAX_WORDS} words at most. Most good ones are 10 to 20.`);
+    expect(flat).toContain('One sentence, or a short statement and then a question. One paragraph.');
+    expect(flat).toContain('One question mark, and it is the last character.');
+  });
+
+  it('says who the Operator writes to, and that nobody else gets a message', () => {
+    // v7 only said how to write. A model that could see the Lead was no
+    // client had nowhere to put that but the DM.
+    const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toContain('## WHO YOU WRITE TO You write to 7-figure DTC founders.');
+    expect(flat).toContain('To someone who is not a fit you write nothing.');
+    expect(flat).toContain('When you are unsure, write.');
+  });
+
+  it('asks about their situation, with a question that is not yes or no', () => {
+    const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toContain('The question is about their situation: how, what, which, or one thing or the other.');
+    expect(flat).toContain('A yes or no question only when you are offering to send something.');
   });
 
   it('uses one detail from the profile, and only one that touches the offer', () => {
     const flat = buildSystemPrompt(marcus).replace(/\s+/g, ' ');
     expect(flat).toContain('Pick ONE detail, the one closest to the problem you solve.');
     expect(flat).toContain('Their bio read back to them, or more than one detail from it.');
-    expect(flat).toContain('If nothing in the profile touches your offer, use nothing from it');
+    expect(flat).toContain('If nothing they show touches your offer, use nothing');
+    expect(flat).toContain('Name the thing itself, never where you read it');
   });
 
-  it('never pitches: the offer appears only as the result, inside the question', () => {
+  it('never pitches, not even as a hint or as a question', () => {
     const prompt = buildSystemPrompt(marcus);
-    expect(prompt.replace(/\s+/g, ' ')).toContain('Your offer shows up only as the result they would want, inside the question');
+    expect(prompt.replace(/\s+/g, ' ')).toContain('Nothing about what you are, what you do or how it works. Not even a hint.');
+    // The offer with a question mark on the end was v7's RESULT opening.
+    expect(prompt).toContain('would that be worth a look?"\n  → your offer with a question mark on the end.');
     // The value line was the pitch. v1 to v6 had a section to build it.
     expect(prompt).not.toContain('## THE OFFER MATH');
     expect(prompt).not.toContain('VALUE HINT');
@@ -208,7 +230,9 @@ describe('the shape of a first DM', () => {
   it('names the five openings generate-dm rotates through', () => {
     // generate-dm's OPENINGS spell each one out too, for hand-edited prompts;
     // the names here are what an untouched prompt shares with them.
-    expect(buildSystemPrompt(marcus)).toMatch(/TRIGGER:[\s\S]*PAIN:[\s\S]*OBSERVATION:[\s\S]*GIVE:[\s\S]*RESULT:/);
+    const openings = buildSystemPrompt(marcus).split('## THE FIVE OPENINGS')[1].split('## WHAT YOU ACTUALLY KNOW')[0];
+    for (const name of Object.keys(OPENINGS)) expect(openings).toContain(`\n${name}: `);
+    expect(openings).not.toContain('RESULT:');
   });
 
   it('offers a free give only when the Ledger holds one', () => {
@@ -229,12 +253,13 @@ describe('the shape of a first DM', () => {
   });
 
   it('writes its own examples the way it asks the DM to be written', () => {
-    // Every quoted good example: one question, at the end, under 30 words.
+    // Every quoted good example passes the gate its DM will have to pass.
     const openings = buildSystemPrompt(marcus).split('## THE FIVE OPENINGS')[1].split('## WHAT YOU ACTUALLY KNOW')[0];
     const examples = [...openings.matchAll(/^ {2}"(.+)"$/gm)].map((m) => m[1]);
     expect(examples).toHaveLength(5);
     for (const dm of examples) {
-      expect(dm.split(/\s+/).length).toBeLessThanOrEqual(30);
+      expect(checkDm(dm, { businessName: 'Apex Growth' })).toEqual([]);
+      expect(dm.split(/\s+/).length).toBeLessThanOrEqual(DM_MAX_WORDS);
       expect(dm.match(/\?/g)).toHaveLength(1);
       expect(dm.trimEnd().endsWith('?')).toBe(true);
       expect(dm).not.toMatch(/[—–;]/);
@@ -561,8 +586,12 @@ describe('write like a person', () => {
     expect(buildReplySystemPrompt(stocked)).not.toMatch(/[–—]/);
   });
 
-  it('still ends the DM prompt on the output rule', () => {
-    expect(buildSystemPrompt(marcus).trimEnd().endsWith('You are writing to them.')).toBe(true);
+  it('lets generate-dm have the last word on what the answer contains', () => {
+    // The voice block used to be followed by an OUTPUT section. The layout of
+    // the answer is now added server-side, after everything the prompt says.
+    const prompt = buildSystemPrompt(marcus);
+    expect(prompt.lastIndexOf('## WHAT FAILURE LOOKS LIKE')).toBeGreaterThan(prompt.indexOf(HUMAN_VOICE_HEADING));
+    expect(withDmContract(prompt).endsWith(OUTPUT_CONTRACT)).toBe(true);
   });
 });
 

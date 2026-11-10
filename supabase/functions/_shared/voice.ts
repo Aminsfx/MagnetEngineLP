@@ -103,11 +103,14 @@ export function humanVoiceBlock(kind: VoiceFor): string {
  * way the rules reach an Operator whose prompt is hand-edited or older than
  * the block. Their own instructions win where they are specific, since those
  * are their words; the block fills in everything they did not say.
+ *
+ * It says nothing about what the response contains. A DM's answer is laid out
+ * by `withDmContract` (dm.ts), which generate-dm adds after this, and a
+ * reply's by generate-reply's own envelope.
  */
 export function withHumanVoice(system: string, kind: VoiceFor): string {
   if (system.includes(HUMAN_VOICE_HEADING)) return system;
   const precedence = `These rules come on top of everything above. Where the instructions above ask
-for something specific, such as a word, a sign-off or a format, follow those.`;
-  const last = kind === 'dm' ? '\n\nYour whole response is still only the DM.' : '';
-  return `${system.trimEnd()}\n\n${humanVoiceBlock(kind)}\n\n${precedence}${last}`;
+for something specific, such as a word or a sign-off, follow those.`;
+  return `${system.trimEnd()}\n\n${humanVoiceBlock(kind)}\n\n${precedence}`;
 }
