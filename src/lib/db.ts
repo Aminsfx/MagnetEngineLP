@@ -128,17 +128,58 @@ async function upsertInboxRows(table: 'conversations' | 'messages', rows: Record
   }
 }
 
+/** Rows asked for per request. The API's own ceiling may be lower; `readAll` copes. */
+const PAGE = 1000;
+
+interface PageResult<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+  count?: number | null;
+}
+
+/**
+ * Every row of a query, a page at a time.
+ *
+ * The API answers at most 1,000 rows a request (the project's "Max rows") and
+ * says nothing when it cuts a result short. Leads were read in one request, so
+ * a workspace past its thousandth Lead loaded only the newest thousand: the
+ * rest were missing from the queue and the stats, and from the handles a new
+ * search passes over as already known, which is how someone gets a second
+ * first DM.
+ *
+ * `page(from, to)` must ask for an exact count and order by something unique,
+ * or two pages can overlap. Reading goes on until the count is reached, so a
+ * ceiling lower than PAGE costs extra requests, never rows. An error returns
+ * what was read so far alongside it, and the caller decides.
+ */
+async function readAll<T>(page: (from: number, to: number) => PromiseLike<PageResult<T>>): Promise<{ rows: T[]; error: { message: string } | null }> {
+  const rows: T[] = [];
+  for (;;) {
+    const { data, error, count } = await page(rows.length, rows.length + PAGE - 1);
+    if (error) return { rows, error };
+    rows.push(...(data ?? []));
+    // A count the API did not give, or an empty page, both end the read: with
+    // neither there would be no way to know when to stop.
+    if (!data || data.length === 0 || typeof count !== 'number' || rows.length >= count) return { rows, error: null };
+  }
+}
+
 export const db = {
   // ─── Leads ────────────────────────────────────────────────────────────────
 
   async getLeads(userId: string): Promise<Lead[]> {
     if (!isSupabaseReady()) return [];
 
-    const { data, error } = await supabase
-      .from('leads')
-      .select('data, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    // Ordered by `id` as well: a scrape inserts hundreds of Leads with one
+    // created_at, and pages cut through a tie would overlap.
+    const { rows: data, error } = await readAll<{ data: unknown; created_at: string | null }>((from, to) =>
+      supabase
+        .from('leads')
+        .select('data, created_at', { count: 'exact' })
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to));
 
     if (error) {
       console.error('[db] getLeads error:', error.message);
@@ -147,7 +188,7 @@ export const db = {
 
     // Leads from before intake stamped `createdAt` still have the row's own
     // insert time, which is the same moment.
-    return (data ?? []).map((row) => {
+    return data.map((row) => {
       const lead = row.data as Lead;
       return lead.createdAt || !row.created_at ? lead : { ...lead, createdAt: row.created_at as string };
     });
@@ -281,18 +322,22 @@ export const db = {
   async getConversations(userId: string): Promise<Conversation[]> {
     if (!isSupabaseReady()) return [];
 
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('last_message_at', { ascending: false, nullsFirst: false });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a row as the API returns it
+    const { rows: data, error } = await readAll<any>((from, to) =>
+      supabase
+        .from('conversations')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(from, to));
 
     if (error) {
       console.error('[db] getConversations error:', error.message);
       return [];
     }
 
-    return (data ?? []).map((r) => ({
+    return data.map((r) => ({
       id: r.id,
       handle: r.handle,
       name: r.name ?? undefined,
@@ -334,20 +379,21 @@ export const db = {
   async getMessages(userId: string, conversationId?: string): Promise<Message[]> {
     if (!isSupabaseReady()) return [];
 
-    let q = supabase
-      .from('messages')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true });
-    if (conversationId) q = q.eq('conversation_id', conversationId);
-
-    const { data, error } = await q;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a row as the API returns it
+    const { rows: data, error } = await readAll<any>((from, to) => {
+      let q = supabase
+        .from('messages')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId);
+      if (conversationId) q = q.eq('conversation_id', conversationId);
+      return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to);
+    });
     if (error) {
       console.error('[db] getMessages error:', error.message);
       return [];
     }
 
-    return (data ?? []).map((r) => ({
+    return data.map((r) => ({
       id: r.id,
       conversationId: r.conversation_id,
       direction: r.direction as Message['direction'],

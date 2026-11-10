@@ -92,3 +92,68 @@ describe('inbox upserts', () => {
     expect(upsert.mock.calls.map(([batch]) => batch.length)).toEqual([200, 200, 50]);
   });
 });
+
+describe('reading a whole workspace', () => {
+  /**
+   * A table that, like the API, answers at most `cap` rows a request and
+   * reports the full count.
+   */
+  function tableOf(rows: unknown[], cap: number) {
+    const ranges: Array<[number, number]> = [];
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      order: () => chain,
+      range: (start: number, end: number) => {
+        ranges.push([start, end]);
+        return Promise.resolve({ data: rows.slice(start, Math.min(end + 1, start + cap)), error: null, count: rows.length });
+      },
+    };
+    from.mockImplementation(() => chain as never);
+    return ranges;
+  }
+
+  const leadRows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ data: { id: `l${i}`, handle: `h${i}` }, created_at: '2026-11-01T00:00:00Z' }));
+
+  beforeEach(() => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    from.mockImplementation(() => ({ upsert }));
+  });
+
+  // The regression: one request, and the API's 1,000-row ceiling. A workspace
+  // with 1,919 Leads loaded 1,000 of them and nothing said so.
+  it('loads every Lead of a workspace past the API ceiling', async () => {
+    const ranges = tableOf(leadRows(2500), 1000);
+
+    const leads = await db.getLeads('user-a');
+
+    expect(leads).toHaveLength(2500);
+    expect(new Set(leads.map((l) => l.id)).size).toBe(2500);
+    expect(ranges).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);
+  });
+
+  it('still loads them all when the ceiling is lower than a page', async () => {
+    tableOf(leadRows(900), 400);
+
+    expect(await db.getLeads('user-a')).toHaveLength(900);
+  });
+
+  it('asks once for a workspace that fits in one page', async () => {
+    const ranges = tableOf(leadRows(300), 1000);
+
+    expect(await db.getLeads('user-a')).toHaveLength(300);
+    expect(ranges).toHaveLength(1);
+  });
+
+  it('reads the whole inbox the same way', async () => {
+    tableOf(Array.from({ length: 1200 }, (_, i) => ({ id: `m${i}`, conversation_id: 't1', direction: 'in', text: 'hi', created_at: '2026-11-01T00:00:00Z' })), 1000);
+
+    expect(await db.getMessages('user-a')).toHaveLength(1200);
+  });
+});

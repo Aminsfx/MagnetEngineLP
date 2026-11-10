@@ -21,6 +21,9 @@ export function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
+/** What a caller is told when a handler throws. The real cause is in the log. */
+export const SERVER_ERROR = "Something went wrong on our side. Nothing was counted. Try again in a minute.";
+
 /** Service-role client — bypasses RLS, so never hand it to unverified callers. */
 export function serviceClient() {
   return createClient(
@@ -92,9 +95,13 @@ export function servePost<B = Record<string, unknown>>(
     try {
       return await handler({ body, user: { id: user.id, email: user.email }, sb });
     } catch (e: unknown) {
+      // The cause goes to the function log and nowhere else. It used to be
+      // sent back as the response, which put "Claude API error 529: {...}" in
+      // an Operator's toast: the name of a provider and its raw answer, both
+      // of which clients must never see (CLAUDE.md, Security Constraints).
       const msg = e instanceof Error ? e.message : "request failed";
       console.error(`[${name}]`, msg);
-      return json(500, { error: msg });
+      return json(500, { error: SERVER_ERROR, code: "server_error" });
     }
   });
 }

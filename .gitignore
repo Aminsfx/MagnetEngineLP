@@ -51,3 +51,7 @@ ROAD-TO-100-USERS.md
 .impeccable/questions/
 .impeccable/critique/
 .impeccable/hook.cache.json
+
+# Playwright
+test-results/
+playwright-report/

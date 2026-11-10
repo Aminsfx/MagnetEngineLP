@@ -38,11 +38,19 @@ export function resolveProvider(requested: Provider): ResolvedProvider | null {
     const key = Deno.env.get(PROVIDER_ENV[p]);
     if (key) return { provider: p, key };
   }
+  console.error(
+    "[ai] no provider key configured. Set CLAUDE_API_KEY (or OPENAI_API_KEY / GEMINI_API_KEY) with `supabase secrets set`.",
+  );
   return null;
 }
 
+/**
+ * What an Operator is told when the Owner has configured no provider key. It
+ * names no provider and no secret: which model writes the DMs is the Owner's
+ * business. `resolveProvider` logs what to set.
+ */
 export const NO_PROVIDER_ERROR =
-  "No AI provider key configured on the server. Set CLAUDE_API_KEY (or OPENAI_API_KEY / GEMINI_API_KEY) via supabase secrets set.";
+  "AI writing is not set up on this workspace yet. Contact support and we will fix it.";
 
 // Direct capture keeps this Edge Function independent of a Node-only provider
 // wrapper. Both values are configured as Supabase function secrets in production.

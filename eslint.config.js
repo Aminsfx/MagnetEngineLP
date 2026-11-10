@@ -114,6 +114,17 @@ export default tseslint.config(
     },
   },
 
+  // ---- End-to-end tests: TypeScript run by Playwright, in Node ----
+  {
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    extends: [js.configs.recommended, tseslint.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: { ...globals.node, ...globals.browser },
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
+    },
+  },
+
   // ---- Node-side build scripts and configs ----
   {
     files: ['scripts/**/*.mjs', '*.config.js', 'vite.config.ts', 'eslint.config.js'],

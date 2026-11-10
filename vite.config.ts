@@ -26,6 +26,10 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-supabase': ['@supabase/supabase-js'],
+          // A third of the entry bundle, and it changes far less often than
+          // the app does: its own file is fetched in parallel and stays cached
+          // across deploys.
+          'vendor-analytics': ['posthog-js'],
         },
       },
     },

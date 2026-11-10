@@ -213,11 +213,19 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
 
   // Count it only after the provider actually billed us AND we have a message
   // to show for it. Atomic, so concurrent generations can't lose a count.
-  const { data: newUsed } = await sb.rpc("increment_dm_usage", {
+  const { data: newUsed, error: countError } = await sb.rpc("increment_dm_usage", {
     p_user_id: user.id,
     p_month: month,
     p_count: 1,
   });
+  // The DM is still handed over: the Operator must not lose a message over
+  // bookkeeping. But the failure is said out loud. Until migration 0005 this
+  // call failed on every DM (dm_usage had no updated_at column), nothing
+  // logged it, and the count read 0 on every sign-in while the monthly limit
+  // went unenforced.
+  if (countError) {
+    console.error(`[generate-dm] increment_dm_usage failed, this DM was not counted: ${countError.message}`);
+  }
   if (trial.active) await spendTrial(sb, user.id, { dms: 1 });
 
   // Report which provider actually ran — the requested one is only a preference

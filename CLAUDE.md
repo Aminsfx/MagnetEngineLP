@@ -79,6 +79,11 @@ supabase/
   functions/_shared/             # http.ts (servePost), ai.ts (providers), completion.ts (output cleanup), dm.ts (the DM's answer fields, brief and gate), hiker.ts (sources + parsing), emails.ts
   migrations/0001_usage.sql      # dm_usage + usage_counters
   migrations/0002_scrape_usage.sql # scrape_usage (HikerAPI lookups per user per month)
+  migrations/0005_dm_usage_counts.sql # the column increment_dm_usage needs; without it no DM is ever counted
+  migrations/0006_leads_by_owner.sql  # index for the per-Operator Lead load
+e2e/extension/                   # Playwright: the real extension in Chromium against a stand-in Instagram
+.github/workflows/ci.yml         # typecheck, lint, unit tests and build on every push
+docs/reviews/                    # code reviews, dated
 CONTEXT.md                       # Domain glossary — read before naming anything
 ```
 Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/csv.ts`, `src/pages/DashboardPage.tsx`, `src/components/calculator/*`, root-level `components/` duplicates.
@@ -139,7 +144,16 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   is the only trustworthy payment signal. Google Analytics and Mixpanel are
   gone — don't add another analytics SDK.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
-  endpoints rather than re-copying the CORS/auth preamble.
+  endpoints rather than re-copying the CORS/auth preamble. A handler that
+  throws is answered with `SERVER_ERROR` and the cause is logged: the thrown
+  message used to be the response, which showed Operators "Claude API error
+  529". Return `json(...)` yourself for anything an Operator should read, and
+  never ignore the `error` of a database call: `increment_dm_usage` failed on
+  every DM for months because nothing looked at it.
+- **Reading a whole table** — through `readAll` in `db.ts`. The API returns at
+  most 1,000 rows a request and does not say when it has cut a result short;
+  a single `select` loaded only the newest thousand Leads of a workspace.
+  Order by something unique (`created_at`, then `id`) and ask for the count.
 - **The Offer Ledger** — the prompts refuse to state a number they were not
   given, which is only enforceable because `OfferLedger` on `PromptIdentity` is
   the one place a number can come from. `ledgerBlock` renders it into all three
@@ -510,6 +524,9 @@ Filters (min/max followers, include/exclude keywords, account type) live in `Set
 npm run dev      # Dev server at http://localhost:3000
 npm run build    # Production build
 npm run preview  # Preview production build
+npm run verify   # typecheck + lint + unit tests (what CI runs, plus the build)
+npm run test:e2e # the extension's Sender in a real browser (Playwright). If Playwright's
+                 # Chromium will not start: E2E_CHANNEL=msedge npm run test:e2e
 ```
 
 ## Design System
