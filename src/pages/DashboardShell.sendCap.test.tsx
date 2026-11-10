@@ -10,7 +10,13 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { APP_TO_EXT, EXT_TO_APP } from '../lib/extensionProtocol';
 
-const h = vi.hoisted(() => ({ dailySendCap: 80 as number | undefined }));
+const h = vi.hoisted(() => {
+  // These tests drive the Supabase adapter (db is mocked below). createStore
+  // only picks it when a project URL is configured, and CI has no .env.
+  vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+  vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key');
+  return { dailySendCap: 80 as number | undefined };
+});
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'cap@test.dev', user_metadata: {} }, signOut: vi.fn() }),

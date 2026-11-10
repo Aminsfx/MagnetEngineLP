@@ -19,7 +19,12 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Lead, Conversation, Message } from '../lib/types';
 
 // ── Shared mutable fixture state (hoisted so vi.mock factories can see it) ───
-const h = vi.hoisted(() => ({
+const h = vi.hoisted(() => {
+  // M2 counts Supabase round-trips, so the harness needs the Supabase adapter.
+  // createStore only picks it when a project URL is configured; CI has no .env.
+  vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+  vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key');
+  return {
   leads: [] as unknown[],
   convos: [] as unknown[],
   messages: [] as unknown[],
@@ -38,7 +43,8 @@ const h = vi.hoisted(() => ({
    * together, on code that was structurally fine.
    */
   inboxGate: null as null | { promise: Promise<void>; release: () => void },
-}));
+  };
+});
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
