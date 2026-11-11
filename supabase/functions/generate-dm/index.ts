@@ -18,6 +18,9 @@
 //   this is about one Lead rather than the whole workspace.
 //   402 { error, code: "trial_limit" } when a free-trial account has written
 //   its 500 DMs (_shared/trial.ts) — the app sends it to pay in full.
+//   503 { error, code: "ai_unavailable" } when the provider account is out of
+//   credit or its key is refused (_shared/outage.ts). Nothing is billed, and
+//   the cause and its fix are in the function log for the Owner.
 
 import { json, servePost } from "../_shared/http.ts";
 import { readTrial, spendTrial, trialLimitResponse } from "../_shared/allowance.ts";
@@ -30,6 +33,8 @@ import {
   resolveProvider,
   NO_PROVIDER_ERROR,
 } from "../_shared/ai.ts";
+import type { Completion } from "../_shared/ai.ts";
+import { AI_OUTAGE, AI_OUTAGE_ERROR, AiOutage, outageLog } from "../_shared/outage.ts";
 import { cleanCompletion } from "../_shared/completion.ts";
 import { withHumanVoice } from "../_shared/voice.ts";
 import {
@@ -164,16 +169,27 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
   let problems: string[] = [];
 
   for (let attempt = 0; attempt < TEMPERATURE.length && !dm; attempt++) {
-    const completion = await complete({
-      provider: resolved.provider,
-      key: resolved.key,
-      system,
-      user: attempt === 0 ? brief : retryBrief(brief, refused, problems),
-      maxTokens: ANSWER_TOKENS,
-      temperature: TEMPERATURE[attempt],
-      aiTrace,
-      jsonSchema: DM_SCHEMA,
-    });
+    let completion: Completion;
+    try {
+      completion = await complete({
+        provider: resolved.provider,
+        key: resolved.key,
+        system,
+        user: attempt === 0 ? brief : retryBrief(brief, refused, problems),
+        maxTokens: ANSWER_TOKENS,
+        temperature: TEMPERATURE[attempt],
+        aiTrace,
+        jsonSchema: DM_SCHEMA,
+      });
+    } catch (e) {
+      // Out of credit, or the key refused: every Lead after this one fails the
+      // same way until the Owner fixes it, so say that plainly and bill nothing.
+      if (e instanceof AiOutage) {
+        console.error(outageLog("generate-dm", resolved.provider, e));
+        return json(503, { error: AI_OUTAGE_ERROR, code: AI_OUTAGE });
+      }
+      throw e;
+    }
     raw = completion.text;
 
     // No object, or one the token cap cut off: there is no DM in it to judge.

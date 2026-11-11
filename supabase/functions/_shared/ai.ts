@@ -4,6 +4,8 @@
 // callGemini and a byte-identical provider-fallback loop, differing only in
 // max_tokens, temperature and whether JSON mode was on.
 
+import { AiOutage, outageCause } from "./outage.ts";
+
 export const PROVIDERS = ["claude", "openai", "gemini"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
@@ -225,6 +227,17 @@ export async function complete(req: CompletionRequest): Promise<Completion> {
   }
 }
 
+/**
+ * A provider's error response, as something to throw. An outage only the Owner
+ * can end (no credit, a refused key) is an `AiOutage`, which the functions
+ * answer with a plain "paused" instead of "try again in a minute".
+ */
+function providerError(label: string, status: number, detail: string): Error {
+  const message = `${label} API error ${status}: ${detail}`;
+  const cause = outageCause(status, detail);
+  return cause ? new AiOutage(cause, status, message) : new Error(message);
+}
+
 async function callClaude(
   { key, system, user, maxTokens, temperature, jsonSchema }: CompletionRequest,
 ): Promise<Completion> {
@@ -261,11 +274,11 @@ async function callClaude(
       console.warn("[ai] Claude rejected output_config; retrying without structured output");
       res = await post(false);
     } else {
-      throw new Error(`Claude API error 400: ${detail}`);
+      throw providerError("Claude", 400, detail);
     }
   }
 
-  if (!res.ok) throw new Error(`Claude API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw providerError("Claude", res.status, await res.text());
   const data = await res.json();
   // Optional chaining is load-bearing: an empty `content` array used to throw a
   // TypeError, which servePost turned into a 500, which stopped the Operator's
@@ -300,7 +313,7 @@ async function callOpenAI(
       ],
     }),
   });
-  if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw providerError("OpenAI", res.status, await res.text());
   const data = await res.json();
   const choice = data?.choices?.[0];
   return {
@@ -340,7 +353,7 @@ async function callGemini(
       }),
     },
   );
-  if (!res.ok) throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw providerError("Gemini", res.status, await res.text());
   const data = await res.json();
   const candidate = data?.candidates?.[0];
   // A safety block returns no parts. That used to throw, killing the batch for

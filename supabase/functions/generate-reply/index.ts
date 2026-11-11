@@ -15,8 +15,11 @@
 //   calendarLink?: string,
 //   provider: 'openai'|'claude'|'gemini'
 // } → { reply, intent, provider }
+//   503 { error, code: "ai_unavailable" } when the provider account is out of
+//   credit or its key is refused (_shared/outage.ts).
 
 import { json, servePost } from "../_shared/http.ts";
+import { AI_OUTAGE, AI_OUTAGE_ERROR, AiOutage, outageLog } from "../_shared/outage.ts";
 import {
   complete,
   createAiSessionId,
@@ -25,6 +28,7 @@ import {
   resolveProvider,
   NO_PROVIDER_ERROR,
 } from "../_shared/ai.ts";
+import type { Completion } from "../_shared/ai.ts";
 import { replyEnvelope } from "../_shared/completion.ts";
 import { withHumanVoice } from "../_shared/voice.ts";
 
@@ -143,16 +147,27 @@ servePost<Body>("generate-reply", async ({ body, user }) => {
     spanName: "generate_reply" as const,
   };
 
-  const completion = await complete({
-    provider: resolved.provider,
-    key: resolved.key,
-    system: buildSystem(systemPrompt, calendarLink),
-    user: buildTranscript(messages, contact),
-    maxTokens: 400,
-    temperature: 0.5,
-    aiTrace,
-    jsonSchema: REPLY_SCHEMA,
-  });
+  let completion: Completion;
+  try {
+    completion = await complete({
+      provider: resolved.provider,
+      key: resolved.key,
+      system: buildSystem(systemPrompt, calendarLink),
+      user: buildTranscript(messages, contact),
+      maxTokens: 400,
+      temperature: 0.5,
+      aiTrace,
+      jsonSchema: REPLY_SCHEMA,
+    });
+  } catch (e) {
+    // Out of credit, or the key refused: no reply can be drafted until the
+    // Owner fixes it, which "try again in a minute" did not say.
+    if (e instanceof AiOutage) {
+      console.error(outageLog("generate-reply", resolved.provider, e));
+      return json(503, { error: AI_OUTAGE_ERROR, code: AI_OUTAGE });
+    }
+    throw e;
+  }
 
   return json(200, {
     ...parseResult(completion.text, completion.truncated, calendarLink),

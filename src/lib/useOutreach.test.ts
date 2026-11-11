@@ -47,6 +47,7 @@ vi.mock('./webhooks', async (importOriginal) => ({
 
 import { aiAPI, EMPTY_COMPLETION } from './api';
 import { FunctionError } from './functions';
+import { AI_OUTAGE, AI_OUTAGE_ERROR } from '../../supabase/functions/_shared/outage.ts';
 import { sendCampaign } from './extensionProtocol';
 import { db } from './db';
 import { fireWebhook } from './webhooks';
@@ -219,9 +220,44 @@ describe('generateDMs', () => {
 
     await act(() => result.current.generateDMs());
 
-    expect(saved[0].map((l) => l.dmContent)).toEqual(['one', 'two']);
+    expect(saved.flat().map((l) => l.dmContent)).toEqual(['one', 'two']);
     expect(result.current.dmUsed).toBe(2);
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('provider exploded'));
+  });
+
+  it('saves each DM before asking for the next', async () => {
+    // The regression this exists for: DMs waited in memory for a batch of ten,
+    // so a run cut off or a tab closed mid-batch lost up to nine that had
+    // already been paid for.
+    const { result, saved } = setup();
+    const savedWhenAsked: number[] = [];
+    vi.mocked(aiAPI.generateDM).mockImplementation(async () => {
+      savedWhenAsked.push(saved.length);
+      return { dm: 'hi', used: 1, limit: 500 };
+    });
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(savedWhenAsked).toEqual([0, 1, 2]);
+  });
+
+  it('stops on an AI outage, keeps what was written, and says nothing was counted', async () => {
+    // 2026-11-10: the AI account ran out of credit mid-run, and the Operator
+    // was told "Something went wrong on our side... Try again in a minute".
+    vi.mocked(aiAPI.generateDM)
+      .mockResolvedValueOnce({ dm: 'first', used: 1, limit: 500 })
+      .mockRejectedValueOnce(new FunctionError(AI_OUTAGE_ERROR, { code: AI_OUTAGE }));
+
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.generateDMs());
+
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(2);
+    expect(saved.flat().map((l) => l.dmContent)).toEqual(['first']);
+    expect(result.current.leads.filter((l) => !l.dmContent).map((l) => l.id)).toEqual(['b', 'c']);
+    expect(toast.error).toHaveBeenCalledWith(`Generated 1 DM, then stopped: ${AI_OUTAGE_ERROR}`);
   });
 
   it('caps a click at one batch and says how many are left', async () => {
@@ -303,7 +339,7 @@ describe('generateDMs', () => {
     // React defer the commit to the outer boundary, which no browser does.
     let run!: Promise<void>;
     await act(async () => { run = result.current.generateDMs(); });
-    await act(async () => { result.current.hydrate([lead('a')], 0); });  // b, c gone
+    await act(async () => { await result.current.removeMany(['b', 'c']); });  // a bulk delete mid-run
     await act(async () => { release(); await run; });
 
     const claimed = [...toast.success.mock.calls, ...toast.error.mock.calls]
@@ -759,7 +795,7 @@ describe('recordDeal', () => {
 });
 
 describe('generateDMs, a whole batch', () => {
-  it('writes batch after batch with `all`, saving each batch as it lands', async () => {
+  it('writes every Lead with `all`, saving each DM as it lands', async () => {
     vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: 'hi', used: 1, limit: 500 });
     const { result, saved } = setup();
     const leads = Array.from({ length: 25 }, (_, i) => lead(`l${i}`));
@@ -768,8 +804,8 @@ describe('generateDMs, a whole batch', () => {
     await act(() => result.current.generateDMs(leads, { all: true }));
 
     expect(aiAPI.generateDM).toHaveBeenCalledTimes(25);
-    // Saved per batch of ten, so a run cut short keeps what it wrote.
-    expect(saved.map((batch) => batch.length)).toEqual([10, 10, 5]);
+    // Saved one at a time, so a run cut short keeps everything it wrote.
+    expect(saved.map((batch) => batch.length)).toEqual(Array(25).fill(1));
     expect(result.current.leads.every((l) => l.dmContent === 'hi')).toBe(true);
     expect(result.current.generation).toBeNull();
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Generated 25 DMs'));

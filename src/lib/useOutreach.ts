@@ -91,10 +91,10 @@ export interface OutreachEngine {
   remove(id: string): Promise<void>;
   removeMany(ids: string[]): Promise<void>;
   /**
-   * Write DMs for the Leads without one: a batch of {@link GENERATION_BATCH}
-   * per call, or with `all`, batch after batch until every one is written,
-   * one fails for everyone, or `stopGenerating` is called. Each batch is saved
-   * as it finishes, so a long run keeps what it wrote.
+   * Write DMs for the Leads without one: {@link GENERATION_BATCH} per call, or
+   * with `all`, every one until they are written, one fails for everyone, or
+   * `stopGenerating` is called. Each DM is saved as soon as it is written, so
+   * a run that stops, or a tab that closes, keeps every DM already paid for.
    */
   generateDMs(target?: Lead[], options?: { all?: boolean }): Promise<void>;
   /** Ends a running generation after the DM being written now. */
@@ -436,83 +436,83 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     let landedCount = 0;
     let dropped = 0;
 
-    for (let start = 0; start < run.length && !failure && !stopRef.current; start += GENERATION_BATCH) {
-      const written = new Map<string, string>();
-      /** Lead id to why the writer passed over them. */
-      const passed = new Map<string, string>();
+    /**
+     * One result onto its Lead, saved before the next Lead is asked for.
+     * Results used to wait for a batch of ten, so a run cut off or a tab closed
+     * mid-batch lost up to nine DMs that had already been paid for.
+     */
+    const keep = async (next: Lead) => {
+      setLeads((prev) => prev.map((l) => (l.id === next.id ? next : l)));
+      await store.saveLeads([next]);
+    };
 
-      for (const lead of run.slice(start, start + GENERATION_BATCH)) {
-        if (stopRef.current) break;
-        // A long run outlives the list it was given: a Lead skipped, written
-        // or deleted since is not worth a paid generation.
-        const now = leadsRef.current.find((l) => l.id === lead.id);
-        if (now && (now.dmContent || now.rejected)) continue;
-        attempted += 1;
-        try {
-          // The server meters the quota and returns the authoritative count, so
-          // the engine keeps no tally of its own.
-          const { dm, used, skip, reason } = await aiAPI.generateDM(config.selectedAIProvider, now ?? lead, config.systemPrompt);
-          if (typeof used === 'number') usedAfter = used;
+    for (const lead of run) {
+      if (failure || stopRef.current) break;
+      // A long run outlives the list it was given: a Lead skipped, written
+      // or deleted since is not worth a paid generation.
+      const now = leadsRef.current.find((l) => l.id === lead.id);
+      if (now && (now.dmContent || now.rejected)) continue;
+      attempted += 1;
+      let text = '';
+      /** Why the writer passed over this Lead, when it did. */
+      let passReason: string | null = null;
+      try {
+        // The server meters the quota and returns the authoritative count, so
+        // the engine keeps no tally of its own.
+        const { dm, used, skip, reason } = await aiAPI.generateDM(config.selectedAIProvider, now ?? lead, config.systemPrompt);
+        if (typeof used === 'number') usedAfter = used;
+        if (skip) {
           // Not someone to write to. That is a verdict, not a failure: the
           // Lead leaves the queue for Skipped with the reason, and nothing was
           // spent on it.
-          if (skip) { passed.set(lead.id, (reason || '').trim() || NO_FIT_REASON); continue; }
+          passReason = (reason || '').trim() || NO_FIT_REASON;
+        } else {
           // A 200 carrying no message is a failed generation, not a generation.
           // Only a *thrown* error used to count as failure, so a blank was
           // stamped on as `dmContent: ''` — which the queue reads as "no DM yet"
           // (`!!l.dmContent`). The toast said ten and the queue showed none, with
           // nothing anywhere naming the reason. Whitespace is the same failure
           // wearing a truthy value: it renders as a Ready row with an empty body.
-          const text = (dm || '').trim();
-          if (!text) { blank.push(lead.handle); continue; }
-          written.set(lead.id, text);
-        } catch (error: unknown) {
-          console.error(`Error generating DM for ${lead.handle}:`, error);
-          // Two failures wearing one shape. A model that returned nothing is a
-          // verdict on THIS Lead — generate-dm already retried, billed nothing,
-          // and the next Lead will very likely be fine — so skip and carry on.
-          // Anything else (no provider configured, spent quota, dead network) is
-          // failing for every Lead alike, and grinding the remaining nine against
-          // it just spends the Operator's wait for nine identical errors.
-          if (isEmptyCompletion(error)) { blank.push(lead.handle); continue; }
-          // Stop the batch but keep what succeeded. Returning here used to discard
-          // up to nine finished DMs that had already been paid for.
+          text = (dm || '').trim();
+          if (!text) blank.push(lead.handle);
+        }
+      } catch (error: unknown) {
+        console.error(`Error generating DM for ${lead.handle}:`, error);
+        // Two failures wearing one shape. A model that returned nothing is a
+        // verdict on THIS Lead — generate-dm already retried, billed nothing,
+        // and the next Lead will very likely be fine — so skip and carry on.
+        // Anything else (no provider configured, spent quota, an AI account out
+        // of credit, dead network) is failing for every Lead alike, and grinding
+        // the rest of the run against it just spends the Operator's wait on
+        // identical errors. Every DM written before it is already saved.
+        if (isEmptyCompletion(error)) blank.push(lead.handle);
+        else {
           failure = error instanceof Error ? error.message : 'Unknown error';
           trialLimited = isTrialLimit(error);
-          break;
-        } finally {
-          setGeneration({ done: attempted, total: run.length });
         }
+      } finally {
+        setGeneration({ done: attempted, total: run.length });
       }
 
-      // Only a Lead still in the queue can receive its DM. A re-scrape or a bulk
-      // delete during the batch removes it, and the `prev.map` below drops the
-      // result on the floor — which the count has to reflect, or the toast
-      // reports DMs that exist nowhere. `leadsRef` refreshes in an effect, so it
-      // is current by the time the awaited batch finishes. The DM lands on the
-      // Lead as it is NOW, so a skip or an edit made mid-run survives it.
-      const landed: Lead[] = [];
-      for (const [id, text] of written) {
-        const current = leadsRef.current.find((l) => l.id === id);
-        if (current) landed.push({ ...current, dmContent: text, dmDate });
-        else dropped += 1;
-      }
-      // A Lead the Operator wrote to, approved or skipped by hand while the
-      // batch ran keeps what they did to it.
-      const skipped: Lead[] = [];
-      for (const [id, reason] of passed) {
-        const current = leadsRef.current.find((l) => l.id === id);
+      // Only a Lead still in the queue can receive what was written for it. A
+      // re-scrape or a bulk delete during the call removes it, which the count
+      // has to reflect, or the toast reports DMs that exist nowhere. `leadsRef`
+      // refreshes in an effect, so it is current once the call has been
+      // awaited. The result lands on the Lead as it is NOW, so a skip or an edit
+      // made mid-run survives it.
+      const current = leadsRef.current.find((l) => l.id === lead.id);
+      if (text) {
+        if (current) {
+          await keep({ ...current, dmContent: text, dmDate });
+          landedCount += 1;
+        } else dropped += 1;
+      } else if (passReason !== null) {
+        // A Lead the Operator wrote to, approved or skipped by hand while the
+        // call ran keeps what they did to it.
         if (current && !current.dmContent && !current.approved && !current.rejected) {
-          skipped.push({ ...current, rejected: true, skipReason: reason });
+          await keep({ ...current, rejected: true, skipReason: passReason });
+          passedOver += 1;
         }
-      }
-      const changed = [...landed, ...skipped];
-      if (changed.length > 0) {
-        const byId = new Map(changed.map((l) => [l.id, l]));
-        setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-        await store.saveLeads(changed);
-        landedCount += landed.length;
-        passedOver += skipped.length;
       }
     }
 
@@ -549,7 +549,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       toast.error((landedCount > 0
         ? `Generated ${count(landedCount)}, then stopped: ${failure}`
         : `DM generation failed: ${failure}`) + skippedNote);
-      // The batch is saved above, so the Operator can go and pay in full.
+      // Every DM is saved as it lands, so the Operator can go and pay in full.
       if (trialLimited) onTrialLimit?.();
       return;
     }
