@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createInboxLog, ingestThreads, type RawThread } from './inbox';
+import { createInboxLog, ingestThreads, readerState, READER_STALE_MS, type RawThread } from './inbox';
 import type { Conversation, Message } from './types';
 
 const thread = (id: string, messages: RawThread['messages']): RawThread => ({
@@ -182,5 +182,25 @@ describe('hydration ordering', () => {
     expect(log.sync(t)).not.toBeNull();
     expect(log.sync(t)).toBeNull();
     expect(log.sync([])).toBeNull();
+  });
+});
+
+describe('readerState', () => {
+  const now = Date.parse('2026-11-12T12:00:00Z');
+
+  it('claims nothing for an extension too old to say when it last read Instagram', () => {
+    expect(readerState(undefined, now)).toEqual({ kind: 'unknown' });
+  });
+
+  it('is live while threads keep coming in, and stale once they stop', () => {
+    expect(readerState(now - 2 * 60_000, now)).toEqual({ kind: 'live', at: now - 2 * 60_000 });
+    expect(readerState(now - READER_STALE_MS, now).kind).toBe('live');
+    // 2026-11-07: the extension went on re-sending a snapshot it had stopped reading 29 hours before.
+    expect(readerState(now - 29 * 3_600_000, now)).toEqual({ kind: 'stale', at: now - 29 * 3_600_000 });
+  });
+
+  it('is stale, with no time, when nothing has ever been read', () => {
+    expect(readerState(null, now)).toEqual({ kind: 'stale', at: null });
+    expect(readerState(Number.NaN, now)).toEqual({ kind: 'stale', at: null });
   });
 });

@@ -28,6 +28,7 @@ function renderInbox({
     onGenerateReply = plainReplies(),
     leads = [] as Lead[],
     onSendReply = vi.fn((): boolean => true),
+    syncedAt = undefined as number | null | undefined,
 } = {}) {
     const { conversations, messages } = demoInbox();
     const onSaveDeal = vi.fn();
@@ -41,6 +42,7 @@ function renderInbox({
                 onSaveDeal={onSaveDeal}
                 config={config}
                 detected={null}
+                syncedAt={syncedAt}
                 onGenerateReply={onGenerateReply}
                 onSendReply={onSendReply}
                 onUpdateConversation={onUpdateConversation}
@@ -202,6 +204,35 @@ describe('InboxView', () => {
             const won = onSaveDeal.mock.calls[0][1](lead({ dealValue: 3000, booked: true }));
             expect(won).toMatchObject({ dealValue: 3000, cashCollected: 1000 });
             expect(won.closedAt).toEqual(expect.any(String));
+        });
+    });
+
+    describe('whether new DMs are reaching it', () => {
+        const stale = () => screen.queryByText(/aren’t reaching this Inbox/);
+
+        it('says when Instagram was last read while it is being read', () => {
+            renderInbox({ syncedAt: Date.now() - 3 * 60_000 });
+            expect(screen.getByText('Read from Instagram 3m ago')).toBeInTheDocument();
+            expect(stale()).toBeNull();
+        });
+
+        it('says so, and what to do, once nothing has been read for a while', () => {
+            renderInbox({ syncedAt: Date.now() - 5 * 3_600_000 });
+            expect(stale()).toHaveTextContent('Instagram was last read 5h ago');
+            expect(screen.getByRole('link', { name: 'Open your Instagram inbox' }))
+                .toHaveAttribute('href', 'https://www.instagram.com/direct/inbox/');
+            expect(screen.queryByText(/Read from Instagram/)).toBeNull();
+        });
+
+        it('says so when nothing has ever been read in this browser', () => {
+            renderInbox({ syncedAt: null });
+            expect(stale()).toHaveTextContent('Nothing has been read from Instagram in this browser yet');
+        });
+
+        it('claims nothing for an extension too old to say', () => {
+            renderInbox();
+            expect(stale()).toBeNull();
+            expect(screen.queryByText(/Read from Instagram/)).toBeNull();
         });
     });
 });

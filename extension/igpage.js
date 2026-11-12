@@ -59,7 +59,10 @@
         return out;
     }
 
-    /** A response may be one JSON document or several, one per line (deferred fragments). */
+    /**
+     * A response may be one JSON document or several, one per line (deferred
+     * fragments). Returns how many carried data.
+     */
     function emit(name, text) {
         const clean = String(text || '').replace(/^for \(;;\);/, '');
         const docs = [];
@@ -68,9 +71,14 @@
                 try { if (line.trim()) docs.push(JSON.parse(line)); } catch { /* skip a partial line */ }
             }
         }
+        let read = 0;
         for (const doc of docs) {
-            if (doc && doc.data) window.postMessage({ source: OUT, name, data: doc.data }, window.location.origin);
+            if (doc && doc.data) {
+                window.postMessage({ source: OUT, name, data: doc.data }, window.location.origin);
+                read++;
+            }
         }
+        return read;
     }
 
     /** A request body as the form string it is, or null when it can't be read without consuming it. */
@@ -159,18 +167,27 @@
     };
 
     // ── Polling: replay Instagram's own inbox request ──
+    // Sent with the page's own fetch, so the replay is read here once rather
+    // than a second time by the hook above.
     async function poll() {
         if (!enabled || !template || document.visibilityState === 'prerender') return;
+        const replayed = template;
         try {
-            const res = await window.fetch(template.url, {
+            const res = await pageFetch.call(window, replayed.url, {
                 method: 'POST',
                 credentials: 'include',
-                headers: template.headers,
-                body: template.body,
+                headers: replayed.headers,
+                body: replayed.body,
             });
-            // A token Instagram has since rotated: forget the request and wait
-            // for the page to make a fresh one.
-            if (!res.ok) template = null;
+            const read = res.ok ? emit(INBOX_QUERY, await res.text()) : 0;
+            // Instagram no longer honours the request: a token it has since
+            // rotated, or a session that ended. It mostly says so with a 200
+            // and an error instead of data, and that answer used to be replayed
+            // every 100 s for as long as the tab stayed open, reading nothing.
+            // Forget it and wait for the page to make a fresh one, which it
+            // does when the inbox is opened again. The dashboard shows how long
+            // ago Instagram was last read, so a stop is never silent.
+            if (!read && template === replayed) template = null;
         } catch { /* offline; try again next tick */ }
     }
     setInterval(poll, POLL_MS);

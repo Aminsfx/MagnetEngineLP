@@ -9,6 +9,14 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // same definition the background worker and the app use.
 const { APP_TO_EXT, EXT_TO_APP, RUNTIME } = MAGNET_PROTOCOL;
 
+// When Chrome updates (or reloads) the extension, the copy of this script
+// already running in each open tab is cut off from the new one: its chrome.*
+// calls throw, and nothing it sends arrives. It keeps running all the same,
+// and nothing on the page says so. Only a page load brings a live copy.
+const extensionAlive = () => {
+    try { return !!(chrome.runtime && chrome.runtime.id); } catch { return false; }
+};
+
 // ── Web app: Relay campaign payload to background worker ──────
 // Runs on every non-Instagram page the manifest matches (localhost + the
 // production dashboard domain). To support a new domain, add it to
@@ -30,7 +38,15 @@ if (!window.location.hostname.includes("instagram.com")) {
     // Announced unsolicited on injection AND on request, because either side
     // can be first — the content script runs at document_idle, which may land
     // before or after React mounts and posts its HELLO.
-    const announce = () => window.postMessage(describeExtension(), '*');
+    //
+    // Only while this copy is still connected to the extension. A cut-off copy
+    // used to answer too, so after an update the dashboard went on reading
+    // "ready" while nothing it sent arrived and no inbox reached it. Silence
+    // lets the handshake time out: the dashboard then shows the extension as
+    // not detected and says to reload the page, which injects a live copy.
+    const announce = () => {
+        if (extensionAlive()) window.postMessage(describeExtension(), '*');
+    };
     announce();
 
     window.addEventListener("message", (event) => {
@@ -92,7 +108,12 @@ if (!window.location.hostname.includes("instagram.com")) {
                 if (!chrome?.runtime?.sendMessage) return;
                 chrome.runtime.sendMessage({ action: RUNTIME.GET_INBOX }, (res) => {
                     if (chrome.runtime.lastError || !res) return;
-                    window.postMessage({ type: EXT_TO_APP.INBOX, threads: res.threads ?? [], viewer: res.viewer ?? null }, '*');
+                    window.postMessage({
+                        type: EXT_TO_APP.INBOX,
+                        threads: res.threads ?? [],
+                        viewer: res.viewer ?? null,
+                        syncedAt: res.syncedAt ?? null,
+                    }, '*');
                 });
             } catch (e) {
                 console.warn("[MagnetEngine] getInbox relay error:", e);
@@ -194,6 +215,43 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
         try { return !!(await chrome.storage.local.get('account')).account; } catch { return false; }
     };
 
+    // ── Cut off by an extension update ──────────────────────────────
+    // The page hook (igpage.js, in the page's own world) outlives an update:
+    // it went on replaying the inbox every 100 s and handing each answer to
+    // this copy, which could no longer pass it on. Nothing said so. On
+    // 2026-11-07 the extension was reloaded at 12:51 and the Operator's
+    // Instagram tab, left open, read for nobody for 29 hours while a campaign
+    // sent all afternoon: two replies reached the Inbox the next evening.
+    //
+    // A page load is the only way back, so the tab reloads itself: at once if
+    // it is in the background, otherwise the moment the Operator leaves it,
+    // and never while something is typed in it.
+    let reviving = false;
+    const somethingTyped = () => {
+        const box = document.querySelector('div[role="textbox"][contenteditable="true"], textarea');
+        return !!box && String(box.value || box.textContent || '').trim().length > 0;
+    };
+    function reviveIfCutOff() {
+        if (extensionAlive()) return false;
+        if (reviving) return true;
+        reviving = true;
+        // The old hook stops replaying for nobody.
+        window.postMessage({ source: TO_PAGE, enabled: false }, window.location.origin);
+        let retry = null;
+        const reloadWhenIdle = () => {
+            if (document.visibilityState !== 'hidden' || somethingTyped()) return;
+            document.removeEventListener('visibilitychange', reloadWhenIdle);
+            clearInterval(retry);
+            console.info('[MagnetEngine] The extension was updated; reloading this Instagram tab to keep reading the inbox.');
+            window.location.reload();
+        };
+        document.addEventListener('visibilitychange', reloadWhenIdle);
+        retry = setInterval(reloadWhenIdle, 60000); // a draft cleared while the tab sits hidden
+        reloadWhenIdle();
+        return true;
+    }
+    setInterval(reviveIfCutOff, 30000);
+
     const sync = (message) => {
         if (!chrome?.runtime?.sendMessage) return;
         chrome.runtime.sendMessage({ action: RUNTIME.INBOX_SYNC, ...message }, () => void chrome.runtime.lastError);
@@ -209,7 +267,7 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
     // in and keeps the threads it has.
     async function reportViewer() {
         try {
-            if (!(await signedIn())) return;
+            if (reviveIfCutOff() || !(await signedIn())) return;
             const viewer = await readViewer();
             if (viewer) sync({ viewer });
         } catch (e) {
@@ -233,7 +291,7 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
         const fromInbox = pendingViewer;
         pendingViewer = null;
         try {
-            if (!(await signedIn())) return;
+            if (reviveIfCutOff() || !(await signedIn())) return;
             const who = await readViewer(fromInbox);
             if (who && threads.length) sync({ threads, viewer: who, partial: true });
         } catch (e) {
@@ -243,6 +301,7 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
 
     window.addEventListener('message', (event) => {
         if (event.source !== window || !event.data || event.data.source !== FROM_PAGE) return;
+        if (reviveIfCutOff()) return;
         try {
             const { threads, viewer } = parseSlideInbox(event.data.data);
             for (const t of threads) {

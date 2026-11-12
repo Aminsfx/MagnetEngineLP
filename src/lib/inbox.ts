@@ -189,6 +189,38 @@ export function ingestThreads(
 }
 
 /**
+ * How long the extension may go without reading threads from Instagram before
+ * the Inbox says nothing is being read. A live reader brings the inbox in about
+ * every 100 s, and Chrome stretches that to a couple of minutes in a background
+ * tab, so ten minutes of quiet is no longer a quiet inbox.
+ */
+export const READER_STALE_MS = 10 * 60_000;
+
+/**
+ * Whether new DMs are reaching this Inbox, from the extension's `syncedAt`:
+ * when it last read threads from Instagram itself.
+ *
+ * - `unknown`: an extension too old to say (it sends no `syncedAt`), or none
+ *   has answered yet. Nothing is claimed either way.
+ * - `live`: read within READER_STALE_MS.
+ * - `stale`: read longer ago than that (`at`), or never (`at: null`).
+ *
+ * This exists because the reader used to stop without a word: the extension
+ * kept re-sending the last snapshot it had, so the Inbox looked current while
+ * nothing was being read (29 hours of it on 2026-11-07).
+ */
+export type ReaderState =
+    | { kind: 'unknown' }
+    | { kind: 'live'; at: number }
+    | { kind: 'stale'; at: number | null };
+
+export function readerState(syncedAt: number | null | undefined, now: number): ReaderState {
+    if (syncedAt === undefined) return { kind: 'unknown' };
+    if (syncedAt === null || !Number.isFinite(syncedAt)) return { kind: 'stale', at: null };
+    return now - syncedAt <= READER_STALE_MS ? { kind: 'live', at: syncedAt } : { kind: 'stale', at: syncedAt };
+}
+
+/**
  * The inbox log: the Conversations and Messages this app knows about, and the
  * rules for merging Instagram's view into them.
  *

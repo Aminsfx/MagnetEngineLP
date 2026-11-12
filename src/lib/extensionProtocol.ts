@@ -297,6 +297,13 @@ export type InboxSnapshot = {
   threads: unknown[];
   /** Absent from builds before protocol 4, which can't say whose inbox it is. */
   viewer?: InstagramViewer | null;
+  /**
+   * When the extension last read threads from Instagram itself (epoch ms), or
+   * null if it hasn't since it was told who is signed in. Not when this
+   * message was sent: the snapshot is re-sent every 100 s whether or not
+   * anything is being read. Absent from builds before 1.10.0.
+   */
+  syncedAt?: number | null;
 };
 
 export type ExtensionMessage =

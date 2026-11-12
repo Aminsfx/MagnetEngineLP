@@ -50,5 +50,38 @@ describe('igpage.js', () => {
         const [url, init] = pageFetch.mock.calls[0] as unknown as [string, RequestInit];
         expect(url).toBe('https://www.instagram.com/api/graphql');
         expect(new URLSearchParams(String(init.body)).get('fb_api_req_friendly_name')).toBe('PolarisDirectInboxQuery');
+        // The replay is read once, by poll, and not a second time by the hook it went around.
+        await vi.waitFor(() => expect(emitted.filter((e) => e.name === 'PolarisDirectInboxQuery')).toHaveLength(1));
+    });
+
+    // Signed out and in again: the hook replays 2 s after it is turned on.
+    const replayNow = async () => {
+        window.dispatchEvent(new MessageEvent('message', { data: { source: 'magnet-engine-ig-ctl', enabled: false }, source: window }));
+        window.dispatchEvent(new MessageEvent('message', { data: { source: 'magnet-engine-ig-ctl', enabled: true }, source: window }));
+        await vi.advanceTimersByTimeAsync(2100);
+    };
+
+    it('stops replaying a request Instagram answers with an error instead of data', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout'] });
+        try {
+            // A rotated token, a session that ended: a 200 carrying no data.
+            pageFetch.mockClear();
+            pageFetch.mockImplementationOnce(async () =>
+                new Response('for (;;);{"error":1357004,"errorSummary":"Sorry, something went wrong"}', { status: 200 }));
+            await replayNow();
+            expect(pageFetch).toHaveBeenCalledTimes(1);
+
+            // It used to go on replaying it every 100 s, reading nothing, for as long as the tab stayed open.
+            await replayNow();
+            expect(pageFetch).toHaveBeenCalledTimes(1);
+
+            // The page loading its inbox again hands the hook a request that works.
+            await window.fetch('https://www.instagram.com/api/graphql', { method: 'POST', body: form('PolarisDirectInboxQuery') });
+            pageFetch.mockClear();
+            await replayNow();
+            expect(pageFetch).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

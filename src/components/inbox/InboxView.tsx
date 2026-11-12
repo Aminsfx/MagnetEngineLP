@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Inbox as InboxIcon, Search, Bot } from 'lucide-react';
 import type { Conversation, Message, AppConfig, Lead } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
@@ -9,7 +9,8 @@ import type { Suggestion } from '../../lib/copilot';
 import { triage, byPriority, PRIORITY_LABEL, type Priority, type Triage } from '../../lib/triage';
 import { canonicalHandle } from '../../lib/intake';
 import { CARD_BEZEL } from '../../lib/theme';
-import { ConversationRow } from './ConversationRow';
+import { readerState } from '../../lib/inbox';
+import { ConversationRow, timeAgo } from './ConversationRow';
 import { OpenConversation } from './OpenConversation';
 
 interface InboxViewProps {
@@ -28,7 +29,21 @@ interface InboxViewProps {
   onUpdateConfig: (config: AppConfig) => Promise<void> | void;
   /** The account logged in to Instagram in this browser right now, if known. */
   detected: InstagramViewer | null;
+  /**
+   * When the extension last read the connected account's inbox from Instagram
+   * (epoch ms), null if it hasn't, undefined if the extension can't say.
+   */
+  syncedAt?: number | null;
   onDisconnectInstagram: () => void;
+}
+
+/** How often the "read … ago" line is brought up to date while the Inbox is open. */
+const READER_TICK_MS = 30_000;
+
+/** "just now", "4m ago", "29h ago": when the extension last read Instagram. */
+function readAgo(at: number): string {
+  const ago = timeAgo(new Date(at).toISOString());
+  return ago === 'now' ? 'just now' : `${ago} ago`;
 }
 
 type Filter = 'all' | 'qualified' | 'objection' | 'booked';
@@ -77,12 +92,20 @@ interface Pin {
 
 export const InboxView: React.FC<InboxViewProps> = ({
   conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation, onUpdateConfig,
-  detected, onDisconnectInstagram,
+  detected, syncedAt, onDisconnectInstagram,
 }) => {
   const account = config.instagramAccount!;
   // The browser is logged in to a different Instagram than the one connected:
   // nothing from it is taken in, and the Operator should know why it's quiet.
   const otherAccount = detected && detected.id !== account.id ? detected : null;
+  // Whether new DMs are reaching this page at all. A reader that stopped used
+  // to look exactly like an inbox nobody had written to.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), READER_TICK_MS);
+    return () => clearInterval(tick);
+  }, []);
+  const reader = readerState(syncedAt, now);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -237,6 +260,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
             >
               Switch account
             </button>
+            {reader.kind === 'live' && (
+              <>
+                {' · '}
+                <span>Read from Instagram {readAgo(reader.at)}</span>
+              </>
+            )}
           </p>
         </div>
         <button
@@ -266,6 +295,26 @@ export const InboxView: React.FC<InboxViewProps> = ({
           <span className="text-white font-medium">This browser is logged in to Instagram as {igName(otherAccount)}, not {igName(account)}.</span>{' '}
           Its DMs stay out of this Inbox. Log in to Instagram as {igName(account)} to see new replies here, or
           switch the connected account.
+        </div>
+      )}
+
+      {reader.kind === 'stale' && !otherAccount && (
+        <div role="status" className="px-4 py-3 rounded-2xl border border-white/20 bg-white/[0.06] text-meta text-neutral-300 leading-relaxed">
+          <span className="text-white font-medium">
+            {reader.at === null
+              ? 'Nothing has been read from Instagram in this browser yet, so new DMs aren’t reaching this Inbox.'
+              : `Instagram was last read ${readAgo(reader.at)}, so new DMs aren’t reaching this Inbox.`}
+          </span>{' '}
+          They come in while your Instagram inbox is open in this browser.{' '}
+          <a
+            href="https://www.instagram.com/direct/inbox/"
+            target="_blank"
+            rel="noreferrer"
+            className="text-white underline decoration-white/30 underline-offset-2 hover:decoration-white"
+          >
+            Open your Instagram inbox
+          </a>
+          , or reload that tab if it’s open already. If the extension was just updated, reload this page too.
         </div>
       )}
 

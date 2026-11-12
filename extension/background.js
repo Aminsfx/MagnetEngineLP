@@ -156,18 +156,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // replacing it. A sync with no `threads` only says who is logged in. A
     // snapshot read from another Instagram account is never kept or re-sent
     // under this one.
+    //
+    // `syncedAt` is when threads last came in from Instagram itself. The
+    // viewer-only sync re-sends the stored snapshot every 100 s whether or not
+    // anything is being read, so without it the dashboard could not tell a
+    // live inbox from one that stopped being read a day ago.
     if (kind === RUNTIME.INBOX_SYNC) {
         const viewer = request.viewer && request.viewer.id ? request.viewer : null;
         const incoming = Array.isArray(request.threads) ? request.threads : null;
-        chrome.storage.local.get(['inboxThreads', 'inboxViewer'], (stored) => {
+        chrome.storage.local.get(['inboxThreads', 'inboxViewer', 'inboxSyncedAt'], (stored) => {
             const sameViewer = !!viewer && stored.inboxViewer?.id === viewer.id;
             const base = sameViewer ? (stored.inboxThreads || []) : [];
             const threads = incoming ? mergeInboxThreads(base, incoming) : base;
+            const syncedAt = incoming ? Date.now() : sameViewer ? (stored.inboxSyncedAt || null) : null;
             const patch = incoming || !sameViewer
-                ? { inboxThreads: threads, inboxViewer: viewer, inboxSyncedAt: Date.now() }
+                ? { inboxThreads: threads, inboxViewer: viewer, inboxSyncedAt: syncedAt }
                 : { inboxViewer: viewer };
             chrome.storage.local.set(patch, () => {
-                broadcastToApp({ type: EXT_TO_APP.INBOX, threads, viewer });
+                broadcastToApp({ type: EXT_TO_APP.INBOX, threads, viewer, syncedAt });
                 sendResponse({ status: 'ok', count: threads.length });
             });
         });
@@ -176,8 +182,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ── Inbox request from the web app (latest snapshot) ───────────────────
     if (kind === RUNTIME.GET_INBOX) {
-        chrome.storage.local.get(['inboxThreads', 'inboxViewer'], (result) => {
-            sendResponse({ threads: result.inboxThreads || [], viewer: result.inboxViewer || null });
+        chrome.storage.local.get(['inboxThreads', 'inboxViewer', 'inboxSyncedAt'], (result) => {
+            sendResponse({
+                threads: result.inboxThreads || [],
+                viewer: result.inboxViewer || null,
+                syncedAt: result.inboxSyncedAt || null,
+            });
         });
         return true;
     }
@@ -383,7 +393,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // the queue and the campaign pauses, rather than a new tab popping open at
 // the next send. Resume from the popup carries on.
 chrome.tabs.onRemoved.addListener((tabId) => {
-    chrome.storage.local.get(['senderTabId', 'currentTask', 'isExecuting', 'campaignQueue'], (result) => {
+    chrome.storage.local.get(['senderTabId', 'currentTask', 'isExecuting', 'campaignQueue', 'inboxTabId'], (result) => {
+        if (result.inboxTabId === tabId) chrome.storage.local.remove('inboxTabId');
         if (result.senderTabId !== tabId) return;
         chrome.alarms.clear('dripEngine');
         chrome.alarms.clear('sendWatchdog');
@@ -411,28 +422,49 @@ function stripDispatch(task) {
 // active outreach (the content-script poller only runs on an IG page).
 chrome.alarms.create('inboxKeepAlive', { periodInMinutes: 3 });
 
-// Ensure a background IG tab exists ONLY while a campaign is active — avoids
-// popping tabs open when the user isn't running outreach. The Sender Tab
-// counts: it is an instagram.com tab.
+const INBOX_URL = 'https://www.instagram.com/direct/inbox/';
+/** No threads from Instagram for this long while a campaign runs: nothing is reading the inbox. */
+const INBOX_STALE_MS = 5 * 60 * 1000;
+/** How often our own inbox tab may be reloaded when it still reads nothing (logged out, say). */
+const INBOX_TAB_RELOAD_MS = 15 * 60 * 1000;
+
+// While a campaign runs, make sure something is reading the inbox, and ONLY
+// then: outside a campaign no tab is ever opened for the Operator.
+//
+// It used to ask only whether any instagram.com tab was open. The Sender Tab
+// always is one, and so is a tab left on the feed or cut off by an extension
+// update, and none of them reads the inbox: on 2026-11-07 a campaign sent for
+// nine hours and not one reply was read. What counts now is whether threads
+// actually came in. If none have for a while, the pinned inbox tab is opened
+// (or, when it is ours already, reloaded).
 function ensureInboxTab() {
-    chrome.storage.local.get(['campaignQueue', 'isExecuting'], (result) => {
-        const active = result.isExecuting || (result.campaignQueue && result.campaignQueue.length > 0);
-        if (!active) return;
-        chrome.tabs.query({}, (tabs) => {
-            const hasIg = tabs.some((t) => t.url && t.url.includes('instagram.com'));
-            if (hasIg) return;
-            chrome.tabs.create(
-                { url: 'https://www.instagram.com/direct/inbox/', active: false, pinned: true },
-                () => void chrome.runtime.lastError,
-            );
-        });
-    });
+    chrome.storage.local.get(
+        ['campaignQueue', 'isExecuting', 'account', 'inboxSyncedAt', 'inboxTabId', 'inboxTabReloadedAt'],
+        (result) => {
+            const active = result.isExecuting || (result.campaignQueue && result.campaignQueue.length > 0);
+            if (!active || !result.account) return;
+            if (result.inboxSyncedAt && Date.now() - result.inboxSyncedAt < INBOX_STALE_MS) return;
+            chrome.tabs.query({}, (tabs) => {
+                const ours = tabs.find((t) => t.id === result.inboxTabId && t.url && t.url.includes('instagram.com'));
+                if (ours) {
+                    if (Date.now() - (result.inboxTabReloadedAt || 0) < INBOX_TAB_RELOAD_MS) return;
+                    chrome.storage.local.set({ inboxTabReloadedAt: Date.now() });
+                    chrome.tabs.reload(ours.id, () => void chrome.runtime.lastError);
+                    return;
+                }
+                chrome.tabs.create({ url: INBOX_URL, active: false, pinned: true }, (tab) => {
+                    if (chrome.runtime.lastError || !tab) return;
+                    chrome.storage.local.set({ inboxTabId: tab.id, inboxTabReloadedAt: Date.now() });
+                });
+            });
+        },
+    );
 }
 
 // ── Recover orphaned task on browser restart ──────────────────────
-// Tab ids don't survive a restart, so the old Sender Tab is forgotten too.
+// Tab ids don't survive a restart, so the old Sender Tab (and inbox tab) are forgotten too.
 chrome.runtime.onStartup?.addListener(() => {
-    chrome.storage.local.remove('senderTabId');
+    chrome.storage.local.remove(['senderTabId', 'inboxTabId']);
     chrome.storage.local.get(['currentTask', 'isExecuting', 'campaignQueue'], (result) => {
         if (result.currentTask && result.isExecuting) {
             const queue = result.campaignQueue || [];

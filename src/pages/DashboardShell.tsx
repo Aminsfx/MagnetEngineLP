@@ -132,6 +132,10 @@ const DashboardShell: React.FC = () => {
   // Whoever the extension last saw logged in to instagram.com in this browser.
   // Not necessarily this Operator — see `instagramAccount` on AppConfig.
   const [igViewer, setIgViewer] = useState<InstagramViewer | null>(null);
+  // When the extension last read an Instagram account's inbox, and whose. The
+  // Inbox shows it, so a reader that stopped is never mistaken for a quiet
+  // inbox. A build too old to say sends no time, and nothing is claimed.
+  const [igRead, setIgRead] = useState<{ igId: string; at: number | null } | null>(null);
 
   // The inbox log owns the merged Conversations/Messages and the ordering rule
   // that used to live here as three refs (inboxReady, pendingThreads, and
@@ -290,6 +294,7 @@ const DashboardShell: React.FC = () => {
         // inbox it read is not trusted with anyone's.
         const connected = configRef.current.instagramAccount;
         if (!connected || viewer?.id !== connected.id) return;
+        if (d.syncedAt !== undefined) setIgRead({ igId: connected.id, at: d.syncedAt });
         const threads = ((d.threads ?? []) as RawThread[]).map((t) => ({ ...t, account: connected.id }));
         const newInbound = ingestRef.current(threads);
         if (newInbound.length) autopilotRef.current(newInbound);
@@ -311,6 +316,8 @@ const DashboardShell: React.FC = () => {
   useEffect(() => {
     if (!dataLoading) requestExtensionSync();
   }, [dataLoading, connectedIgId]);
+  // A newly connected account has not been read yet as far as this page knows.
+  const igSyncedAt = igRead && igRead.igId === connectedIgId ? igRead.at : undefined;
 
   // What the Inbox shows: the connected account's Conversations only. Rows
   // from before accounts were tracked carry none, and drop out until the
@@ -590,6 +597,7 @@ const DashboardShell: React.FC = () => {
           onSaveDeal={handleSaveDeal}
           config={config}
           detected={igViewer}
+          syncedAt={igSyncedAt}
           onDisconnectInstagram={handleDisconnectInstagram}
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}
