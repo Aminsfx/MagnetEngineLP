@@ -30,6 +30,14 @@ export interface Outcome {
   replied: boolean;
   /** When they first did. */
   repliedAt?: string;
+  /**
+   * The Operator marked them qualified: worth a call, not yet booked on one.
+   *
+   * Only ever their click. The AI's `interested` is the same idea as a
+   * judgement, and it stays out for the reason given below; a person saying
+   * "this one is qualified" is the event itself.
+   */
+  qualified: boolean;
   booked: boolean;
   /**
    * They asked to be left alone.
@@ -74,9 +82,11 @@ export function readOutcome(conversation: Conversation, messages: Message[]): Ou
     sentAt,
     replied: repliedAt !== undefined,
     repliedAt,
-    // Interest alone is an AI judgement and does not move the funnel; booking
-    // is a confirmed event, whether the Operator clicked it or the model read
-    // it off a "yes, Tuesday works".
+    // Interest alone is an AI judgement and does not move the funnel. Qualified
+    // is the Operator's click and nothing else; booking is a confirmed event,
+    // whether the Operator clicked it or the model read it off a "yes, Tuesday
+    // works".
+    qualified: conversation.status === 'qualified',
     booked: conversation.status === 'booked' || conversation.intent === 'booked',
     optedOut: conversation.intent === 'not_interested' || conversation.status === 'closed',
   };
@@ -129,6 +139,23 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
     changed = true;
   }
 
+  if (outcome.qualified && !lead.positiveReply) {
+    // Qualified is its own stage, before Booked: the Operator decided this
+    // person is worth a call, and no call is booked yet. It is the same flag
+    // the Approval Queue's "Mark interested" sets, so the dashboard counts one
+    // thing under one name.
+    //
+    // Like a booking, it implies the stages before it. positiveReplyRate is
+    // positive replies over replies, and reply rate is replies over sends, so
+    // a qualified Lead that was not also Replied and Sent would push both
+    // above 100%. No dates come with them, for the reason given below.
+    next.dmSent = true;
+    next.replied = true;
+    next.positiveReply = true;
+    next.qualifiedAt = lead.qualifiedAt ?? new Date().toISOString();
+    changed = true;
+  }
+
   if (outcome.booked && !lead.booked) {
     // A booking implies everything before it in the funnel, which is what
     // `markBooked` did and what the rate calculations in filters.ts assume.
@@ -148,7 +175,7 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
     // Dated when the booking was read, the closest moment this code knows.
     const now = new Date().toISOString();
     next.bookedAt = lead.bookedAt ?? now;
-    next.qualifiedAt = lead.qualifiedAt ?? now;
+    next.qualifiedAt = next.qualifiedAt ?? now;
     changed = true;
   }
 

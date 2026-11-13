@@ -33,6 +33,7 @@ function renderInbox({
     const { conversations, messages } = demoInbox();
     const onSaveDeal = vi.fn();
     const onUpdateConversation = vi.fn();
+    const onMarkConversation = vi.fn();
     const ui = (list: Conversation[]) => (
         <ToastProvider>
             <InboxView
@@ -46,6 +47,7 @@ function renderInbox({
                 onGenerateReply={onGenerateReply}
                 onSendReply={onSendReply}
                 onUpdateConversation={onUpdateConversation}
+                onMarkConversation={onMarkConversation}
                 onUpdateConfig={vi.fn()}
                 onDisconnectInstagram={vi.fn()}
             />
@@ -53,7 +55,7 @@ function renderInbox({
     );
     const { rerender } = render(ui(conversations));
     return {
-        onGenerateReply, onSaveDeal, onSendReply, onUpdateConversation, conversations,
+        onGenerateReply, onSaveDeal, onSendReply, onUpdateConversation, onMarkConversation, conversations,
         rerender: (list: Conversation[]) => rerender(ui(list)),
     };
 }
@@ -161,6 +163,72 @@ describe('InboxView', () => {
 
         await userEvent.click(maya);
         expect(onUpdateConversation).toHaveBeenCalledWith(expect.objectContaining({ handle: 'maya-builds.coaching', unread: false }));
+    });
+
+    describe('qualified', () => {
+        const NOOR = /@studio-noor-design/;
+        const noor = () => screen.getByRole('region', { name: 'Conversation with @studio-noor-design' });
+        const mark = (list: Conversation[], handle: string, status: Conversation['status']) =>
+            list.map(c => (c.handle === handle ? { ...c, status } : c));
+
+        it('has its own button, apart from booked', async () => {
+            const { onMarkConversation, onUpdateConversation } = renderInbox();
+            await userEvent.click(row(NOOR));
+
+            expect(within(noor()).getByRole('button', { name: /Mark booked/ })).toBeInTheDocument();
+            await userEvent.click(within(noor()).getByRole('button', { name: /Mark qualified/ }));
+
+            // Qualified, and nothing about a call: the AI's read is left as it was.
+            expect(onMarkConversation).toHaveBeenCalledTimes(1);
+            expect(onMarkConversation).toHaveBeenCalledWith(
+                expect.objectContaining({ handle: 'studio-noor-design', status: 'qualified', intent: 'neutral' }),
+            );
+            expect(onUpdateConversation).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'qualified' }));
+            expect(await screen.findByText('@studio-noor-design marked as qualified')).toBeInTheDocument();
+        });
+
+        it('shows the conversation as qualified, with booking still to come', async () => {
+            const { conversations, rerender } = renderInbox();
+            await userEvent.click(row(NOOR));
+            rerender(mark(conversations, 'studio-noor-design', 'qualified'));
+
+            expect(within(row(NOOR)).getByText('Qualified')).toBeInTheDocument();
+            expect(within(noor()).queryByRole('button', { name: /Mark qualified/ })).not.toBeInTheDocument();
+            expect(within(noor()).getByText('Qualified')).toBeInTheDocument();
+            expect(within(noor()).getByRole('button', { name: /Mark booked/ })).toBeInTheDocument();
+        });
+
+        it('sends a booking down the same path, as its own stage', async () => {
+            const { onMarkConversation } = renderInbox();
+            await userEvent.click(row(NOOR));
+            await userEvent.click(within(noor()).getByRole('button', { name: /Mark booked/ }));
+
+            expect(onMarkConversation).toHaveBeenCalledWith(
+                expect.objectContaining({ handle: 'studio-noor-design', status: 'booked', intent: 'booked' }),
+            );
+        });
+
+        it('calls the AI\'s read Interested, and keeps Qualified for the Operator\'s mark', () => {
+            renderInbox();
+            // Maya and Jordan are the AI's "interested"; nobody has been marked.
+            expect(within(row(/@maya-builds\.coaching/)).getByText('Interested')).toBeInTheDocument();
+            expect(screen.getByRole('tab', { name: /^Interested/ })).toHaveTextContent('2');
+            expect(screen.getByRole('tab', { name: /^Qualified/ })).toHaveTextContent('0');
+        });
+
+        it('holds the open conversation under the filter it was marked from', async () => {
+            const { conversations, rerender } = renderInbox();
+            await userEvent.click(screen.getByRole('tab', { name: /^Interested/ }));
+            await userEvent.click(row(/@maya-builds\.coaching/));
+
+            rerender(mark(conversations, 'maya-builds.coaching', 'qualified'));
+            // Marked, it belongs under Qualified now, but it stays under the Operator's hands.
+            expect(screen.getByRole('region', { name: 'Conversation with @maya-builds.coaching' })).toBeInTheDocument();
+            expect(screen.getByRole('tab', { name: /^Qualified/ })).toHaveTextContent('1');
+
+            await userEvent.click(row(/@maya-builds\.coaching/));       // fold
+            expect(screen.queryByText('@maya-builds.coaching')).not.toBeInTheDocument();
+        });
     });
 
     describe('deal', () => {

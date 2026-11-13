@@ -162,9 +162,24 @@ _Avoid_: sync, import, intake (reserved for Leads)
 The mode in which the AI answers new inbound Messages without waiting for the
 operator to approve each reply.
 
+**Qualified**:
+The Operator decided this person is worth a call, and no call is booked yet:
+the stage between a Reply and Booked. Always the Operator's own mark, made with
+"Mark qualified" in the Inbox or "Mark interested" on a Sent Lead in the
+Approval Queue (one flag, `positiveReply`, dated by `qualifiedAt`). A Booked
+Lead is also Qualified, as it is also Sent. In the Inbox the mark makes a Lead
+of someone no campaign found, so it always counts.
+_Avoid_: interested (below), hot, warm (labels, which count nowhere)
+
+**Interested**:
+The AI's read of a thread: they sound keen. A guess, shown on the Inbox row and
+its filter, that moves no metric and fires no webhook. It becomes Qualified
+only when the Operator says so.
+
 **Outcome**:
 What a Conversation reveals about the Lead behind it — that we messaged them,
-that they replied, and whether they booked. The one path from the Inbox back
+that they replied, whether the Operator marked them qualified, and whether they
+booked. The one path from the Inbox back
 into the Lead lifecycle. An Outcome is evidence that something happened, never
 that it didn't, so it only ever moves a Lead forwards. Interest as read by the
 AI is a judgement, not an Outcome: it colours the Inbox but does not move the

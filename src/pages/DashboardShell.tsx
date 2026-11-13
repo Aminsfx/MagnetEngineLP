@@ -389,6 +389,22 @@ const DashboardShell: React.FC = () => {
     outreach.recordOutcomes([readOutcome(conv, next.messages)]);
   }, [outreach, store, inbox]);
 
+  /** The Operator's own mark on the person in a Conversation: Qualified, Booked.
+   *  It reaches the dashboard even for someone no campaign found, who becomes
+   *  a Lead here. An intent the AI read never does that: it goes through
+   *  `handleUpdateConversation`, which only stamps Leads that exist. */
+  const handleMarkConversation = useCallback((conv: Conversation) => {
+    const next = inbox.recordConversation(conv);
+    setConversations(next.conversations);
+    store.saveConversations([conv]).catch(console.error);
+    outreach
+      .recordMark(
+        { handle: conv.handle, name: conv.name, avatarUrl: conv.avatarUrl },
+        readOutcome(conv, next.messages),
+      )
+      .catch(console.error);
+  }, [outreach, store, inbox]);
+
   /** The deal with the person in a Conversation. Carries what the thread
    *  already shows, in case they become a Lead only now. */
   const handleSaveDeal = useCallback((conv: Conversation, change: (lead: Lead) => Lead) => {
@@ -602,6 +618,7 @@ const DashboardShell: React.FC = () => {
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}
           onUpdateConversation={handleUpdateConversation}
+          onMarkConversation={handleMarkConversation}
           onUpdateConfig={handleUpdateConfig}
         />
         ) : (

@@ -26,6 +26,11 @@ interface InboxViewProps {
   /** Hands the reply to the extension: false when it was refused, so the draft stays. */
   onSendReply: (conv: Conversation, text: string) => Promise<boolean> | boolean;
   onUpdateConversation: (conv: Conversation) => void;
+  /**
+   * The Operator's own mark on `conv` (Qualified, Booked). It counts on the
+   * dashboard, making the person a Lead if they aren't one.
+   */
+  onMarkConversation: (conv: Conversation) => void;
   onUpdateConfig: (config: AppConfig) => Promise<void> | void;
   /** The account logged in to Instagram in this browser right now, if known. */
   detected: InstagramViewer | null;
@@ -46,10 +51,12 @@ function readAgo(at: number): string {
   return ago === 'now' ? 'just now' : `${ago} ago`;
 }
 
-type Filter = 'all' | 'qualified' | 'objection' | 'booked';
+type Filter = 'all' | 'interested' | 'qualified' | 'objection' | 'booked';
 
+/** The funnel's order: the AI's read, then the Operator's own marks. */
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'all', label: 'All' },
+  { key: 'interested', label: 'Interested' },
   { key: 'qualified', label: 'Qualified' },
   { key: 'objection', label: 'Objections' },
   { key: 'booked', label: 'Booked' },
@@ -76,8 +83,7 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-const matchesFilter = (q: Triage['qualification'], f: Filter) =>
-  f === 'all' || (f === 'qualified' ? q === 'qualified' : f === 'objection' ? q === 'objection' : q === 'booked');
+const matchesFilter = (q: Triage['qualification'], f: Filter) => f === 'all' || q === f;
 
 /**
  * Where the open conversation sat when it unfolded. It stays there until it
@@ -91,7 +97,8 @@ interface Pin {
 }
 
 export const InboxView: React.FC<InboxViewProps> = ({
-  conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation, onUpdateConfig,
+  conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation,
+  onMarkConversation, onUpdateConfig,
   detected, syncedAt, onDisconnectInstagram,
 }) => {
   const account = config.instagramAccount!;
@@ -123,7 +130,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
 
   const counts = useMemo(() => {
     const n = (f: Filter) => triaged.filter(({ t }) => matchesFilter(t.qualification, f)).length;
-    return { all: triaged.length, qualified: n('qualified'), objection: n('objection'), booked: n('booked') };
+    return {
+      all: triaged.length, interested: n('interested'), qualified: n('qualified'),
+      objection: n('objection'), booked: n('booked'),
+    };
   }, [triaged]);
 
   const attention = useMemo(() => triaged.filter(({ t }) => t.priority === 'high').length, [triaged]);
@@ -133,7 +143,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
     const q = search.trim().toLowerCase();
     const items = triaged
       .filter(({ c, t }) => {
-        if (!matchesFilter(t.qualification, filter)) return false;
+        // The open conversation is held to the filter it was opened under, as
+        // it is held to its place: marking it qualified under "Interested"
+        // must not fold it away mid-click.
+        if (!matchesFilter((pin?.id === c.id ? pin.t : t).qualification, filter)) return false;
         if (q && !c.handle.toLowerCase().includes(q) && !(c.name ?? '').toLowerCase().includes(q)) return false;
         return true;
       })
@@ -412,6 +425,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                           generate={generateFor}
                           onSend={sendFor}
                           onUpdate={onUpdateConversation}
+                          onMark={onMarkConversation}
                           onSaveDeal={(change) => onSaveDeal(c, change)}
                           next={next}
                           onNext={() => {

@@ -207,7 +207,12 @@ export interface Conversation {
     lastMessageAt?: string;     // ISO
     lastMessageText?: string;
     unread: boolean;
-    status: 'open' | 'booked' | 'closed';
+    /**
+     * Where the Operator has got to with this person. `qualified` is only ever
+     * the Operator's own mark (Mark qualified in the Inbox): the AI's read of
+     * the thread is `intent`, and `interested` there moves nothing.
+     */
+    status: 'open' | 'qualified' | 'booked' | 'closed';
     intent?: ConversationIntent;
     labels?: string[];          // freeform lead labels/tags (e.g. "hot", "call booked")
     needsReply: boolean;        // last message is inbound with no outbound after it

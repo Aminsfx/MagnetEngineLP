@@ -18,7 +18,7 @@ const conv = (over: Partial<Conversation>): Conversation => ({
 describe('triage', () => {
     it('puts an interested prospect waiting on us first, with the booking step', () => {
         expect(triage(conv({ needsReply: true, intent: 'interested' }), { now: NOW, hasBookingLink: true })).toEqual({
-            priority: 'high', qualification: 'qualified', nextAction: 'Send your booking link',
+            priority: 'high', qualification: 'interested', nextAction: 'Send your booking link',
         });
         expect(triage(conv({ needsReply: true, intent: 'interested' }), { now: NOW }).nextAction).toBe('Ask for a time to talk');
     });
@@ -31,6 +31,27 @@ describe('triage', () => {
     it('asks for a follow-up after two quiet days on our side', () => {
         expect(triage(conv({ lastMessageAt: hoursAgo(5) }), { now: NOW })).toMatchObject({ priority: 'low', nextAction: 'Waiting on their reply' });
         expect(triage(conv({ lastMessageAt: hoursAgo(60) }), { now: NOW })).toMatchObject({ priority: 'medium', nextAction: 'Follow up — they went quiet' });
+    });
+
+    it('calls a conversation Qualified only on the Operator\'s mark', () => {
+        // The AI's read is "Interested". Qualified is what the dashboard counts.
+        expect(triage(conv({ intent: 'interested' }), { now: NOW }).qualification).toBe('interested');
+        expect(triage(conv({ status: 'qualified', needsReply: true }), { now: NOW, hasBookingLink: true })).toEqual({
+            priority: 'high', qualification: 'qualified', nextAction: 'Send your booking link',
+        });
+        expect(triage(conv({ status: 'qualified' }), { now: NOW })).toMatchObject({
+            qualification: 'qualified', nextAction: 'Waiting on their reply',
+        });
+    });
+
+    it('keeps the Operator\'s mark over what the AI reads later', () => {
+        expect(triage(conv({ status: 'qualified', needsReply: true, intent: 'not_interested' }), { now: NOW }).qualification).toBe('qualified');
+        // Still qualified, and the objection is what to deal with next.
+        expect(triage(conv({ status: 'qualified', needsReply: true, intent: 'objection' }), { now: NOW })).toEqual({
+            priority: 'high', qualification: 'qualified', nextAction: 'Answer their objection',
+        });
+        // A booking is the stage after it.
+        expect(triage(conv({ status: 'booked' }), { now: NOW }).qualification).toBe('booked');
     });
 
     it('settles booked and declined conversations, even with a reply owed', () => {
@@ -46,7 +67,8 @@ describe('byPriority', () => {
             conv({ id: 'objection', needsReply: true, intent: 'objection', lastMessageAt: hoursAgo(30) }),
             conv({ id: 'hot-new', needsReply: true, intent: 'interested', lastMessageAt: hoursAgo(1) }),
             conv({ id: 'hot-old', needsReply: true, intent: 'interested', lastMessageAt: hoursAgo(5) }),
+            conv({ id: 'marked', needsReply: true, status: 'qualified', lastMessageAt: hoursAgo(1) }),
         ].map(c => ({ c, t: triage(c, { now: NOW }) }));
-        expect(items.sort(byPriority).map(x => x.c.id)).toEqual(['hot-old', 'hot-new', 'objection', 'low']);
+        expect(items.sort(byPriority).map(x => x.c.id)).toEqual(['marked', 'hot-old', 'hot-new', 'objection', 'low']);
     });
 });

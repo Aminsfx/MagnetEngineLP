@@ -84,6 +84,7 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
                     onGenerateReply={generate}
                     onSendReply={send}
                     onUpdateConversation={update}
+                    onMarkConversation={update}
                     onUpdateConfig={(next) => setAutopilot(!!next.autopilot)}
                     onDisconnectInstagram={() => toast.info('Preview: there is no real account connected.')}
                 />

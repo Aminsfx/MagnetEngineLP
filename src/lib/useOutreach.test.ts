@@ -634,7 +634,7 @@ describe('sendFollowUps', () => {
 
 describe('recordOutcomes', () => {
   const outcome = (over: Partial<Outcome> = {}): Outcome => ({
-    handle: 'founder_one', sent: false, replied: false, booked: false, optedOut: false, ...over,
+    handle: 'founder_one', sent: false, replied: false, qualified: false, booked: false, optedOut: false, ...over,
   });
 
   it('reflects an Inbox reply on the Lead behind the handle', async () => {
@@ -771,7 +771,7 @@ describe('recordDeal', () => {
     await act(() => result.current.recordDeal(
       { handle: 'inbound_one', name: 'Inbound One' },
       (l) => ({ ...l, dealValue: 4000 }),
-      { handle: 'inbound_one', sent: true, sentAt: '2026-10-20T09:00:00.000Z', replied: false, booked: true, optedOut: false },
+      { handle: 'inbound_one', sent: true, sentAt: '2026-10-20T09:00:00.000Z', replied: false, qualified: false, booked: true, optedOut: false },
     ));
 
     const created = result.current.leads[0];
@@ -791,6 +791,62 @@ describe('recordDeal', () => {
     await act(() => result.current.recordDeal({ handle: 'founder_one' }, (l) => ({ ...l, dealValue: 3000 })));
 
     expect(fireWebhook).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordMark', () => {
+  const marked = (over: Partial<Outcome> = {}): Outcome => ({
+    handle: 'founder_one', sent: true, replied: true, qualified: true, booked: false, optedOut: false, ...over,
+  });
+
+  it('counts the Lead as qualified, once, and not as booked', async () => {
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([lead('a', { handle: 'founder_one', dmSent: true, replied: true })], 0));
+
+    await act(() => result.current.recordMark({ handle: '@Founder_One' }, marked()));
+
+    expect(result.current.leads[0]).toMatchObject({ positiveReply: true, qualifiedAt: expect.any(String) });
+    expect(result.current.leads[0].booked).toBeFalsy();
+    expect(saved).toHaveLength(1);
+    expect(vi.mocked(fireWebhook).mock.calls.map((c) => c[1])).toEqual(['positive_reply']);
+
+    // The mark again, as a second click or a second tab would send it.
+    await act(() => result.current.recordMark({ handle: 'founder_one' }, marked()));
+    expect(saved).toHaveLength(1);
+    expect(fireWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes a Lead of someone no campaign found, so the mark counts on the dashboard', async () => {
+    // Half the people in an Inbox were never scraped. recordOutcomes passes
+    // over them; an Operator's mark that did the same would count nowhere.
+    const { result, saved } = setup();
+    act(() => result.current.hydrate([], 0));
+
+    await act(() => result.current.recordMark(
+      { handle: 'inbound_one', name: 'Inbound One' },
+      marked({ handle: 'inbound_one', sentAt: '2026-11-12T09:00:00.000Z', replied: false }),
+    ));
+
+    const created = result.current.leads[0];
+    expect(created).toMatchObject({
+      handle: 'inbound_one', name: 'Inbound One', campaignName: 'From the Inbox',
+      positiveReply: true, replied: true, dmSent: true, sentAt: '2026-11-12T09:00:00.000Z',
+    });
+    expect(created.booked).toBeFalsy();
+    expect(saved[0]).toEqual([created]);
+    expect(vi.mocked(fireWebhook).mock.calls.filter((c) => c[1] === 'positive_reply')).toHaveLength(1);
+  });
+
+  it('books someone no campaign found, the same way', async () => {
+    const { result } = setup();
+    act(() => result.current.hydrate([], 0));
+
+    await act(() => result.current.recordMark(
+      { handle: 'inbound_one' },
+      marked({ handle: 'inbound_one', qualified: false, booked: true }),
+    ));
+
+    expect(result.current.leads[0]).toMatchObject({ booked: true, positiveReply: true, bookedAt: expect.any(String) });
   });
 });
 

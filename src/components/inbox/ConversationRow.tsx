@@ -3,10 +3,11 @@ import { ChevronDown } from 'lucide-react';
 import type { Conversation } from '../../lib/types';
 import { QUALIFICATION_LABEL, type Triage } from '../../lib/triage';
 
-/** Booked is the funnel's good outcome; a qualified lead or an objection is worth your eye; the rest is chrome. */
+/** Booked is the funnel's good outcome; a qualified lead, an interested one or an objection is worth your eye; the rest is chrome. */
 const QUALIFICATION_CLS: Record<Triage['qualification'], string> = {
   booked: 'text-positive-300 border-positive-500/30 bg-positive-500/10',
   qualified: 'text-white border-white/25 bg-white/[0.08]',
+  interested: 'text-white border-white/25 bg-white/[0.08]',
   objection: 'text-white border-white/25 bg-white/[0.08]',
   unqualified: 'text-neutral-400 border-white/[0.08]',
   unknown: 'text-neutral-400 border-white/[0.08]',
@@ -115,7 +116,7 @@ export const ConversationRow: React.FC<{
         <span className="col-start-2 col-span-2 row-start-3 md:col-start-4 md:col-span-1 md:row-start-1 min-w-0 flex items-center gap-2">
           {/* A fixed slot at md+, held empty when there's nothing to say, so
               every next step starts on one line down the list. */}
-          <span className={`flex-none md:w-[4.75rem] ${t.qualification === 'unknown' ? 'max-md:hidden' : ''}`}>
+          <span className={`flex-none md:w-[5.25rem] ${t.qualification === 'unknown' ? 'max-md:hidden' : ''}`}>
             {t.qualification !== 'unknown' && (
               <span className={`inline-block px-2 py-0.5 rounded-full border text-label font-semibold ${QUALIFICATION_CLS[t.qualification]}`}>
                 {QUALIFICATION_LABEL[t.qualification]}

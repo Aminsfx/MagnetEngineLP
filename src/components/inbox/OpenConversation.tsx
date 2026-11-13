@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Tag, X, Calendar, Check, ArrowRight, ArrowUpRight, Plus } from 'lucide-react';
+import { Send, Tag, X, Calendar, Check, ArrowRight, ArrowUpRight, Plus, Star } from 'lucide-react';
 import type { Conversation, Lead, Message } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
 import type { Suggestion } from '../../lib/copilot';
@@ -30,8 +30,8 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(naviga
 
 /**
  * An open conversation, unfolded under its row: the latest messages, the
- * copilot's three replies, the composer, and a bar for Booked, the deal and
- * labels. Mount it with `key={conversation.id}` — the draft belongs to one
+ * copilot's three replies, the composer, and a bar for Qualified, Booked, the
+ * deal and labels. Mount it with `key={conversation.id}` — the draft belongs to one
  * conversation.
  *
  * After a reply is handed to the extension the composer offers the next
@@ -49,12 +49,14 @@ export const OpenConversation: React.FC<{
   /** Hands the reply to the extension; false when it was refused (the reason is already on screen). */
   onSend: (text: string) => Promise<boolean>;
   onUpdate: (c: Conversation) => void;
+  /** The Operator's own mark (Qualified, Booked), which counts on the dashboard. */
+  onMark: (c: Conversation) => void;
   onSaveDeal: (change: (lead: Lead) => Lead) => void;
   /** The conversation to offer once a reply goes out, if any still needs the Operator. */
   next: Conversation | null;
   onNext: () => void;
   onClose: () => void;
-}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onSaveDeal, next, onNext, onClose }) => {
+}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onMark, onSaveDeal, next, onNext, onClose }) => {
   const toast = useToast();
   const [draft, setDraft] = useState('');
   const [labelInput, setLabelInput] = useState('');
@@ -77,6 +79,7 @@ export const OpenConversation: React.FC<{
   const shown = useMemo(() => thread.slice(earlier), [thread, earlier]);
   const threadKey = `${c.id}:${c.lastMessageAt ?? ''}`;
   const booked = c.status === 'booked' || !!lead?.booked;
+  const qualified = c.status === 'qualified' || !!lead?.positiveReply;
   const labels = c.labels ?? [];
 
   const type = (text: string) => {
@@ -112,8 +115,15 @@ export const OpenConversation: React.FC<{
 
   const removeLabel = (label: string) => onUpdate({ ...c, labels: labels.filter((l) => l !== label) });
 
+  // Qualified is its own stage: worth a call, with no call booked yet.
+  const markQualified = () => {
+    onMark({ ...c, status: 'qualified' });
+    posthogCapture('conversation_marked_qualified');
+    toast.success(`@${c.handle} marked as qualified`);
+  };
+
   const markBooked = () => {
-    onUpdate({ ...c, status: 'booked', intent: 'booked' });
+    onMark({ ...c, status: 'booked', intent: 'booked' });
     posthogCapture('conversation_marked_booked');
     toast.success(`@${c.handle} marked as booked`);
   };
@@ -223,18 +233,30 @@ export const OpenConversation: React.FC<{
         </div>
       </div>
 
-      {/* ── Booked, deal, labels ── */}
+      {/* ── Qualified, booked, deal, labels ── */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pt-4 border-t border-white/[0.06]">
         {booked ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-positive-500/30 bg-positive-500/10 text-meta font-medium text-positive-300">
             <Calendar className="w-3.5 h-3.5" aria-hidden /> Booked
           </span>
         ) : (
-          // Chrome, not `positive`: the control is the Operator's click, while
-          // the pill it produces is the funnel state.
-          <button type="button" onClick={markBooked} className={ROW_PILL}>
-            <Calendar className="w-3.5 h-3.5" aria-hidden /> Mark booked
-          </button>
+          // Two stages, two controls, in the funnel's order. Chrome, not
+          // `positive`: the control is the Operator's click, while the pill it
+          // produces is the funnel state.
+          <div className="flex flex-wrap items-center gap-2">
+            {qualified ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/25 bg-white/[0.08] text-meta font-medium text-white">
+                <Star className="w-3.5 h-3.5" aria-hidden /> Qualified
+              </span>
+            ) : (
+              <button type="button" onClick={markQualified} className={ROW_PILL}>
+                <Star className="w-3.5 h-3.5" aria-hidden /> Mark qualified
+              </button>
+            )}
+            <button type="button" onClick={markBooked} className={ROW_PILL}>
+              <Calendar className="w-3.5 h-3.5" aria-hidden /> Mark booked
+            </button>
+          </div>
         )}
 
         <DealPanel conversation={c} lead={lead} onSave={onSaveDeal} />

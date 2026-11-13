@@ -8,11 +8,16 @@ import type { Conversation } from './types';
  * message is theirs (`needsReply`), the AI's read of it (`intent`), its status
  * and when it last moved. Nothing here moves the funnel; like `intent`, it
  * colours the Inbox only (CONTEXT.md).
+ *
+ * Two of its words look alike and are not. **Interested** is the AI's read of
+ * the thread, a guess. **Qualified** is the Operator's own mark (`status`),
+ * the one the dashboard counts. They carried one label until 2026-11-13, so a
+ * row could say "Qualified" for someone the dashboard had never heard of.
  */
 
 export type Priority = 'high' | 'medium' | 'low';
 
-export type Qualification = 'booked' | 'qualified' | 'objection' | 'unqualified' | 'unknown';
+export type Qualification = 'booked' | 'qualified' | 'interested' | 'objection' | 'unqualified' | 'unknown';
 
 export interface Triage {
     priority: Priority;
@@ -39,20 +44,24 @@ export function triage(c: Conversation, opts: { now?: number; hasBookingLink?: b
     if (c.status === 'booked' || c.intent === 'booked') {
         return { priority: 'low', qualification: 'booked', nextAction: 'Call booked — get ready for it' };
     }
-    if (c.status === 'closed' || c.intent === 'not_interested') {
+    // The Operator's mark outranks the AI's read of the latest message: a
+    // misread "not interested" must not take back a decision a person made.
+    const qualified = c.status === 'qualified';
+    if (c.status === 'closed' || (c.intent === 'not_interested' && !qualified)) {
         return { priority: 'low', qualification: 'unqualified', nextAction: 'Nothing to send — they passed' };
     }
 
     if (c.needsReply) {
-        if (c.intent === 'interested') {
+        if (c.intent === 'objection') {
+            // Still qualified if the Operator said so; the objection is what to do next.
+            return { priority: 'high', qualification: qualified ? 'qualified' : 'objection', nextAction: 'Answer their objection' };
+        }
+        if (qualified || c.intent === 'interested') {
             return {
                 priority: 'high',
-                qualification: 'qualified',
+                qualification: qualified ? 'qualified' : 'interested',
                 nextAction: opts.hasBookingLink ? 'Send your booking link' : 'Ask for a time to talk',
             };
-        }
-        if (c.intent === 'objection') {
-            return { priority: 'high', qualification: 'objection', nextAction: 'Answer their objection' };
         }
         return {
             priority: age >= WAITING_TOO_LONG_MS ? 'high' : 'medium',
@@ -62,7 +71,9 @@ export function triage(c: Conversation, opts: { now?: number; hasBookingLink?: b
     }
 
     // The last word was ours.
-    const qualification: Qualification = c.intent === 'interested' ? 'qualified' : c.intent === 'objection' ? 'objection' : 'unknown';
+    const qualification: Qualification = qualified
+        ? 'qualified'
+        : c.intent === 'interested' ? 'interested' : c.intent === 'objection' ? 'objection' : 'unknown';
     if (age >= FOLLOW_UP_AFTER_MS) {
         return { priority: 'medium', qualification, nextAction: 'Follow up — they went quiet' };
     }
@@ -71,7 +82,7 @@ export function triage(c: Conversation, opts: { now?: number; hasBookingLink?: b
 
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 /** Inside a group, the warmest lead first: a hot prospect left waiting costs the most. */
-const WARMTH: Record<Qualification, number> = { qualified: 0, objection: 1, unknown: 2, booked: 3, unqualified: 4 };
+const WARMTH: Record<Qualification, number> = { qualified: 0, interested: 1, objection: 2, unknown: 3, booked: 4, unqualified: 5 };
 
 /** Priority, then warmth, then whoever has waited longest at the top of their group. */
 export function byPriority(a: { t: Triage; c: Conversation }, b: { t: Triage; c: Conversation }): number {
@@ -95,6 +106,7 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 export const QUALIFICATION_LABEL: Record<Qualification, string> = {
     booked: 'Booked',
     qualified: 'Qualified',
+    interested: 'Interested',
     objection: 'Objection',
     unqualified: 'Not a fit',
     unknown: 'Not qualified yet',

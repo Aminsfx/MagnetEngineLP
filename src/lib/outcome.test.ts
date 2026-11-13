@@ -25,6 +25,7 @@ describe('readOutcome', () => {
       sentAt: '2026-09-01T09:00:00.000Z',
       replied: true,
       repliedAt: '2026-09-03T11:00:00.000Z',
+      qualified: false,
       booked: false,
       optedOut: false,
     });
@@ -111,6 +112,13 @@ describe('readOutcome', () => {
   it('is not booked on interest alone — that stays human-gated', () => {
     expect(readOutcome(conversation({ intent: 'interested' }), []).booked).toBe(false);
   });
+
+  it('is qualified on the Operator\'s mark, and never on what the AI read', () => {
+    expect(readOutcome(conversation({ status: 'qualified' }), []).qualified).toBe(true);
+    expect(readOutcome(conversation({ intent: 'interested' }), []).qualified).toBe(false);
+    // Qualified and booked are two stages: marking one is not marking the other.
+    expect(readOutcome(conversation({ status: 'qualified' }), []).booked).toBe(false);
+  });
 });
 
 const lead = (over: Partial<Lead> = {}): Lead => ({
@@ -120,7 +128,7 @@ const lead = (over: Partial<Lead> = {}): Lead => ({
 });
 
 const outcome = (over: Partial<Outcome> = {}): Outcome => ({
-  handle: 'founder_one', sent: false, replied: false, booked: false, optedOut: false, ...over,
+  handle: 'founder_one', sent: false, replied: false, qualified: false, booked: false, optedOut: false, ...over,
 });
 
 describe('applyOutcome', () => {
@@ -194,6 +202,35 @@ describe('applyOutcome', () => {
     // implied every earlier stage; Sent is now one of them.
     expect(applyOutcome(lead({ dmSent: false }), outcome({ replied: true, repliedAt: '2026-09-03T11:00:00.000Z', booked: true })))
       .toMatchObject({ dmSent: true, booked: true, positiveReply: true, replied: true, status: 'won' });
+  });
+
+  it('counts a qualified Lead as qualified, not as booked', () => {
+    const before = lead({ replied: true });
+    const after = applyOutcome(before, outcome({ qualified: true }));
+
+    expect(after).toMatchObject({ positiveReply: true, qualifiedAt: expect.any(String), status: 'cold' });
+    expect(after?.booked).toBeFalsy();
+    expect(after?.bookedAt).toBeUndefined();
+    // The same event the Approval Queue's "Mark interested" fires.
+    expect(detectTransitions(before, after!)).toEqual(['positive_reply']);
+  });
+
+  it('carries the stages before Qualified, so no rate passes 100%', () => {
+    // positiveReplyRate is positive replies over replies, and reply rate is
+    // replies over sends: a qualified Lead has to be in both denominators.
+    const after = applyOutcome(lead({ dmSent: false }), outcome({ qualified: true }));
+
+    expect(after).toMatchObject({ dmSent: true, replied: true, positiveReply: true });
+    // Nothing observed when the send happened, so it carries no date.
+    expect(after?.sentAt).toBeUndefined();
+  });
+
+  it('keeps the day a Lead was qualified when the booking follows', () => {
+    const qualified = lead({ replied: true, positiveReply: true, qualifiedAt: '2026-11-01T09:00:00.000Z' });
+
+    expect(applyOutcome(qualified, outcome({ qualified: true }))).toBeNull();
+    expect(applyOutcome(qualified, outcome({ booked: true })))
+      .toMatchObject({ booked: true, qualifiedAt: '2026-11-01T09:00:00.000Z' });
   });
 
   it('never walks a flag backwards', () => {

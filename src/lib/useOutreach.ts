@@ -122,6 +122,16 @@ export interface OutreachEngine {
    * price happened while there was no Lead to stamp it on.
    */
   recordDeal(person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome): Promise<void>;
+  /**
+   * The Operator's own mark on the person in an Inbox Conversation: Qualified,
+   * Booked. `outcome` is their Conversation read with the mark on it.
+   *
+   * Unlike an Outcome read on a poll, which only stamps Leads that exist, a
+   * mark makes a Lead of someone who isn't one yet, as a deal does. Half the
+   * people in an Inbox were never found by a campaign, and a mark that counted
+   * nowhere for them would be a button that does nothing.
+   */
+  recordMark(person: DealPerson, outcome: Outcome): Promise<void>;
 }
 
 /** What a lead search may still spend on, and who it can pass over without a lookup. */
@@ -721,6 +731,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     }
 
     const updated = change(base!);
+    // Nothing to say about a Lead that already reflects it.
+    if (existing && updated === existing) return;
     setLeads((prev) => (existing
       ? prev.map((l) => (l.id === updated.id ? updated : l))
       : [...prev, updated]));
@@ -730,6 +742,12 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     for (const event of detectTransitions(before, updated)) fireWebhook(config, event, updated);
     await store.saveLeads([updated]);
   }, [config, store]);
+
+  const recordMark = useCallback(
+    (person: DealPerson, outcome: Outcome) =>
+      recordDeal(person, (lead) => applyOutcome(lead, outcome) ?? lead, outcome),
+    [recordDeal],
+  );
 
   return {
     leads,
@@ -758,5 +776,6 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     markSent,
     recordOutcomes,
     recordDeal,
+    recordMark,
   };
 }
