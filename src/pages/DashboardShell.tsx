@@ -20,6 +20,7 @@ import { TRIAL_UPGRADE_PATH } from '../lib/trial';
 import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
+import { untilLoaded } from '../lib/retry';
 import { readOutcome } from '../lib/outcome';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
@@ -120,6 +121,12 @@ const DashboardShell: React.FC = () => {
   const campaigns = useMemo(() => campaignsOf(outreach.leads), [outreach.leads]);
 
   const [dataLoading, setDataLoading] = useState(true);
+  // The workspace could not be loaded. Shown instead of the dashboard, with a
+  // way to try again; `loadAttempt` re-runs the load.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  // The saved Conversations could not be loaded (yet): the Inbox says so.
+  const [inboxLoadFailed, setInboxLoadFailed] = useState(false);
   // Real per-day sent count reported by the extension (source of truth for what
   // actually went out), vs the app's optimistic handoff count.
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
@@ -174,6 +181,7 @@ const DashboardShell: React.FC = () => {
   const userId = user?.id;
   useEffect(() => {
     if (!userId) return;
+    let cancelled = false;
 
     // Only what the dashboard needs to paint. The inbox (conversations +
     // every message ever synced) used to be awaited here too, so first paint
@@ -183,6 +191,7 @@ const DashboardShell: React.FC = () => {
       store.loadConfig(),
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
+      if (cancelled) return;
       // Campaigns typed with the same name before names joined campaigns are
       // one campaign now. Only the Leads that moved are saved, and once they
       // have been, this finds nothing to do.
@@ -202,30 +211,48 @@ const DashboardShell: React.FC = () => {
       setConfig(migrated);
       if (migrated !== loaded) store.saveConfig(migrated).catch(console.error);
       setDataLoading(false);
+    }).catch((error: unknown) => {
+      // A load that failed is not an empty workspace. The dashboard used to
+      // have no answer here at all: a store that returned nothing on an error
+      // opened it on the default config, and the first setting touched saved
+      // those defaults over the Operator's own. It now stops and says so.
+      if (cancelled) return;
+      console.error('[dashboard] loading the workspace failed:', error);
+      setLoadFailed(true);
     });
+
+    return () => { cancelled = true; };
     // `outreach` is intentionally not a dependency: hydrate is stable and
     // re-running the cold load on every engine render would defeat the point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, store]);
+  }, [userId, store, loadAttempt]);
 
   // Inbox history loads behind first paint. Snapshots arriving before it lands
   // are parked by the log rather than merged — echo suppression compares against
   // the Messages already known, so merging into a half-loaded inbox would
-  // duplicate every optimistic send.
+  // duplicate every optimistic send. A load that fails is tried again until it
+  // lands, and the Inbox says so meanwhile: hydrating from nothing instead
+  // would re-create every Conversation without its marks.
   useEffect(() => {
     if (!userId) return;
-    let cancelled = false;
 
-    store.loadInbox().then((history) => {
-      if (cancelled) return;
-      const replayed = inbox.hydrate(history);
-      setConversations(replayed?.conversations ?? history.conversations);
-      setMessages(replayed?.messages ?? history.messages);
-      if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
-    });
+    const stop = untilLoaded(
+      () => store.loadInbox(),
+      (history) => {
+        setInboxLoadFailed(false);
+        const replayed = inbox.hydrate(history);
+        setConversations(replayed?.conversations ?? history.conversations);
+        setMessages(replayed?.messages ?? history.messages);
+        if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
+      },
+      (error) => {
+        console.error('[inbox] loading saved conversations failed, trying again:', error);
+        setInboxLoadFailed(true);
+      },
+    );
 
     return () => {
-      cancelled = true;
+      stop();
       inbox.reset();
     };
   }, [userId, store, inbox, persistInbox]);
@@ -510,6 +537,27 @@ const DashboardShell: React.FC = () => {
     navigate('/login');
   }, [signOut, navigate]);
 
+  if (loadFailed) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center px-6">
+        <div className="max-w-sm text-center" role="alert">
+          <h1 className="text-xl font-semibold text-white tracking-tight">We couldn't load your workspace</h1>
+          <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+            Nothing has been lost. Your leads and settings are saved, and this page couldn't reach them.
+            Check your connection, then try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setLoadFailed(false); setLoadAttempt((n) => n + 1); }}
+            className="mt-5 inline-flex items-center px-4 py-2 rounded-full bg-white text-surface text-sm font-semibold hover:bg-neutral-200 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (dataLoading) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -614,6 +662,7 @@ const DashboardShell: React.FC = () => {
           config={config}
           detected={igViewer}
           syncedAt={igSyncedAt}
+          loadFailed={inboxLoadFailed}
           onDisconnectInstagram={handleDisconnectInstagram}
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}

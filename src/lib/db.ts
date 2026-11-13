@@ -128,6 +128,22 @@ async function upsertInboxRows(table: 'conversations' | 'messages', rows: Record
   }
 }
 
+/**
+ * A read the API refused, or that never reached it.
+ *
+ * Reads used to answer an error with "nothing there": `[]` for Leads and the
+ * inbox, `null` for the config. Nothing downstream can tell that from a
+ * workspace that really is empty, and acting on the difference loses data: the
+ * dashboard opened on the default config and the first setting touched saved
+ * it over the Operator's own, and an inbox hydrated empty re-created every
+ * Conversation without its Qualified or Booked mark. So a failed read throws,
+ * and the caller shows that it failed and offers to try again.
+ */
+function readFailed(what: string, error: { message: string }): Error {
+  console.error(`[db] ${what} error:`, error.message);
+  return new Error(`[db] ${what}: ${error.message}`);
+}
+
 /** Rows asked for per request. The API's own ceiling may be lower; `readAll` copes. */
 const PAGE = 1000;
 
@@ -181,10 +197,7 @@ export const db = {
         .order('id', { ascending: true })
         .range(from, to));
 
-    if (error) {
-      console.error('[db] getLeads error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getLeads', error);
 
     // Leads from before intake stamped `createdAt` still have the row's own
     // insert time, which is the same moment.
@@ -234,10 +247,8 @@ export const db = {
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (error) {
-      console.error('[db] getConfig error:', error.message);
-      return null;
-    }
+    // No row is a new Operator (null). An error is not: see `readFailed`.
+    if (error) throw readFailed('getConfig', error);
 
     return data ? (data.data as AppConfig) : null;
   },
@@ -332,10 +343,7 @@ export const db = {
         .order('id', { ascending: true })
         .range(from, to));
 
-    if (error) {
-      console.error('[db] getConversations error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getConversations', error);
 
     return data.map((r) => ({
       id: r.id,
@@ -388,10 +396,7 @@ export const db = {
       if (conversationId) q = q.eq('conversation_id', conversationId);
       return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to);
     });
-    if (error) {
-      console.error('[db] getMessages error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getMessages', error);
 
     return data.map((r) => ({
       id: r.id,

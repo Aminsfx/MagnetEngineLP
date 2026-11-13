@@ -157,3 +157,64 @@ describe('reading a whole workspace', () => {
     expect(await db.getMessages('user-a')).toHaveLength(1200);
   });
 });
+
+describe('a read that fails', () => {
+  /** A table whose every read answers with an error, as a dropped connection or an expired session does. */
+  function failingTable(message: string) {
+    const answer = Promise.resolve({ data: null, error: { message }, count: null });
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      order: () => chain,
+      range: () => answer,
+      maybeSingle: () => answer,
+    };
+    from.mockImplementation(() => chain as never);
+  }
+
+  beforeEach(() => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    from.mockImplementation(() => ({ upsert }));
+  });
+
+  // The regression: every read answered an error with "nothing there". A
+  // config that failed to load came back as null, the dashboard opened on the
+  // defaults, and the first setting the Operator touched saved those defaults
+  // over their real prompt, Offer Ledger and connected Instagram account.
+  it('is not read as an Operator with no saved config', async () => {
+    failingTable('JWT expired');
+
+    await expect(db.getConfig('user-a')).rejects.toThrow(/JWT expired/);
+  });
+
+  it('still reads a new Operator, who has no config row, as null', async () => {
+    const chain = { select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: null, error: null }) };
+    from.mockImplementation(() => chain as never);
+
+    expect(await db.getConfig('user-a')).toBeNull();
+  });
+
+  // Leads read as [] opened an empty pipeline, and a search run from it
+  // passed over nobody as already known: the same people were bought and
+  // added a second time.
+  it('is not read as an empty pipeline', async () => {
+    failingTable('Failed to fetch');
+
+    await expect(db.getLeads('user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+
+  // An inbox read as empty made every thread in the next snapshot a new
+  // Conversation, saved over the stored one: its Qualified or Booked mark,
+  // its labels and the AI's read of it were gone.
+  it('is not read as an empty inbox', async () => {
+    failingTable('Failed to fetch');
+
+    await expect(db.getConversations('user-a')).rejects.toThrow(/Failed to fetch/);
+    await expect(db.getMessages('user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+});
