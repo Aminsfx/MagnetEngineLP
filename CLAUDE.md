@@ -568,3 +568,17 @@ hex/rgba, for SVG props and inline styles, which no utility can reach).
 3. **AI DM generation is template-based** in the wizard step; live AI calls use the selected provider key from localStorage
 4. **CampaignBuilder fallback**: if user scrapes results but selects none, clicking "Add to Queue" adds all results (prevents silent no-op)
 5. **Scrape "everything"**: the UI defaults to every profile a source has, up to `MAX_PER_QUERY` (500) in `_shared/hiker.ts`; the Operator pauses or finishes when they have enough
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, used as named: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
