@@ -37,11 +37,15 @@ test('sends a DM and tells the dashboard it went', async ({ harness }) => {
 // alert() popped up over the dashboard for every reply.
 test('a reply handed over mid-campaign joins the queue, and every DM still goes out', async ({ harness }) => {
   const reply = 'Tuesday at 3 works, talk then.';
+  // A 15-second pause, so theo.makes is certainly still waiting when the reply
+  // arrives. With the usual second it can already be on its way, and a send
+  // in progress is never cut in on.
   await harness.handOff([
     { handle: 'maya.builds', message: dm },
     { handle: 'theo.makes', message: dm },
-  ]);
+  ], { pauseMinutes: 0.25 });
   await expect.poll(() => harness.received(SENT), { timeout: 60_000 }).toHaveLength(1);
+  expect((await harness.storage()).currentTask ?? null).toBeNull();
 
   // The first DM has gone; the second is waiting out its pause. Handed over
   // as a replace, the reply would leave theo.makes unsent for good.

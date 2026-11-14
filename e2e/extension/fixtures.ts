@@ -69,9 +69,11 @@ export interface Harness {
   /**
    * Hand DMs to the extension, the way the dashboard does: the Approval
    * Queue's Send by default, or `{ mode: 'add' }` for an Inbox reply or a
-   * follow-up, which joins the queue.
+   * follow-up, which joins the queue. `pauseMinutes` is the pause between
+   * sends; by default about a second, so a test does not wait out a human's
+   * pacing.
    */
-  handOff(leads: Lead[], options?: { mode?: 'add' }): Promise<void>;
+  handOff(leads: Lead[], options?: { mode?: 'add'; pauseMinutes?: number }): Promise<void>;
   /** Every alert/confirm the extension raised on the dashboard page. */
   dialogs: string[];
   /** Messages the extension has posted back to the dashboard, of one type. */
@@ -188,14 +190,14 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
       opened,
       dialogs,
       async handOff(leads, options = {}) {
+        const pause = options.pauseMinutes ?? 0.01;
         await dashboard.evaluate(
-          ({ type, leads, mode }) =>
+          ({ type, leads, mode, pause }) =>
             window.postMessage(
-              // Minutes. Small enough that a test does not wait out a human's pacing.
-              { type, payload: { leads, minDelay: 0.01, maxDelay: 0.02, dailyCap: 40, ...(mode ? { mode } : {}) } },
+              { type, payload: { leads, minDelay: pause, maxDelay: pause * 1.2, dailyCap: 40, ...(mode ? { mode } : {}) } },
               '*',
             ),
-          { type: PROTOCOL.APP_TO_EXT.CAMPAIGN, leads, mode: options.mode },
+          { type: PROTOCOL.APP_TO_EXT.CAMPAIGN, leads, mode: options.mode, pause },
         );
       },
       received(type) {
