@@ -34,14 +34,38 @@ const AuthLoader: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
+/**
+ * The subscription could not be read. Said as that, with a retry, rather than
+ * read as unpaid: /activate is the checkout, and a paying Operator whose
+ * connection dropped as the page opened was sent there and asked to pay again.
+ */
+const PlanUnconfirmed: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+  <div className="min-h-screen bg-surface flex items-center justify-center px-6">
+    <div className="max-w-sm text-center" role="alert">
+      <h1 className="text-xl font-semibold text-white tracking-tight">We couldn't confirm your plan</h1>
+      <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+        Nothing is wrong with your account: this page couldn't reach it. Check your connection, then try again.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-5 inline-flex items-center px-4 py-2 rounded-full bg-white text-surface text-sm font-semibold hover:bg-neutral-200 transition-colors"
+      >
+        Try again
+      </button>
+    </div>
+  </div>
+);
+
 /** Requires a signed-in user AND an owner-activated (paid) subscription. */
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
-  const { status, loading: planLoading } = usePlan();
+  const { status, loading: planLoading, failed: planFailed, refresh } = usePlan();
 
   if (loading) return <AuthLoader label="Authenticating…" />;
   if (!user) return <Navigate to="/login" replace />;
   if (planLoading) return <AuthLoader label="Checking your access…" />;
+  if (planFailed) return <PlanUnconfirmed onRetry={() => void refresh()} />;
   if (status !== 'active') return <Navigate to="/activate" replace />;
   return <>{children}</>;
 };

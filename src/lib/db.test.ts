@@ -226,6 +226,21 @@ describe('a read that fails', () => {
     await expect(db.getConversations('user-a')).rejects.toThrow(/Failed to fetch/);
     await expect(db.getMessages('user-a')).rejects.toThrow(/Failed to fetch/);
   });
+
+  // Read as 'pending', a dropped connection sent a paying Operator to the
+  // checkout (/activate) and asked them to pay again.
+  it('is not read as an account that never paid', async () => {
+    failingTable('Failed to fetch');
+
+    await expect(db.getSubscription('user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+
+  it('still reads an account with no subscription row as pending', async () => {
+    const chain = { select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: null, error: null }) };
+    from.mockImplementation(() => chain as never);
+
+    expect(await db.getSubscription('user-a')).toMatchObject({ status: 'pending' });
+  });
 });
 
 // The regression: every write answered an error with a console line and

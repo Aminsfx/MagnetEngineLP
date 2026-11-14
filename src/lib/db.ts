@@ -483,12 +483,11 @@ export const db = {
         .maybeSingle());
     }
 
-    if (error) {
-      console.error('[db] getSubscription error:', error.message);
-      // Fail closed: unknown state = not activated (prevents free access when
-      // the table is missing or the query is blocked)
-      return { tier: 'starter', status: 'pending' };
-    }
+    // Still closed: a read that failed is not access. But it is not "never
+    // paid" either. Answered as 'pending', a dropped connection sent a paying
+    // Operator to /activate, the checkout, and asked them to pay again; the
+    // caller now says it could not check and offers to try again.
+    if (error) throw readFailed('getSubscription', error);
 
     if (!data) return { tier: 'starter', status: 'pending' };
 
