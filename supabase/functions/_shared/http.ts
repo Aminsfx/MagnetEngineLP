@@ -7,6 +7,13 @@
 // the JWT check — was one of the things being copy-pasted.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  maySpend,
+  PLAN_UNCONFIRMED,
+  PLAN_UNCONFIRMED_ERROR,
+  SUBSCRIPTION_INACTIVE,
+  SUBSCRIPTION_INACTIVE_ERROR,
+} from "./access.ts";
 
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +54,12 @@ export interface HandlerContext<B> {
 export interface ServeOptions {
   /** Also require the caller's email to be in the ADMIN_EMAILS secret. */
   adminOnly?: boolean;
+  /**
+   * Also require an active plan (see `_shared/access.ts`). Every function that
+   * spends the Owner's money on an AI provider or a lookup sets it: a signed-in
+   * account is not a paying one, and sign-up is open to anyone.
+   */
+  requireActivePlan?: boolean;
 }
 
 function isAdmin(email: string | undefined): boolean {
@@ -83,6 +96,25 @@ export function servePost<B = Record<string, unknown>>(
 
     if (options.adminOnly && !isAdmin(user.email)) {
       return json(403, { error: "not an admin" });
+    }
+
+    // The Owner's own accounts are never asked (maySpend says the same), so
+    // a missing row can't lock them out and costs them no read.
+    if (options.requireActivePlan && !isAdmin(user.email)) {
+      const { data: sub, error: subErr } = await sb
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      // Not read is not refused: say so, and spend nothing.
+      if (subErr) {
+        console.error(`[${name}] reading the subscription failed:`, subErr.message);
+        return json(503, { error: PLAN_UNCONFIRMED_ERROR, code: PLAN_UNCONFIRMED });
+      }
+      if (!maySpend(sub, false)) {
+        console.warn(`[${name}] refused ${user.id}: plan is ${sub?.status ?? "missing"}`);
+        return json(403, { error: SUBSCRIPTION_INACTIVE_ERROR, code: SUBSCRIPTION_INACTIVE });
+      }
     }
 
     let body: B;

@@ -4,8 +4,12 @@
 // Secrets: CLAUDE_API_KEY (and/or OPENAI_API_KEY, GEMINI_API_KEY)
 //
 // Auth: the Supabase gateway requires a valid user JWT (deployed WITHOUT
-// --no-verify-jwt), and servePost re-verifies it in-function, so only signed-in
-// Operators can spend the Owner's AI credits.
+// --no-verify-jwt), and servePost re-verifies it in-function and requires an
+// active plan (`requireActivePlan`, _shared/access.ts), so only Operators who
+// pay, or are in their trial, can spend the Owner's AI credits. Signed in is
+// not enough: sign-up is open to anyone.
+//   403 { error, code: "subscription_inactive" } for a pending, cancelled or
+//   missing plan; 503 { code: "plan_unconfirmed" } when it could not be read.
 //
 // POST JSON: { lead, systemPrompt, provider: 'openai'|'claude'|'gemini' }
 // → { dm: string, provider: string, used: number, limit: number }
@@ -252,4 +256,4 @@ servePost<Body>("generate-dm", async ({ body, user, sb }) => {
     used: newUsed ?? used + 1,
     limit: MONTHLY_DM_LIMIT,
   });
-});
+}, { requireActivePlan: true });

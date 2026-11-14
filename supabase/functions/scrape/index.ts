@@ -25,6 +25,8 @@
 //   404 not_found, 422 private_target — about this one query: noted, run continues
 //   429 scrape_quota                  — the month's lookups are spent
 //   402 trial_limit                   — the free trial's 500 leads are found (_shared/trial.ts)
+//   403 subscription_inactive         — no active plan: signed in is not paying (_shared/access.ts)
+//   503 plan_unconfirmed              — the plan could not be read; nothing was spent
 //   503 scrape_unavailable / scrape_busy, 502 scrape_upstream — about the whole run
 //
 // During a free trial every page also answers `trialLeft`: the leads the trial
@@ -303,4 +305,4 @@ servePost<Body>("scrape", async ({ body, user, sb }) => {
   } finally {
     if (units > 0) await bill(sb, user.id, month, units);
   }
-});
+}, { requireActivePlan: true });
