@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Inbox as InboxIcon, Search, Bot } from 'lucide-react';
 import type { Conversation, Message, AppConfig, Lead } from '../../lib/types';
+import type { Delivery } from '../../lib/delivery';
 import type { ReplyResult } from '../../lib/api';
 import { posthogCapture } from '../../lib/posthog';
 import type { InstagramViewer } from '../../lib/extensionProtocol';
@@ -25,6 +26,10 @@ interface InboxViewProps {
   onGenerateReply: (conv: Conversation, instruction?: string) => Promise<ReplyResult>;
   /** Hands the reply to the extension: false when it was refused, so the draft stays. */
   onSendReply: (conv: Conversation, text: string) => Promise<boolean> | boolean;
+  /** What the extension has said about each reply handed to it, by Message id. */
+  delivery?: Record<string, Delivery>;
+  /** Hand a reply the extension couldn't send to it again. */
+  onResendReply?: (conv: Conversation, message: Message) => void;
   onUpdateConversation: (conv: Conversation) => void;
   /**
    * The Operator's own mark on `conv` (Qualified, Booked). It counts on the
@@ -103,7 +108,7 @@ interface Pin {
 }
 
 export const InboxView: React.FC<InboxViewProps> = ({
-  conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation,
+  conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, delivery, onResendReply, onUpdateConversation,
   onMarkConversation, onUpdateConfig,
   detected, syncedAt, loadFailed, onDisconnectInstagram,
 }) => {
@@ -447,6 +452,8 @@ export const InboxView: React.FC<InboxViewProps> = ({
                             unfold(next);
                           }}
                           onClose={fold}
+                          delivery={delivery}
+                          onResend={(m) => onResendReply?.(c, m)}
                         />
                       )}
                     </ConversationRow>

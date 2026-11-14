@@ -438,6 +438,23 @@ export const db = {
     }));
   },
 
+  /**
+   * Delete Messages by id: the app's own copies of replies that Instagram's
+   * copy has replaced. Scoped to the Operator, because a Message is keyed on
+   * (user_id, id).
+   */
+  async deleteMessages(ids: string[], userId: string): Promise<void> {
+    if (ids.length === 0 || !isSupabaseReady()) return;
+
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('user_id', userId)
+      .in('id', ids);
+
+    if (error) throw writeFailed('deleteMessages', [error.message]);
+  },
+
   async upsertMessages(rows: Message[], userId: string): Promise<void> {
     if (rows.length === 0 || !isSupabaseReady()) return;
 

@@ -77,6 +77,7 @@ function fakeStore(kind: WorkspaceStore['kind'] = 'supabase') {
     loadInbox: async () => ({ conversations: [], messages: [] }),
     saveConversations: async () => {},
     saveMessages: async () => {},
+    removeMessages: async () => {},
     loadSequences: async () => [],
     saveSequence: async (sequence) => sequence,
   };

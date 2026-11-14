@@ -26,12 +26,14 @@ function noop(): Stub {
     });
 }
 
-type QueueItem = { handle: string; message: string; added?: boolean };
+type QueueItem = { handle: string; message: string; added?: boolean; reply?: boolean; ref?: string };
 
 function loadBackground(initial: Record<string, unknown> = {}, pendingAlarms: string[] = []) {
     const store: Record<string, unknown> = { account: { userId: 'u1', email: '' }, ...initial };
     const alarms = new Map<string, unknown>(pendingAlarms.map((name) => [name, { name }]));
     const opened: string[] = [];
+    /** What the worker told the dashboard tab. */
+    const toApp: Array<Record<string, unknown>> = [];
     let onMessage: ((req: unknown, sender: unknown, respond: (r: unknown) => void) => unknown) | null = null;
 
     const chrome = noop();
@@ -56,8 +58,9 @@ function loadBackground(initial: Record<string, unknown> = {}, pendingAlarms: st
         },
     };
     chrome.tabs = {
-        query: (_q: unknown, cb: (t: unknown[]) => void) => cb([]),
-        sendMessage: (_id: number, _msg: unknown, cb?: () => void) => cb?.(),
+        // One dashboard tab, so broadcasts to the app can be read.
+        query: (_q: unknown, cb: (t: unknown[]) => void) => cb([{ id: 5, url: 'http://localhost:3000/inbox' }]),
+        sendMessage: (_id: number, msg: Record<string, unknown>, cb?: () => void) => { toApp.push(msg); cb?.(); },
         onRemoved: { addListener: vi.fn() },
         create: (props: { url: string }, cb?: (t: { id: number; url: string }) => void) => {
             opened.push(props.url);
@@ -78,8 +81,11 @@ function loadBackground(initial: Record<string, unknown> = {}, pendingAlarms: st
             {},
             done as (r: unknown) => void,
         ));
+    /** The content script reporting how the send in flight went. */
+    const complete = (result: 'success' | 'failed' | 'skipped', handle: string, reason?: string) =>
+        new Promise<unknown>((done) => onMessage!({ type: 'TASK_COMPLETE', result, handle, reason }, {}, done));
     const queue = () => ((store.campaignQueue as QueueItem[]) || []).map((l) => l.handle);
-    return { store, alarms, opened, handOver, queue };
+    return { store, alarms, opened, toApp, handOver, complete, queue };
 }
 
 const dm = (handle: string, message = `hey ${handle}`): QueueItem => ({ handle, message });
@@ -125,10 +131,11 @@ describe('handing a reply or a follow-up to a running campaign', () => {
         expect(queue()).toEqual(['maya', 'a']);
     });
 
-    it('leaves a paused campaign paused', async () => {
+    it('leaves a paused campaign paused, and holds a follow-up with it', async () => {
+        const followUp = dm('maya', 'still keen to sort the clips out?');
         const { store, handOver, queue, opened } = loadBackground({ campaignQueue: [dm('a')], isPaused: true });
 
-        await handOver([reply], 'add');
+        await handOver([followUp], 'add');
 
         expect(store.isPaused).toBe(true);
         expect(queue()).toEqual(['maya', 'a']);
@@ -184,5 +191,86 @@ describe('the Approval Queue handing over every approved DM', () => {
         expect(queue()).toEqual(['b']);
         expect(store.originalTotal).toBe(2);
         expect(opened).toHaveLength(1);
+    });
+});
+
+// The regression: an autopilot or Inbox reply waited behind the campaign. A
+// paused campaign, or one that had used the day's Send Cap, held every reply
+// until Resume or the next morning, while the Inbox showed them as sent. And
+// the worker only ever told the dashboard about a send that worked, never
+// which reply it was, nor about one that failed, so a failed reply stayed
+// "sent" in the Inbox for good.
+describe('a reply to someone who wrote in', () => {
+    const answer = (handle: string, ref = `local_${handle}`): QueueItem => ({
+        handle, message: `answer for ${handle}`, reply: true, ref,
+    });
+    const today = new Date().toDateString();
+
+    it('is sent while the campaign is paused, and the campaign stays paused', async () => {
+        const { store, handOver, queue, opened } = loadBackground({ campaignQueue: [dm('a')], isPaused: true });
+
+        await handOver([answer('maya')], 'add');
+
+        expect(store.currentTask).toMatchObject({ handle: 'maya' });
+        expect(opened).toHaveLength(1);
+        expect(queue()).toEqual(['a']);
+        expect(store.isPaused).toBe(true);
+    });
+
+    it("is sent once the day's Send Cap is used up, while the campaign waits for tomorrow", async () => {
+        const { store, handOver, queue, opened } = loadBackground({
+            campaignQueue: [dm('a')], dailySentCount: 40, dailyResetDate: today, dailyCap: 40,
+        });
+
+        await handOver([answer('maya')], 'add');
+
+        expect(store.currentTask).toMatchObject({ handle: 'maya' });
+        expect(opened).toHaveLength(1);
+        expect(queue()).toEqual(['a']);
+    });
+
+    it('goes out in the order people wrote, ahead of the campaign', async () => {
+        const { handOver, queue } = loadBackground({ campaignQueue: [dm('a')] }, ['dripEngine']);
+
+        await handOver([answer('sam')], 'add');
+        await handOver([answer('lea')], 'add');
+        await handOver([answer('tom')], 'add');
+
+        expect(queue()).toEqual(['sam', 'lea', 'tom', 'a']);
+    });
+
+    it('is followed by the next reply while the campaign is paused, and never by a campaign DM', async () => {
+        const { store, alarms, complete, queue } = loadBackground({
+            campaignQueue: [answer('lea'), dm('a')], isPaused: true,
+            isExecuting: true, currentTask: { ...answer('sam'), dispatched: true },
+        });
+
+        await complete('success', 'sam');
+
+        expect(alarms.has('dripEngine')).toBe(true); // lea is next, after the usual pause
+        expect(queue()).toEqual(['lea', 'a']);
+        expect(store.isPaused).toBe(true);
+    });
+
+    it('tells the dashboard which reply was sent', async () => {
+        const { toApp, complete } = loadBackground({
+            campaignQueue: [], isExecuting: true, currentTask: { ...answer('sam', 'local_42'), dispatched: true },
+        });
+
+        await complete('success', 'sam');
+
+        expect(toApp).toContainEqual(expect.objectContaining({ type: 'MAGNET_ENGINE_SENT', handle: 'sam', ref: 'local_42' }));
+    });
+
+    it("tells the dashboard which reply couldn't be sent, and why", async () => {
+        const { toApp, complete } = loadBackground({
+            campaignQueue: [], isExecuting: true, currentTask: { ...answer('sam', 'local_42'), dispatched: true },
+        });
+
+        await complete('skipped', 'sam', "this profile doesn't exist any more.");
+
+        expect(toApp).toContainEqual(expect.objectContaining({
+            type: 'MAGNET_ENGINE_NOT_SENT', handle: 'sam', ref: 'local_42', reason: "this profile doesn't exist any more.",
+        }));
     });
 });

@@ -64,11 +64,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     dailyCap,
                 }, () => {
                     sendResponse({ status: 'queued', count: taken });
-                    // A send in flight, or a pause, settles what happens next by
-                    // itself. Otherwise go now, unless a paced wait between two
-                    // sends is already running: that wait is the next send.
-                    chrome.storage.local.get(['isExecuting', 'isPaused'], (now) => {
-                        if (now.isExecuting || now.isPaused) return;
+                    // A send in flight settles what happens next by itself.
+                    // Otherwise go now, unless a paced wait between two sends is
+                    // already running: that wait is the next send. A paused
+                    // campaign is left to processNextLead, which sends a reply
+                    // through it and nothing else.
+                    chrome.storage.local.get(['isExecuting'], (now) => {
+                        if (now.isExecuting) return;
                         chrome.alarms.get('dripEngine', (alarm) => { if (!alarm) processNextLead(); });
                     });
                 });
@@ -285,7 +287,7 @@ function joinQueue(leads, queue, inFlight, originalTotal) {
     return {
         taken: fresh.length,
         patch: {
-            campaignQueue: [...fresh, ...queue],
+            campaignQueue: inLine([...queue, ...fresh]),
             originalTotal: idle ? fresh.length : (Number(originalTotal) || queue.length + 1) + fresh.length,
             ...(idle ? { failedCount: 0, lastFailure: null, noButtonHeld: [] } : {}),
         },
@@ -298,7 +300,7 @@ function joinQueue(leads, queue, inFlight, originalTotal) {
 function replaceQueue(leads, queue, inFlight) {
     const kept = queue.filter((q) => q.added);
     const fresh = newDms(leads, inFlight ? [...kept, inFlight] : kept);
-    const campaignQueue = [...kept, ...fresh];
+    const campaignQueue = inLine([...kept, ...fresh]);
     return {
         taken: fresh.length,
         patch: {
@@ -311,6 +313,31 @@ function replaceQueue(leads, queue, inFlight) {
             ...(inFlight ? {} : { isExecuting: false, currentTask: null }),
         },
     };
+}
+
+// A reply to someone who wrote in (`reply: true`, an Inbox or autopilot reply).
+// Someone is waiting on it, so it goes before everything else, and a paused
+// campaign or a used-up Send Cap holds the campaign, never a reply. Until
+// 1.11.0 both held replies until Resume or the next morning, while the Inbox
+// showed them as sent.
+function isReply(lead) {
+    return !!(lead && lead.reply);
+}
+
+// The order the queue is sent in: replies, then follow-ups and other added
+// DMs, then the campaign, each in the order it arrived (sort is stable). New
+// replies used to go in front of the ones already waiting, so the last person
+// to write was answered first.
+function inLine(queue) {
+    const rank = (lead) => (isReply(lead) ? 0 : lead.added ? 1 : 2);
+    return [...queue].sort((a, b) => rank(a) - rank(b));
+}
+
+// Which queued DM may go next: the first one, or while the campaign is held
+// (paused, or at its Send Cap), the first reply. -1 when nothing may.
+function nextSendable(queue, held) {
+    if (!held) return queue.length ? 0 : -1;
+    return queue.findIndex(isReply);
 }
 
 // ── A send finished (or gave up) ──────────────────────────────────
@@ -411,20 +438,34 @@ function completeTask(outcome, handle, reason, code) {
             }, () => {
                 // Tell any open MagnetEngine tab what actually got sent, so the
                 // app marks the lead sent for real (not on handoff).
+                // `ref` is the dashboard's own id for this DM (an Inbox reply's
+                // Message), so it can tell which one went, or which didn't. A
+                // failure used to be told to nobody: a reply that couldn't be
+                // sent stayed "sent" in the Inbox for good.
                 if (outcome === 'success') {
                     broadcastToApp({
                         type: EXT_TO_APP.SENT,
                         handle: task.handle,
+                        ref: task.ref,
                         dailySentCount: count,
                         dailyCap: cap,
+                    });
+                } else if (outcome === 'failed' || outcome === 'skipped') {
+                    broadcastToApp({
+                        type: EXT_TO_APP.NOT_SENT,
+                        handle: task.handle,
+                        ref: task.ref,
+                        reason: reason || 'no reason given.',
                     });
                 }
 
                 // Done: the Sender Tab has nothing left to do.
                 if (queue.length === 0) { closeSenderTab(); return; }
-                // Stopping for a while (cap reached, or paused mid-send): give the
-                // tab back rather than leave it blocked until tomorrow.
-                if (count >= cap || result.isPaused) { releaseSenderTab(); return; }
+                // The campaign stopping for a while (cap reached, or paused
+                // mid-send): replies still go, and once none is left the tab is
+                // given back rather than left blocked until tomorrow.
+                const held = count >= cap || result.isPaused;
+                if (nextSendable(queue, held) === -1) { releaseSenderTab(); return; }
 
                 scheduleNext(result);
             });
@@ -627,12 +668,12 @@ function resumeIfStalled() {
         ['campaignQueue', 'isExecuting', 'isPaused', 'dailySentCount', 'dailyResetDate', 'dailyCap', 'minDelay', 'maxDelay'],
         (result) => {
             const queue = result.campaignQueue || [];
-            if (queue.length === 0 || result.isExecuting || result.isPaused) return;
+            if (queue.length === 0 || result.isExecuting) return;
 
             const today = new Date().toDateString();
             const count = result.dailyResetDate === today ? (result.dailySentCount || 0) : 0;
             const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
-            if (count >= cap) return;
+            if (nextSendable(queue, !!result.isPaused || count >= cap) === -1) return;
 
             chrome.alarms.get('dripEngine', (alarm) => {
                 if (alarm) return;
@@ -648,20 +689,23 @@ function processNextLead() {
         ['campaignQueue', 'isExecuting', 'isPaused', 'dailySentCount', 'dailyResetDate', 'dailyCap'],
         (result) => {
             if (result.isExecuting) return;
-            if (result.isPaused)    return;
 
             const today = new Date().toDateString();
             const count = result.dailyResetDate === today ? (result.dailySentCount || 0) : 0;
             const cap = Number(result.dailyCap) || DEFAULT_DAILY_CAP;
-            if (count >= cap) return;
+            // Paused, or at the Send Cap: the campaign waits, a reply doesn't.
+            const held = !!result.isPaused || count >= cap;
 
             const queue = result.campaignQueue || [];
             if (queue.length === 0) {
-                chrome.storage.local.set({ isExecuting: false }, closeSenderTab);
+                if (!held) chrome.storage.local.set({ isExecuting: false }, closeSenderTab);
                 return;
             }
 
-            const [nextLead, ...rest] = queue;
+            const next = nextSendable(queue, held);
+            if (next === -1) return;
+            const nextLead = queue[next];
+            const rest = [...queue.slice(0, next), ...queue.slice(next + 1)];
             chrome.storage.local.set({
                 campaignQueue: rest,
                 currentTask:   stripDispatch(nextLead),

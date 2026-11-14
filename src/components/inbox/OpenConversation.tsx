@@ -9,6 +9,7 @@ import { posthogCapture } from '../../lib/posthog';
 import { Copilot, ROW_PILL } from './Copilot';
 import { DealPanel } from './DealPanel';
 import { timeAgo } from './ConversationRow';
+import { replyStatus, type Delivery, type ReplyStatus } from '../../lib/delivery';
 
 /** The open row's one white pill (DESIGN.md: one white pill per action group). */
 const PRIMARY = 'inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-surface text-meta font-semibold hover:bg-neutral-100 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap';
@@ -56,7 +57,11 @@ export const OpenConversation: React.FC<{
   next: Conversation | null;
   onNext: () => void;
   onClose: () => void;
-}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onMark, onSaveDeal, next, onNext, onClose }) => {
+  /** What the extension has said about each reply handed to it, by Message id. */
+  delivery?: Record<string, Delivery>;
+  /** Hand a reply that wasn't sent to the extension again. */
+  onResend?: (message: Message) => void;
+}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onMark, onSaveDeal, next, onNext, onClose, delivery, onResend }) => {
   const toast = useToast();
   const [draft, setDraft] = useState('');
   const [labelInput, setLabelInput] = useState('');
@@ -164,6 +169,7 @@ export const OpenConversation: React.FC<{
                 <time dateTime={m.createdAt} className={`block mt-0.5 font-mono text-label tabular-nums ${out ? 'text-right text-white/60' : 'text-neutral-400'}`}>
                   {timeAgo(m.createdAt)}
                 </time>
+                <ReplyState status={replyStatus(m, delivery?.[m.id])} onResend={() => onResend?.(m)} />
               </div>
             </li>
           );
@@ -302,4 +308,30 @@ export const OpenConversation: React.FC<{
       </div>
     </div>
   );
+};
+
+/**
+ * Where a reply the app sent is, under its bubble: nothing once it is
+ * Instagram's own copy. A reply used to look sent the moment it was handed to
+ * the extension, so one that never reached Instagram looked exactly like one
+ * that did.
+ */
+const ReplyState: React.FC<{ status: ReplyStatus | null; onResend: () => void }> = ({ status, onResend }) => {
+  if (!status) return null;
+  if (status.state === 'failed') {
+    return (
+      <span role="status" className="mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-label text-danger-300">
+        <span>Not sent: {status.reason}</span>
+        <button
+          type="button"
+          onClick={onResend}
+          className="font-medium text-white underline decoration-white/40 hover:decoration-white"
+        >
+          Send again
+        </button>
+      </span>
+    );
+  }
+  const label = status.state === 'sending' ? 'Sending…' : status.state === 'sent' ? 'Sent' : 'Not on Instagram yet';
+  return <span role="status" className="mt-0.5 block text-right text-label text-white/60">{label}</span>;
 };

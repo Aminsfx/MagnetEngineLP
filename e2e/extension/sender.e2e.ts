@@ -9,7 +9,7 @@ import { test, expect, PROTOCOL } from './fixtures';
  * campaign was reported as "no Message button" because Instagram was in French
  * and the Sender only knew the English word.
  */
-const { SENT } = PROTOCOL.EXT_TO_APP;
+const { SENT, NOT_SENT } = PROTOCOL.EXT_TO_APP;
 
 const dm = 'how are you getting your episodes cut into clips right now?';
 
@@ -59,6 +59,35 @@ test('a reply handed over mid-campaign joins the queue, and every DM still goes 
     ['theo.makes', dm],
   ]);
   expect(harness.dialogs).toEqual([]);
+});
+
+// The regression: a reply waited behind a paused campaign (or one at its Send
+// Cap) until Resume or the next morning, while the Inbox showed it as sent,
+// and the dashboard was never told which reply went, nor about one that failed.
+test('a reply goes out while the campaign is paused, and the dashboard hears which one went', async ({ harness }) => {
+  const reply = 'Tuesday at 3 works, talk then.';
+  await harness.setStorage({ campaignQueue: [{ handle: 'theo.makes', message: dm }], isPaused: true });
+
+  await harness.handOff([{ handle: 'maya.builds', message: reply, ref: 'local_t1_1', reply: true }], { mode: 'add' });
+
+  await expect.poll(() => harness.received(SENT), { timeout: 60_000 }).toHaveLength(1);
+  expect(harness.sent).toEqual([{ handle: 'maya.builds', text: reply, lang: 'en' }]);
+  expect((await harness.received(SENT))[0]).toMatchObject({ handle: 'maya.builds', ref: 'local_t1_1' });
+
+  // The campaign stays paused, its DM unsent and still queued.
+  const state = await harness.storage();
+  expect(state.isPaused).toBe(true);
+  expect((state.campaignQueue as Array<{ handle: string }>).map((l) => l.handle)).toEqual(['theo.makes']);
+});
+
+test("tells the dashboard which reply couldn't be sent, and why", async ({ harness }) => {
+  await harness.handOff([{ handle: 'gone.account', message: 'see you then', ref: 'local_t2_1', reply: true }], { mode: 'add' });
+
+  await expect.poll(() => harness.received(NOT_SENT), { timeout: 60_000 }).toHaveLength(1);
+  const [notice] = await harness.received(NOT_SENT);
+  expect(notice).toMatchObject({ handle: 'gone.account', ref: 'local_t2_1' });
+  expect(String(notice.reason)).toContain("doesn't exist any more");
+  expect(harness.sent).toEqual([]);
 });
 
 test('sends on an Instagram that stays in French', async ({ harness }) => {

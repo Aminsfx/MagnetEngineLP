@@ -39,8 +39,11 @@ const MAGNET_PROTOCOL = {
    *     extension does nothing on Instagram for nobody. INBOX now carries the
    *     Instagram account it was read from (`viewer`), so a dashboard only
    *     takes in the inbox of the account its Operator connected.
+   * 5 — NOT_SENT: a DM the extension gave up on, with why. SENT and NOT_SENT
+   *     carry the `ref` the dashboard gave the DM, and a reply (`reply: true`)
+   *     goes out even while the campaign is paused or at its Send Cap.
    */
-  VERSION: 4,
+  VERSION: 5,
 
   /** Every page↔extension message name starts with this. */
   PREFIX: 'MAGNET_ENGINE_',
@@ -59,6 +62,7 @@ const MAGNET_PROTOCOL = {
   EXT_TO_APP: {
     STATS: 'MAGNET_ENGINE_STATS',
     SENT: 'MAGNET_ENGINE_SENT',
+    NOT_SENT: 'MAGNET_ENGINE_NOT_SENT',
     INBOX: 'MAGNET_ENGINE_INBOX',
     HELLO_BACK: 'MAGNET_ENGINE_HELLO_BACK',
   },

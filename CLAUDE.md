@@ -103,6 +103,21 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   `void`: check `delivered` and show `reason` — never report success for a
   handoff an old or missing extension will ignore, and never stamp a Lead
   (`followedUp`, an outbound Message) off a refused one.
+- **A reply is sent when Instagram shows it** (2026-11-14, when the Owner's
+  autopilot replies read as sent in the Inbox and weren't on Instagram). A
+  delivered Handoff is the extension taking the work, nothing more. So:
+  (1) every Inbox or autopilot reply goes out as `{ ref: message.id, reply: true }`.
+  A `reply` jumps the queue and goes through a paused campaign or a used-up
+  Send Cap (extension 1.11.0, protocol 5); follow-ups and openers never set
+  it. (2) The extension answers `SENT` or `NOT_SENT` with that `ref`, and the
+  Inbox draws the reply through `replyStatus` (`src/lib/delivery.ts`):
+  Sending…, Sent, Not sent with the reason and Send again, or Not on
+  Instagram yet. `NOT_SENT` also puts the Conversation back in "needs you".
+  (3) When Instagram's copy is read, it replaces the app's (`settled` in
+  `inbox.ts`), and the app's row is deleted once Instagram's is saved. Until
+  then the app kept its own copy and threw Instagram's away, so a reply only
+  handed over looked exactly like one Instagram had. Never draw a
+  `LOCAL_MESSAGE_PREFIX` Message as sent without asking `replyStatus`.
 - **Reading Instagram's page to send** — only through `MagnetSend` (`extension/igsend.js`),
   never an English string in content.js. On 2026-11-07 a campaign ran from an account shown in
   French ("Envoyer un message"), and the English-only lookup reported all 85 profiles as having
@@ -515,7 +530,7 @@ on `user_id,id`; `DashboardShell.persistInbox` writes Conversations before their
 - `DashboardShell` ingests snapshots via `src/lib/inbox.ts:ingestThreads` (dedupe by IG item_id; preserves AI-set intent/status/labels) into `conversations`/`messages` (Supabase, localStorage fallback), rendered by `src/components/inbox/InboxView.tsx` (`/inbox`).
 - **The Inbox is one list, not two panes** (owner, 2026-10-24; brief at `.impeccable/surfaces/src-components-inbox-inboxview-tsx.md`). Conversations sit in `triage.ts` priority groups; a row (`ConversationRow`) unfolds in place into `OpenConversation`: the thread, the copilot's three replies in full (`Copilot`), the composer, and a bar for Mark qualified, Mark booked, the deal and labels. The open row is pinned where it unfolded until it folds, so a send never moves it under the Operator; an unread row stays lit until opened. `onSendReply` returns whether the extension accepted the reply: on `false` the draft stays, on `true` the composer offers "Next: @handle" (the first conversation down the list that still needs the Operator) as its one white pill, with focus on it.
 - AI replies: `generate-reply` Edge Function (JWT-gated like `generate-dm`, `verify_jwt=true` in `config.toml`) returns `{ reply, intent }`. Approved replies reuse the existing `MAGNET_ENGINE_CAMPAIGN` send path (DMing the handle appends to the thread).
-- Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open; paced/capped by the extension. Human-approval is the default.
+- Autopilot (`AppConfig.autopilot`): auto-drafts + auto-sends replies to new inbound while a dashboard tab is open. Each reply goes out as a `reply` (see "A reply is sent when Instagram shows it"): paced by the extension, never held by a paused campaign or the Send Cap. A reply autopilot couldn't write, or one the extension couldn't send, is said on screen. Human-approval is the default.
 - **Inbox → funnel:** every changed Conversation is read as an `Outcome` (`src/lib/outcome.ts`) and the batch handed to `outreach.recordOutcomes`, which stamps the Leads behind the handles. An inbound Message sets `replied` + `replyDate`; booking — the Operator's "Booked" click or the AI's `booked` intent — sets `booked`/`positiveReply`/`replied`/`status: 'won'`. The Operator's "Mark qualified" click sets `positiveReply` + `qualifiedAt` and nothing about a booking. The AI's `interested` intent deliberately does **not** move the funnel: it colours the Inbox only, so a misread never inflates metrics or fires a webhook the Operator can't unsend. Reply rate, the conversion chart, AI Analyst, Health Score and the `replied`/`positive_reply`/`booked` webhooks all depend on this path.
 - **Reply rate stays ≤ 100% by construction.** An Outcome reads `sent` off the thread's outbound Messages, which the extension pulls from Instagram's own inbox API (`extension/content.js` tags direction by comparing the sender to the viewer) — a second confirmation route, not an inference, so Sent stays the extension's word. A reply is only read from an inbound Message that arrived *after* an outbound one, which makes `replied` a subset of `dmSent` and keeps `filters.ts`'s `replyRate` (`replied/dmsSent`) in range. A prospect who DMs the Operator first is an inbound lead, not a reply, and does not move the funnel. `booked` implies Sent for the same reason — you cannot book someone you never messaged.
 - **Limitation:** polling + autopilot only run while an `instagram.com` tab is open (the background worker can't send IG's SameSite cookie). During active campaigns the extension opens a pinned inbox tab when nothing has been read for 5 minutes (see above).

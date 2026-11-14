@@ -102,6 +102,44 @@ describe('inbox upserts', () => {
   });
 });
 
+// The app's copy of a reply is deleted once Instagram's copy replaces it.
+describe('deleting messages', () => {
+  function messageTable(error: { message: string } | null = null) {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const chain = {
+      delete: () => { calls.push(['delete']); return chain; },
+      eq: (col: string, v: unknown) => { calls.push(['eq', col, v]); return chain; },
+      in: (col: string, v: unknown) => { calls.push(['in', col, v]); return Promise.resolve({ error }); },
+    };
+    from.mockImplementation(() => chain as never);
+    return calls;
+  }
+
+  beforeEach(() => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    from.mockImplementation(() => ({ upsert }));
+  });
+
+  it("deletes only this Operator's rows: an Instagram id is not unique across Operators", async () => {
+    const calls = messageTable();
+
+    await db.deleteMessages(['local_t1_1'], 'user-a');
+
+    expect(calls).toEqual([['delete'], ['eq', 'user_id', 'user-a'], ['in', 'id', ['local_t1_1']]]);
+  });
+
+  it('says so when the delete fails', async () => {
+    messageTable({ message: 'Failed to fetch' });
+
+    await expect(db.deleteMessages(['local_t1_1'], 'user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+});
+
 describe('reading a whole workspace', () => {
   /**
    * A table that, like the API, answers at most `cap` rows a request and
