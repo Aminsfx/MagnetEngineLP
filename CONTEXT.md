@@ -92,7 +92,9 @@ _Avoid_: queued, scheduled, sending
 
 **Send Cap**:
 The maximum number of DMs the extension will send in one day. Set by the
-operator, enforced by the extension.
+operator, enforced by the extension. It holds the campaign, never a reply to
+someone who wrote in: a reply still goes, and counts toward the day's sends.
+A paused campaign holds replies no more than the cap does.
 _Avoid_: rate limit, throttle
 
 **Follow-up**:

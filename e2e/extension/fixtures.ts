@@ -62,6 +62,10 @@ export interface SentMessage {
 export interface Lead {
   handle: string;
   message: string;
+  /** The dashboard's id for the DM, handed back on SENT and NOT_SENT. */
+  ref?: string;
+  /** A reply to someone who wrote in: it goes even while the campaign is held. */
+  reply?: boolean;
 }
 
 /** What the tests drive: the dashboard page, and what Instagram and the extension saw. */
@@ -84,6 +88,8 @@ export interface Harness {
   opened: string[];
   /** The extension's own stored state. */
   storage(): Promise<Record<string, unknown>>;
+  /** Change the extension's stored state, as the popup's Pause does. */
+  setStorage(patch: Record<string, unknown>): Promise<void>;
 }
 
 export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
@@ -211,6 +217,9 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
       },
       storage() {
         return popup.evaluate(() => chrome.storage.local.get(null)) as Promise<Record<string, unknown>>;
+      },
+      async setStorage(patch) {
+        await popup.evaluate((p) => chrome.storage.local.set(p), patch);
       },
     });
   },

@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, ExternalLink, Instagram, Loader2 } from 'lucide-react';
 import {
   EXTENSION_INSTALL_URL,
+  readsInboxViewer,
   type ExtensionStatus,
   type InstagramViewer,
 } from '../../lib/extensionProtocol';
@@ -32,7 +33,10 @@ export const igName = (viewer: { username: string }) =>
  */
 export const ConnectInstagram: React.FC<ConnectInstagramProps> = ({ extension, detected, onConnect }) => {
   const installed = extension.state === 'ready' || extension.state === 'legacy';
-  const current = installed && !extension.needsUpdate;
+  // Not "the latest build": one that says whose inbox it read is all this
+  // needs. Asking for the latest locked Operators out every time the protocol
+  // moved on, for the days until the new build cleared the Chrome Web Store.
+  const current = installed && readsInboxViewer(extension);
 
   const steps: Array<{ title: string; done: boolean; body: React.ReactNode }> = [
     {

@@ -37,6 +37,7 @@ export const APP_TO_EXT = {
 export const EXT_TO_APP = {
   STATS: 'MAGNET_ENGINE_STATS',
   SENT: 'MAGNET_ENGINE_SENT',
+  NOT_SENT: 'MAGNET_ENGINE_NOT_SENT',
   INBOX: 'MAGNET_ENGINE_INBOX',
   HELLO_BACK: 'MAGNET_ENGINE_HELLO_BACK',
 } as const;
@@ -47,7 +48,7 @@ export const PROTOCOL_PREFIX = 'MAGNET_ENGINE_';
  * Wire-protocol revision this build of the dashboard speaks. Must match
  * MAGNET_PROTOCOL.VERSION in extension/protocol.js — asserted by the test.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * What an extension built before the handshake (≤ 1.4.0) accepts.
@@ -76,6 +77,17 @@ const HANDSHAKE_TIMEOUT_MS = 2500;
 export interface CampaignRecipient {
   handle: string;
   message: string;
+  /**
+   * The dashboard's own id for this DM, handed back on SENT and NOT_SENT so
+   * the app knows which one went. An Inbox reply passes its Message's id.
+   */
+  ref?: string;
+  /**
+   * A reply to someone who wrote in. It goes before everything else, and a
+   * paused campaign or a used-up Send Cap holds the campaign, never a reply
+   * (protocol 5, extension 1.11.0). Never set it on an opener or a follow-up.
+   */
+  reply?: boolean;
 }
 
 export interface CampaignPayload {
@@ -118,8 +130,17 @@ export interface ExtensionStats {
 
 export interface SentNotice {
   handle: string;
+  /** The `ref` the DM was handed over with (protocol 5). */
+  ref?: string;
   dailySentCount: number;
   dailyCap: number;
+}
+
+/** A DM the extension gave up on (protocol 5): why, and the `ref` it carried. */
+export interface NotSentNotice {
+  handle: string;
+  ref?: string;
+  reason: string;
 }
 
 /** One send the extension confirmed. `sentAt` only when it said when. */
@@ -171,6 +192,15 @@ export interface ExtensionStatus {
   accepts: readonly string[];
   /** Installed, but behind the dashboard. The cue to prompt for an update. */
   needsUpdate: boolean;
+}
+
+/**
+ * Whether this build says whose Instagram inbox it read (`viewer`, protocol 4),
+ * which is what connecting an Instagram account needs. Not `!needsUpdate`: a
+ * build one protocol behind the dashboard still reads the viewer.
+ */
+export function readsInboxViewer(s: ExtensionStatus): boolean {
+  return s.protocolVersion >= 4;
 }
 
 const UNKNOWN: ExtensionStatus = {
@@ -318,6 +348,7 @@ export type InboxSnapshot = {
 export type ExtensionMessage =
   | ({ type: typeof EXT_TO_APP.STATS } & Partial<ExtensionStats>)
   | ({ type: typeof EXT_TO_APP.SENT } & Partial<SentNotice>)
+  | ({ type: typeof EXT_TO_APP.NOT_SENT } & Partial<NotSentNotice>)
   | ({ type: typeof EXT_TO_APP.INBOX } & Partial<InboxSnapshot>)
   | ({ type: typeof EXT_TO_APP.HELLO_BACK } & Partial<ExtensionHandshake>);
 
