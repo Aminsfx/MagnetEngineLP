@@ -83,6 +83,8 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, con
   const [previewHandle, setPreviewHandle] = useState('johndoe');
   const [previewName, setPreviewName] = useState('John');
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState(false);
 
   const activeSeq = sequences[kind];
@@ -154,13 +156,21 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, con
       }
 
       setSequences(next);
+      setLoadFailed(false);
+      setLoading(false);
+    }).catch((error) => {
+      // Not "no sequences": seeding here would show ladders the Operator never
+      // wrote, send from them, and store a second ladder beside theirs on Save.
+      if (cancelled) return;
+      console.error('[follow-ups] load failed:', error);
+      setLoadFailed(true);
       setLoading(false);
     });
     return () => { cancelled = true; };
     // Config is read for the Offer Ledger at seed time only; re-seeding on every
     // keystroke in Settings would throw away unsaved step edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
+  }, [store, attempt]);
 
   const patchActive = useCallback((patch: Partial<FollowUpSequence>) => {
     setSequences((prev) => {
@@ -238,6 +248,22 @@ export const FollowUpSequencer: React.FC<FollowUpSequencerProps> = ({ leads, con
       <div className="flex items-center justify-center h-48 text-neutral-400 text-sm">
         <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white/20 rounded-full mr-3" />
         Loading sequences…
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div role="alert" className="flex flex-col items-center justify-center gap-3 h-48 text-center text-sm">
+        <p className="text-white">We couldn't load your follow-up sequences.</p>
+        <p className="text-neutral-400">Nothing was changed. Check your connection, then try again.</p>
+        <button
+          type="button"
+          onClick={() => { setLoading(true); setAttempt((n) => n + 1); }}
+          className="mt-1 px-4 py-2 rounded-full bg-white text-black text-xs font-medium hover:bg-neutral-200 transition-colors"
+        >
+          Try again
+        </button>
       </div>
     );
   }

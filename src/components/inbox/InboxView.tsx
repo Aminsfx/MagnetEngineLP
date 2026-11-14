@@ -39,6 +39,12 @@ interface InboxViewProps {
    * (epoch ms), null if it hasn't, undefined if the extension can't say.
    */
   syncedAt?: number | null;
+  /**
+   * The saved Conversations could not be loaded, and the load is being tried
+   * again. Until it lands nothing new is taken in either, so an empty list
+   * here is not an empty inbox and the page has to say so.
+   */
+  loadFailed?: boolean;
   onDisconnectInstagram: () => void;
 }
 
@@ -99,7 +105,7 @@ interface Pin {
 export const InboxView: React.FC<InboxViewProps> = ({
   conversations, messages, leads, onSaveDeal, config, onGenerateReply, onSendReply, onUpdateConversation,
   onMarkConversation, onUpdateConfig,
-  detected, syncedAt, onDisconnectInstagram,
+  detected, syncedAt, loadFailed, onDisconnectInstagram,
 }) => {
   const account = config.instagramAccount!;
   // The browser is logged in to a different Instagram than the one connected:
@@ -308,6 +314,13 @@ export const InboxView: React.FC<InboxViewProps> = ({
           <span className="text-white font-medium">This browser is logged in to Instagram as {igName(otherAccount)}, not {igName(account)}.</span>{' '}
           Its DMs stay out of this Inbox. Log in to Instagram as {igName(account)} to see new replies here, or
           switch the connected account.
+        </div>
+      )}
+
+      {loadFailed && (
+        <div role="alert" className="px-4 py-3 rounded-2xl border border-white/20 bg-white/[0.06] text-meta text-neutral-300 leading-relaxed">
+          <span className="text-white font-medium">Your saved conversations couldn’t be loaded, so this Inbox is waiting for them.</span>{' '}
+          Nothing is lost. It is trying again by itself; check your connection, or reload the page if this stays.
         </div>
       )}
 

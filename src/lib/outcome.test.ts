@@ -211,7 +211,7 @@ describe('applyOutcome', () => {
     expect(after).toMatchObject({ positiveReply: true, qualifiedAt: expect.any(String), status: 'cold' });
     expect(after?.booked).toBeFalsy();
     expect(after?.bookedAt).toBeUndefined();
-    // The same event the Approval Queue's "Mark interested" fires.
+    // The same event the Approval Queue's "Mark qualified" fires.
     expect(detectTransitions(before, after!)).toEqual(['positive_reply']);
   });
 

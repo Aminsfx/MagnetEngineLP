@@ -257,7 +257,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                 ) : lead.booked ? (
                     <span className="text-meta font-medium text-positive-300">Booked</span>
                 ) : lead.replied ? (
-                    <span className="text-meta text-white">{lead.positiveReply ? 'Replied · interested' : 'Replied'}</span>
+                    <span className="text-meta text-white">{lead.positiveReply ? 'Replied · qualified' : 'Replied'}</span>
                 ) : (
                     <span className="text-meta text-neutral-400">No reply yet</span>
                 )}
@@ -317,7 +317,7 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                 {view === 'sent' && (
                     <>
                         {/* The one next mark this Lead can take, named — the
-                            funnel's order: replied, interested, booked, won. */}
+                            funnel's order: replied, qualified, booked, won. */}
                         {!lead.replied ? (
                             <button type="button"
                                 onClick={() => {
@@ -329,8 +329,8 @@ const QueueRowBase: React.FC<QueueRowProps> = ({
                             </button>
                         ) : !lead.positiveReply ? (
                             <button type="button" onClick={() => onUpdateLead({ ...lead, positiveReply: true, qualifiedAt: lead.qualifiedAt ?? new Date().toISOString() })}
-                                aria-label={`Mark ${who}'s reply as interested`} className={ROW_PRIMARY}>
-                                <ThumbsUp className="w-3.5 h-3.5" aria-hidden /> Mark interested
+                                aria-label={`Mark ${who} as qualified`} className={ROW_PRIMARY}>
+                                <ThumbsUp className="w-3.5 h-3.5" aria-hidden /> Mark qualified
                             </button>
                         ) : !lead.booked ? (
                             <button type="button" onClick={() => onUpdateLead({ ...lead, booked: true, bookedAt: lead.bookedAt ?? new Date().toISOString() })}

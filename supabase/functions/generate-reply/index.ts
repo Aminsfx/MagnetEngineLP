@@ -6,7 +6,8 @@
 //
 // Auth: like generate-dm, the Supabase gateway requires a valid user JWT (see
 // supabase/config.toml → [functions.generate-reply] verify_jwt = true), and
-// servePost re-verifies in-function.
+// servePost re-verifies in-function and requires an active plan
+// (403 subscription_inactive / 503 plan_unconfirmed, _shared/access.ts).
 //
 // POST JSON: {
 //   messages: [{ direction: 'in'|'out', text }],
@@ -173,4 +174,4 @@ servePost<Body>("generate-reply", async ({ body, user }) => {
     ...parseResult(completion.text, completion.truncated, calendarLink),
     provider: resolved.provider,
   });
-});
+}, { requireActivePlan: true });

@@ -44,6 +44,21 @@ export const confirmedByInstagram = (message: Message): boolean =>
 const echoSignature = (conversationId: string, text: string) =>
     `${conversationId}|${text.trim()}`;
 
+/**
+ * Which photo a profile-photo URL is. Instagram signs its CDN URLs afresh on
+ * every read (the query string, and often the host, change; the path is the
+ * file), so comparing whole URLs counted about 25 Conversations a poll as
+ * changed: saved again, and their Outcomes read again, every ~100 s.
+ */
+function photoOf(url: string | undefined): string {
+    if (!url) return '';
+    try {
+        return new URL(url).pathname;
+    } catch {
+        return url.split('?')[0];
+    }
+}
+
 /** Fields the poller can change. AI-set intent/status/labels are carried over. */
 function differs(a: Conversation, b: Conversation): boolean {
     return (
@@ -53,7 +68,7 @@ function differs(a: Conversation, b: Conversation): boolean {
         a.needsReply !== b.needsReply ||
         a.handle !== b.handle ||
         a.name !== b.name ||
-        a.avatarUrl !== b.avatarUrl ||
+        photoOf(a.avatarUrl) !== photoOf(b.avatarUrl) ||
         a.account !== b.account
     );
 }
@@ -78,6 +93,19 @@ function isLegacyCopy(m: RawThread['messages'][number], legacy: Message[] | unde
 }
 
 /**
+ * Whether a Conversation is unread after a merge. Only something new from
+ * them makes it unread, and only an answer, or the Operator opening it, makes
+ * it read. It used to be "the last message is theirs", worked out again on
+ * every poll, so a conversation the Operator had opened lit up again ~100 s
+ * later, and that was saved over their open.
+ */
+function unreadAfter(existing: Conversation | undefined, last: Message, newFromThem: boolean): boolean {
+    if (last.direction === 'out') return false;
+    if (!existing || newFromThem) return true;
+    return existing.unread;
+}
+
+/**
  * Merge a fresh snapshot into existing state. Pure — see `createInboxLog` for
  * the stateful wrapper that owns hydration ordering.
  *
@@ -87,8 +115,8 @@ function isLegacyCopy(m: RawThread['messages'][number], legacy: Message[] | unde
  *   signature suppresses exactly ONE echo and is then consumed, so an Operator
  *   who genuinely sends "ok" twice keeps both.
  * - Conversations preserve AI-set `intent`/`status`/`labels` (the poller only
- *   knows raw thread facts) and recompute `needsReply`/`unread` from the last
- *   Message.
+ *   knows raw thread facts) and recompute `needsReply` from the last Message.
+ *   `unread` follows new Messages, not the last one (`unreadAfter`).
  */
 export function ingestThreads(
     threads: RawThread[],
@@ -167,7 +195,7 @@ export function ingestThreads(
             account: t.account ?? existing?.account,
             lastMessageAt: last.createdAt,
             lastMessageText: last.text,
-            unread: last.direction === 'in',
+            unread: unreadAfter(existing, last, newInboundConvIds.has(t.threadId)),
             status: existing?.status ?? 'open',
             intent: existing?.intent,
             labels: existing?.labels,

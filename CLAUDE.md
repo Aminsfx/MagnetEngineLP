@@ -139,7 +139,7 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   and qualified"). Mark qualified sets `Conversation.status = 'qualified'`,
   which is only ever the Operator's click; `applyOutcome` turns it into
   `positiveReply` + `qualifiedAt`, the dashboard's Qualified and the same flag
-  as the Approval Queue's "Mark interested". What the AI reads off a thread is
+  as the Approval Queue's "Mark qualified". What the AI reads off a thread is
   shown as **Interested** (`triage.ts`) and still moves nothing: the two shared
   the label "Qualified" until then, so a row could say Qualified for someone
   the dashboard had never counted. Both marks go through `outreach.recordMark`,
@@ -158,7 +158,11 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   is the only trustworthy payment signal. Google Analytics and Mixpanel are
   gone — don't add another analytics SDK.
 - **Edge Functions** — use `servePost` from `_shared/http.ts` for JWT-gated POST
-  endpoints rather than re-copying the CORS/auth preamble. A handler that
+  endpoints rather than re-copying the CORS/auth preamble. Any function that
+  spends the Owner's money (an AI provider, HikerAPI) also passes
+  `{ requireActivePlan: true }` (`_shared/access.ts`): signed in is not paying,
+  and sign-up is open, so until 2026-11-13 any free account could call
+  generate-dm, generate-reply and scrape directly. A handler that
   throws is answered with `SERVER_ERROR` and the cause is logged: the thrown
   message used to be the response, which showed Operators "Claude API error
   529". Return `json(...)` yourself for anything an Operator should read, and

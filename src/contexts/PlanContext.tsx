@@ -10,6 +10,11 @@ interface PlanContextValue {
     status: SubscriptionStatus;
     /** True until the first subscription fetch resolves — gate routing on this */
     loading: boolean;
+    /**
+     * The last fetch could not read the subscription at all. Not 'pending':
+     * the account may well be paid, so nobody is sent to the checkout on it.
+     */
+    failed: boolean;
     /** Re-fetch the subscription (used by the "check activation" button) */
     refresh: () => Promise<SubscriptionStatus>;
     /** When the free trial ends, while the account is in one (ISO); null otherwise. */
@@ -22,6 +27,7 @@ const PlanContext = createContext<PlanContextValue>({
     limits: PLAN_LIMITS,
     status: 'pending',
     loading: true,
+    failed: false,
     refresh: async () => 'pending',
     trialEndsAt: null,
     reload: async () => ({ tier: 'starter', status: 'pending', trialEndsAt: null }),
@@ -34,6 +40,7 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [status, setStatus] = useState<SubscriptionStatus>('pending');
     const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
 
     // When the signed-in user changes, flip back to loading *during render* —
     // otherwise route guards see one frame of the previous user's (stale)
@@ -56,7 +63,19 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
             return { tier: 'starter', status: 'pending', trialEndsAt: null };
         }
-        const sub = await db.getSubscription(currentUserId);
+        let sub: Subscription;
+        try {
+            sub = await db.getSubscription(currentUserId);
+        } catch (error: unknown) {
+            // Couldn't read is not unpaid: the gate shows a retry, not the
+            // checkout. Access stays closed meanwhile (status is not touched,
+            // and starts as 'pending').
+            console.error('[plan] reading the subscription failed:', error);
+            setFailed(true);
+            setLoading(false);
+            return { tier: 'starter', status: 'pending', trialEndsAt: null };
+        }
+        setFailed(false);
         setStatus(sub.status);
         setTrialEndsAt(sub.trialEndsAt ?? null);
         setLoading(false);
@@ -72,7 +91,7 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [fetchSubscription]);
 
     return (
-        <PlanContext.Provider value={{ limits: PLAN_LIMITS, status, loading, refresh: fetchSubscription, trialEndsAt, reload }}>
+        <PlanContext.Provider value={{ limits: PLAN_LIMITS, status, loading, failed, refresh: fetchSubscription, trialEndsAt, reload }}>
             {children}
         </PlanContext.Provider>
     );

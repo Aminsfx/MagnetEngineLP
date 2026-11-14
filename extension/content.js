@@ -138,8 +138,10 @@ if (!window.location.hostname.includes("instagram.com")) {
                         alert("Campaign rejected: " + response.reason);
                         return;
                     }
+                    // No alert: the dashboard already says what it handed over,
+                    // and this one popped up over every Inbox reply, blocking the
+                    // page until it was dismissed.
                     console.log("[MagnetEngine] Background confirmed:", response);
-                    alert(`Campaign queued! ${response.count} DMs will be sent. Check the extension popup for progress.`);
                 });
             } catch (e) {
                 console.error("[MagnetEngine] Relay error:", e);

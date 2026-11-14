@@ -30,38 +30,50 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // everything else used `action`, so the listener read two different fields.
     const kind = messageKind(request);
 
-    // ── New campaign from web app ──────────────────────────────────
+    // ── DMs from the web app ───────────────────────────────────────
+    // Two kinds of handoff (see readCampaign). The Approval Queue's Send
+    // replaces the queue; a reply or a follow-up joins it. Both used to
+    // replace it, so an Inbox reply sent mid-campaign threw away every
+    // approved DM still waiting. Both are taken while a DM is being typed:
+    // that DM is left to finish, and nothing new starts on top of it. They
+    // used to be refused then, after the dashboard had already counted them
+    // handed over.
     if (kind === APP_TO_EXT.CAMPAIGN) {
-        chrome.storage.local.get(['isExecuting', 'account'], (result) => {
-            if (result.isExecuting) {
-                sendResponse({ status: 'rejected', reason: 'A campaign is already running. Pause or clear it first.' });
-                return;
-            }
-            // Payload shape + defaults live with the protocol, so the app and
-            // the extension can't disagree about what a campaign looks like.
-            const { leads, minDelay, maxDelay, dailyCap } = readCampaign(request.payload, {
-                minDelay: DEFAULT_MIN_DELAY,
-                maxDelay: DEFAULT_MAX_DELAY,
-                dailyCap: DEFAULT_DAILY_CAP,
-            });
-            chrome.storage.local.set({
-                // Whose campaign this is, so a different sign-in can't resume it.
-                campaignOwner: result.account ? result.account.userId : null,
-                campaignQueue: leads,
-                originalTotal: leads.length,
-                minDelay:      minDelay,
-                maxDelay:      maxDelay,
-                dailyCap:      dailyCap,
-                isExecuting:   false,
-                isPaused:      false,
-                failedCount:   0,
-                lastFailure:   null,
-                noButtonHeld:  [],
-            }, () => {
-                processNextLead();
-                sendResponse({ status: 'queued', count: leads.length });
-            });
-        });
+        chrome.storage.local.get(
+            ['isExecuting', 'isPaused', 'currentTask', 'campaignQueue', 'campaignOwner', 'account', 'originalTotal'],
+            (result) => {
+                // Payload shape + defaults live with the protocol, so the app and
+                // the extension can't disagree about what a campaign looks like.
+                const { leads, minDelay, maxDelay, dailyCap, mode } = readCampaign(request.payload, {
+                    minDelay: DEFAULT_MIN_DELAY,
+                    maxDelay: DEFAULT_MAX_DELAY,
+                    dailyCap: DEFAULT_DAILY_CAP,
+                });
+                const queue = result.campaignQueue || [];
+                const inFlight = result.isExecuting ? result.currentTask : null;
+                const owner = result.account ? result.account.userId : null;
+                const { patch, taken } = mode === 'add'
+                    ? joinQueue(leads, queue, inFlight, result.originalTotal)
+                    : replaceQueue(leads, queue, inFlight);
+                chrome.storage.local.set({
+                    ...patch,
+                    // Whose campaign this is, so a different sign-in can't resume it.
+                    campaignOwner: mode === 'add' && queue.length > 0 ? (result.campaignOwner ?? owner) : owner,
+                    minDelay,
+                    maxDelay,
+                    dailyCap,
+                }, () => {
+                    sendResponse({ status: 'queued', count: taken });
+                    // A send in flight, or a pause, settles what happens next by
+                    // itself. Otherwise go now, unless a paced wait between two
+                    // sends is already running: that wait is the next send.
+                    chrome.storage.local.get(['isExecuting', 'isPaused'], (now) => {
+                        if (now.isExecuting || now.isPaused) return;
+                        chrome.alarms.get('dripEngine', (alarm) => { if (!alarm) processNextLead(); });
+                    });
+                });
+            },
+        );
         return true;
     }
 
@@ -241,6 +253,64 @@ function clearCampaign() {
         lastFailure:   null,
         noButtonHeld:  [],
     }, closeSenderTab);
+}
+
+// ── What a handoff does to the queue ──────────────────────────────
+// The same DM (same person, same words) is never queued twice, nor queued
+// beside the one being typed: a double click on Send in the Inbox, or the
+// Approval Queue handing over a DM that is in flight and not yet confirmed
+// Sent, would otherwise send it again.
+function sameDm(a, b) {
+    const handle = (l) => String(l && l.handle || '').toLowerCase().replace(/^@/, '');
+    return !!a && !!b && handle(a) === handle(b) && String(a.message) === String(b.message);
+}
+
+function newDms(leads, already) {
+    const taken = [];
+    for (const lead of leads) {
+        if (!lead || !lead.handle) continue;
+        if (already.some((q) => sameDm(q, lead)) || taken.some((q) => sameDm(q, lead))) continue;
+        taken.push(lead);
+    }
+    return taken;
+}
+
+// A reply or a follow-up: in at the front, because a person is waiting on
+// it, and nothing else changes. A campaign's progress, its pause and its
+// last failure are the campaign's, and joining it touches none of them.
+function joinQueue(leads, queue, inFlight, originalTotal) {
+    const fresh = newDms(leads, inFlight ? [...queue, inFlight] : queue)
+        .map((lead) => ({ ...lead, added: true }));
+    const idle = queue.length === 0 && !inFlight;
+    return {
+        taken: fresh.length,
+        patch: {
+            campaignQueue: [...fresh, ...queue],
+            originalTotal: idle ? fresh.length : (Number(originalTotal) || queue.length + 1) + fresh.length,
+            ...(idle ? { failedCount: 0, lastFailure: null, noButtonHeld: [] } : {}),
+        },
+    };
+}
+
+// The Approval Queue's Send: every approved DM, so the queue becomes these,
+// after any reply or follow-up still waiting in it. Send is also how a paused
+// campaign is started again. A DM being typed is left to finish.
+function replaceQueue(leads, queue, inFlight) {
+    const kept = queue.filter((q) => q.added);
+    const fresh = newDms(leads, inFlight ? [...kept, inFlight] : kept);
+    const campaignQueue = [...kept, ...fresh];
+    return {
+        taken: fresh.length,
+        patch: {
+            campaignQueue,
+            originalTotal: campaignQueue.length + (inFlight ? 1 : 0),
+            isPaused:      false,
+            failedCount:   0,
+            lastFailure:   null,
+            noButtonHeld:  [],
+            ...(inFlight ? {} : { isExecuting: false, currentTask: null }),
+        },
+    };
 }
 
 // ── A send finished (or gave up) ──────────────────────────────────

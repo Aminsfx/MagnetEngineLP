@@ -597,6 +597,9 @@ describe('sendFollowUps', () => {
     expect(sendCampaign).toHaveBeenCalledWith(expect.objectContaining({
       leads: [{ handle: 'founder_one', message: 'still keen?' }],
       dailyCap: 40,
+      // Joins the extension's queue. Handed over as a replace, follow-ups threw
+      // away every approved DM still waiting in it.
+      mode: 'add',
     }));
     expect(saved[0][0].followedUp).toBe(true);
   });
@@ -895,6 +898,81 @@ describe('generateDMs, a whole batch', () => {
     const skipped = result.current.leads.find((l) => l.id === 'b')!;
     expect(skipped.rejected).toBe(true);
     expect(skipped.dmContent).toBeUndefined();
+  });
+});
+
+// The regression: the store's writes logged an error and resolved as if they
+// had saved. An approval, an edited DM or a skip stayed on screen, the Operator
+// moved on, and it was gone at the next reload with nothing ever having said so.
+describe('a save that fails', () => {
+  function failingSetup() {
+    const { store } = fakeStore();
+    let writes = 0;
+    store.saveLeads = async () => { writes += 1; throw new Error('[db] upsertLeads: Failed to fetch'); };
+    store.removeLeads = async () => { throw new Error('[db] deleteLeads: Failed to fetch'); };
+    const view = renderHook(() => useOutreach({ store, config, limits: PLAN_LIMITS, toast }));
+    return { ...view, writes: () => writes };
+  }
+
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+
+  it('says the change was not saved', async () => {
+    const { result } = failingSetup();
+    act(() => result.current.hydrate([lead('a')], 0));
+
+    await act(() => result.current.approve('a'));
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn.t be saved/i));
+  });
+
+  it('says it once for a burst of failures, not once per click', async () => {
+    const { result } = failingSetup();
+    act(() => result.current.hydrate([lead('a'), lead('b'), lead('c')], 0));
+
+    await act(() => result.current.approve('a'));
+    await act(() => result.current.reject('b'));
+    await act(() => result.current.updateDM('c', 'hello'));
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a delete that did not happen', async () => {
+    const { result } = failingSetup();
+    act(() => result.current.hydrate([lead('a')], 0));
+
+    await act(() => result.current.removeMany(['a']));
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn.t be saved/i));
+  });
+
+  it('says so for a send the extension confirmed', async () => {
+    const { result } = failingSetup();
+    act(() => result.current.hydrate([lead('a')], 0));
+
+    act(() => result.current.markSent([{ handle: 'a' }]));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn.t be saved/i)));
+  });
+
+  // Every DM is paid for when it is written. Writing on while none of them can
+  // be kept spends the Operator's allowance on DMs a reload throws away.
+  it('stops writing DMs once one cannot be kept, and ends the run', async () => {
+    vi.mocked(aiAPI.generateDM).mockResolvedValue({ dm: 'hi', used: 1, limit: 500 });
+    const { result, writes } = failingSetup();
+    const leads = Array.from({ length: 5 }, (_, i) => lead(`l${i}`));
+    act(() => result.current.hydrate(leads, 0));
+
+    await act(() => result.current.generateDMs(leads, { all: true }));
+
+    expect(aiAPI.generateDM).toHaveBeenCalledTimes(1);
+    expect(writes()).toBe(1);
+    expect(result.current.isGenerating).toBe(false);
+    expect(result.current.generation).toBeNull();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn.t be saved/i));
   });
 });
 

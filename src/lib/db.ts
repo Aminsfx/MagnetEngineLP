@@ -118,14 +118,58 @@ function isSupabaseReady(): boolean {
  * the write falls back to the old key rather than failing outright.
  */
 async function upsertInboxRows(table: 'conversations' | 'messages', rows: Record<string, unknown>[]): Promise<void> {
+  const failures: string[] = [];
   for (let i = 0; i < rows.length; i += 200) {
     const batch = rows.slice(i, i + 200);
     let { error } = await supabase.from(table).upsert(batch, { onConflict: 'user_id,id' });
     if (error?.code === '42P10') {
       ({ error } = await supabase.from(table).upsert(batch, { onConflict: 'id' }));
     }
-    if (error) console.error(`[db] upsert ${table} error:`, error.message);
+    if (error) failures.push(error.message);
   }
+  if (failures.length > 0) throw writeFailed(`upsert ${table}`, failures);
+}
+
+/**
+ * A write the API refused, or that never reached it.
+ *
+ * Writes used to log the error and resolve as if they had saved, so no caller
+ * could tell: an approval, an edited DM, a setting or a skip stayed on screen
+ * and was gone at the next reload, with nothing ever having said so. A batched
+ * write still tries every batch, so one refused batch costs only its own rows,
+ * then throws for all of them.
+ */
+function writeFailed(what: string, messages: string[]): Error {
+  const unique = [...new Set(messages)];
+  console.error(`[db] ${what} error:`, unique.join('; '));
+  return new Error(`[db] ${what}: ${unique.join('; ')}`);
+}
+
+/**
+ * A read the API refused, or that never reached it.
+ *
+ * Reads used to answer an error with "nothing there": `[]` for Leads and the
+ * inbox, `null` for the config. Nothing downstream can tell that from a
+ * workspace that really is empty, and acting on the difference loses data: the
+ * dashboard opened on the default config and the first setting touched saved
+ * it over the Operator's own, and an inbox hydrated empty re-created every
+ * Conversation without its Qualified or Booked mark. So a failed read throws,
+ * and the caller shows that it failed and offers to try again.
+ */
+function readFailed(what: string, error: { message: string }): Error {
+  console.error(`[db] ${what} error:`, error.message);
+  return new Error(`[db] ${what}: ${error.message}`);
+}
+
+/**
+ * Whether a follow-up sequence has a row of its own yet. The Follow-ups page
+ * seeds an Operator's first ladders as `new-no_reply` and `new-rescue`, and
+ * this used to know only `new`: the made-up id went to a uuid column, Postgres
+ * refused it, and no Operator's first Save ever stored. A stored id is a uuid,
+ * whose hex never starts with `n`.
+ */
+function isStoredSequence(id: string | undefined): id is string {
+  return !!id && !id.startsWith('new');
 }
 
 /** Rows asked for per request. The API's own ceiling may be lower; `readAll` copes. */
@@ -181,10 +225,7 @@ export const db = {
         .order('id', { ascending: true })
         .range(from, to));
 
-    if (error) {
-      console.error('[db] getLeads error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getLeads', error);
 
     // Leads from before intake stamped `createdAt` still have the row's own
     // insert time, which is the same moment.
@@ -201,13 +242,15 @@ export const db = {
     const rows = leads.map((l) => ({ id: l.id, user_id: userId, data: l }));
 
     // Supabase upsert in batches of 200 to avoid request size limits
+    const failures: string[] = [];
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await supabase
         .from('leads')
         .upsert(batch, { onConflict: 'id' });
-      if (error) console.error('[db] upsertLeads batch error:', error.message);
+      if (error) failures.push(error.message);
     }
+    if (failures.length > 0) throw writeFailed('upsertLeads', failures);
   },
 
 
@@ -220,7 +263,7 @@ export const db = {
       .delete()
       .in('id', ids);
 
-    if (error) console.error('[db] deleteLeads error:', error.message);
+    if (error) throw writeFailed('deleteLeads', [error.message]);
   },
 
   // ─── Config ───────────────────────────────────────────────────────────────
@@ -234,10 +277,8 @@ export const db = {
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (error) {
-      console.error('[db] getConfig error:', error.message);
-      return null;
-    }
+    // No row is a new Operator (null). An error is not: see `readFailed`.
+    if (error) throw readFailed('getConfig', error);
 
     return data ? (data.data as AppConfig) : null;
   },
@@ -249,7 +290,7 @@ export const db = {
       .from('configs')
       .upsert({ user_id: userId, data: config, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
-    if (error) console.error('[db] setConfig error:', error.message);
+    if (error) throw writeFailed('setConfig', [error.message]);
   },
 
   // ─── Follow-up Sequences ──────────────────────────────────────────────────
@@ -263,10 +304,9 @@ export const db = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[db] getSequences error:', error.message);
-      return [];
-    }
+    // Read as "no sequences", the page would seed fresh ladders over the
+    // Operator's own, and a Save would store a second ladder beside it.
+    if (error) throw readFailed('getSequences', error);
 
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -284,7 +324,8 @@ export const db = {
       campaign_id: seq.campaignId ?? null,
       steps: seq.steps,
       active: seq.active,
-      ...(seq.id && seq.id !== 'new' ? { id: seq.id } : {}),
+      // A ladder the page made up has no row yet: the database names it.
+      ...(isStoredSequence(seq.id) ? { id: seq.id } : {}),
     };
 
     const { data, error } = await supabase
@@ -332,10 +373,7 @@ export const db = {
         .order('id', { ascending: true })
         .range(from, to));
 
-    if (error) {
-      console.error('[db] getConversations error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getConversations', error);
 
     return data.map((r) => ({
       id: r.id,
@@ -388,10 +426,7 @@ export const db = {
       if (conversationId) q = q.eq('conversation_id', conversationId);
       return q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to);
     });
-    if (error) {
-      console.error('[db] getMessages error:', error.message);
-      return [];
-    }
+    if (error) throw readFailed('getMessages', error);
 
     return data.map((r) => ({
       id: r.id,
@@ -459,12 +494,11 @@ export const db = {
         .maybeSingle());
     }
 
-    if (error) {
-      console.error('[db] getSubscription error:', error.message);
-      // Fail closed: unknown state = not activated (prevents free access when
-      // the table is missing or the query is blocked)
-      return { tier: 'starter', status: 'pending' };
-    }
+    // Still closed: a read that failed is not access. But it is not "never
+    // paid" either. Answered as 'pending', a dropped connection sent a paying
+    // Operator to /activate, the checkout, and asked them to pay again; the
+    // caller now says it could not check and offers to try again.
+    if (error) throw readFailed('getSubscription', error);
 
     if (!data) return { tier: 'starter', status: 'pending' };
 

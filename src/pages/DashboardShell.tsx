@@ -20,6 +20,8 @@ import { TRIAL_UPGRADE_PATH } from '../lib/trial';
 import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
+import { untilLoaded } from '../lib/retry';
+import { saveFailedNotice } from '../lib/saveFailed';
 import { readOutcome } from '../lib/outcome';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
@@ -116,10 +118,20 @@ const DashboardShell: React.FC = () => {
   // interface with two ports (the store, and the extension protocol). This used
   // to be seventeen callbacks and six mirror refs inlined here.
   const outreach = useOutreach({ store, config, limits, toast, onTrialLimit: toTrialUpgrade });
+  // The settings and the inbox are saved here rather than by the engine, and
+  // a failed save is said the same way, once per burst.
+  const sayError = toast.error;
+  const saveFailed = useMemo(() => saveFailedNotice(sayError), [sayError]);
   // What the Campaign Builder files a named search into.
   const campaigns = useMemo(() => campaignsOf(outreach.leads), [outreach.leads]);
 
   const [dataLoading, setDataLoading] = useState(true);
+  // The workspace could not be loaded. Shown instead of the dashboard, with a
+  // way to try again; `loadAttempt` re-runs the load.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  // The saved Conversations could not be loaded (yet): the Inbox says so.
+  const [inboxLoadFailed, setInboxLoadFailed] = useState(false);
   // Real per-day sent count reported by the extension (source of truth for what
   // actually went out), vs the app's optimistic handoff count.
   const [extStats, setExtStats] = useState<{ count: number; cap: number } | null>(null);
@@ -165,8 +177,8 @@ const DashboardShell: React.FC = () => {
   const persistInbox = useCallback((rows: Conversation[], msgs: Message[]) => {
     store.saveConversations(rows)
       .then(() => store.saveMessages(msgs))
-      .catch(console.error);
-  }, [store]);
+      .catch((error: unknown) => saveFailed('saving the inbox', error));
+  }, [store, saveFailed]);
 
   // Load data from Supabase (or localStorage fallback) on mount.
   // Keyed on the user ID (not the user object) so token refreshes on tab
@@ -174,6 +186,7 @@ const DashboardShell: React.FC = () => {
   const userId = user?.id;
   useEffect(() => {
     if (!userId) return;
+    let cancelled = false;
 
     // Only what the dashboard needs to paint. The inbox (conversations +
     // every message ever synced) used to be awaited here too, so first paint
@@ -183,6 +196,7 @@ const DashboardShell: React.FC = () => {
       store.loadConfig(),
       db.getDMUsage(userId),
     ]).then(([savedLeads, savedConfig, dmUsage]) => {
+      if (cancelled) return;
       // Campaigns typed with the same name before names joined campaigns are
       // one campaign now. Only the Leads that moved are saved, and once they
       // have been, this finds nothing to do.
@@ -202,30 +216,48 @@ const DashboardShell: React.FC = () => {
       setConfig(migrated);
       if (migrated !== loaded) store.saveConfig(migrated).catch(console.error);
       setDataLoading(false);
+    }).catch((error: unknown) => {
+      // A load that failed is not an empty workspace. The dashboard used to
+      // have no answer here at all: a store that returned nothing on an error
+      // opened it on the default config, and the first setting touched saved
+      // those defaults over the Operator's own. It now stops and says so.
+      if (cancelled) return;
+      console.error('[dashboard] loading the workspace failed:', error);
+      setLoadFailed(true);
     });
+
+    return () => { cancelled = true; };
     // `outreach` is intentionally not a dependency: hydrate is stable and
     // re-running the cold load on every engine render would defeat the point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, store]);
+  }, [userId, store, loadAttempt]);
 
   // Inbox history loads behind first paint. Snapshots arriving before it lands
   // are parked by the log rather than merged — echo suppression compares against
   // the Messages already known, so merging into a half-loaded inbox would
-  // duplicate every optimistic send.
+  // duplicate every optimistic send. A load that fails is tried again until it
+  // lands, and the Inbox says so meanwhile: hydrating from nothing instead
+  // would re-create every Conversation without its marks.
   useEffect(() => {
     if (!userId) return;
-    let cancelled = false;
 
-    store.loadInbox().then((history) => {
-      if (cancelled) return;
-      const replayed = inbox.hydrate(history);
-      setConversations(replayed?.conversations ?? history.conversations);
-      setMessages(replayed?.messages ?? history.messages);
-      if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
-    });
+    const stop = untilLoaded(
+      () => store.loadInbox(),
+      (history) => {
+        setInboxLoadFailed(false);
+        const replayed = inbox.hydrate(history);
+        setConversations(replayed?.conversations ?? history.conversations);
+        setMessages(replayed?.messages ?? history.messages);
+        if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
+      },
+      (error) => {
+        console.error('[inbox] loading saved conversations failed, trying again:', error);
+        setInboxLoadFailed(true);
+      },
+    );
 
     return () => {
-      cancelled = true;
+      stop();
       inbox.reset();
     };
   }, [userId, store, inbox, persistInbox]);
@@ -354,10 +386,16 @@ const DashboardShell: React.FC = () => {
   }, [dataLoading, sendCap, extStatus.state]);
 
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
+  // Settings save as the Operator types, from callers that never await, so a
+  // failure is caught and said here rather than left to reject unheard.
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
     setConfig(newConfig);
-    await store.saveConfig(newConfig);
-  }, [store]);
+    try {
+      await store.saveConfig(newConfig);
+    } catch (error: unknown) {
+      saveFailed('saving settings', error);
+    }
+  }, [store, saveFailed]);
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
 
@@ -385,9 +423,9 @@ const DashboardShell: React.FC = () => {
   const handleUpdateConversation = useCallback((conv: Conversation) => {
     const next = inbox.recordConversation(conv);
     setConversations(next.conversations);
-    store.saveConversations([conv]).catch(console.error);
+    store.saveConversations([conv]).catch((error: unknown) => saveFailed('saving a conversation', error));
     outreach.recordOutcomes([readOutcome(conv, next.messages)]);
-  }, [outreach, store, inbox]);
+  }, [outreach, store, inbox, saveFailed]);
 
   /** The Operator's own mark on the person in a Conversation: Qualified, Booked.
    *  It reaches the dashboard even for someone no campaign found, who becomes
@@ -396,14 +434,14 @@ const DashboardShell: React.FC = () => {
   const handleMarkConversation = useCallback((conv: Conversation) => {
     const next = inbox.recordConversation(conv);
     setConversations(next.conversations);
-    store.saveConversations([conv]).catch(console.error);
+    store.saveConversations([conv]).catch((error: unknown) => saveFailed('saving a conversation', error));
     outreach
       .recordMark(
         { handle: conv.handle, name: conv.name, avatarUrl: conv.avatarUrl },
         readOutcome(conv, next.messages),
       )
       .catch(console.error);
-  }, [outreach, store, inbox]);
+  }, [outreach, store, inbox, saveFailed]);
 
   /** The deal with the person in a Conversation. Carries what the thread
    *  already shows, in case they become a Lead only now. */
@@ -468,6 +506,8 @@ const DashboardShell: React.FC = () => {
       minDelay: delay.min,
       maxDelay: delay.max,
       dailyCap: sendCapOf(configRef.current),
+      // Joins the queue: a reply must never replace the approved DMs waiting in it.
+      mode: 'add',
     });
     if (!handoff.delivered) {
       toast.error(handoff.reason!);
@@ -509,6 +549,27 @@ const DashboardShell: React.FC = () => {
     await signOut();
     navigate('/login');
   }, [signOut, navigate]);
+
+  if (loadFailed) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center px-6">
+        <div className="max-w-sm text-center" role="alert">
+          <h1 className="text-xl font-semibold text-white tracking-tight">We couldn't load your workspace</h1>
+          <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+            Nothing has been lost. Your leads and settings are saved, and this page couldn't reach them.
+            Check your connection, then try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setLoadFailed(false); setLoadAttempt((n) => n + 1); }}
+            className="mt-5 inline-flex items-center px-4 py-2 rounded-full bg-white text-surface text-sm font-semibold hover:bg-neutral-200 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (dataLoading) {
     return (
@@ -614,6 +675,7 @@ const DashboardShell: React.FC = () => {
           config={config}
           detected={igViewer}
           syncedAt={igSyncedAt}
+          loadFailed={inboxLoadFailed}
           onDisconnectInstagram={handleDisconnectInstagram}
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}

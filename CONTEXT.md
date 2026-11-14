@@ -165,8 +165,9 @@ operator to approve each reply.
 **Qualified**:
 The Operator decided this person is worth a call, and no call is booked yet:
 the stage between a Reply and Booked. Always the Operator's own mark, made with
-"Mark qualified" in the Inbox or "Mark interested" on a Sent Lead in the
-Approval Queue (one flag, `positiveReply`, dated by `qualifiedAt`). A Booked
+"Mark qualified" in the Inbox or on a Sent Lead in the Approval Queue, or the
+"They're interested" reply card there (one flag, `positiveReply`, dated by
+`qualifiedAt`). A Booked
 Lead is also Qualified, as it is also Sent. In the Inbox the mark makes a Lead
 of someone no campaign found, so it always counts.
 _Avoid_: interested (below), hot, warm (labels, which count nowhere)

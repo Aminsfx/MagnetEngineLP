@@ -119,7 +119,16 @@ function describeExtension() {
   };
 }
 
-/** Normalize a campaign payload, applying the extension's own defaults. */
+/**
+ * Normalize a campaign payload, applying the extension's own defaults.
+ *
+ * `mode` says what the DMs do to the queue. 'replace' (the default, and all a
+ * payload without `mode` can mean) is the Approval Queue's Send: every
+ * approved DM, so the queue becomes these. 'add' is anything else that goes
+ * out the same way, an Inbox reply, an autopilot reply, a follow-up: they
+ * join the queue and replace nothing. A build that predates `mode` reads every
+ * payload as 'replace', as it always has.
+ */
 function readCampaign(payload, defaults) {
   const minDelay = Number(payload?.minDelay) || defaults.minDelay;
   const maxDelay = Math.max(minDelay, Number(payload?.maxDelay) || defaults.maxDelay);
@@ -128,6 +137,7 @@ function readCampaign(payload, defaults) {
     minDelay,
     maxDelay,
     dailyCap: Number(payload?.dailyCap) || defaults.dailyCap,
+    mode: payload?.mode === 'add' ? 'add' : 'replace',
   };
 }
 

@@ -84,6 +84,15 @@ export interface CampaignPayload {
   minDelay: number;
   maxDelay: number;
   dailyCap: number;
+  /**
+   * What these DMs do to the extension's queue. Leave it out (or 'replace')
+   * only for the Approval Queue's Send, which hands over every approved DM.
+   * Anything else that goes out this way, an Inbox reply, an autopilot reply,
+   * a follow-up, is 'add': it joins the queue. Sent as 'replace', a reply
+   * mid-campaign threw away every approved DM still waiting. A build older
+   * than 1.10.1 ignores the field and replaces, as it always did.
+   */
+  mode?: 'replace' | 'add';
 }
 
 /**
