@@ -66,8 +66,14 @@ export interface Lead {
 
 /** What the tests drive: the dashboard page, and what Instagram and the extension saw. */
 export interface Harness {
-  /** Hand a campaign to the extension, the way the dashboard does. */
-  handOff(leads: Lead[]): Promise<void>;
+  /**
+   * Hand DMs to the extension, the way the dashboard does: the Approval
+   * Queue's Send by default, or `{ mode: 'add' }` for an Inbox reply or a
+   * follow-up, which joins the queue.
+   */
+  handOff(leads: Lead[], options?: { mode?: 'add' }): Promise<void>;
+  /** Every alert/confirm the extension raised on the dashboard page. */
+  dialogs: string[];
   /** Messages the extension has posted back to the dashboard, of one type. */
   received(type: string): Promise<Array<Record<string, unknown>>>;
   /** Every message Instagram accepted, in order. */
@@ -155,9 +161,13 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
     });
 
     const dashboard: Page = await context.newPage();
-    // The content script answers a queued campaign with alert(); nobody is
-    // there to press OK.
-    dashboard.on('dialog', (dialog) => void dialog.dismiss());
+    // Recorded and dismissed: nobody is there to press OK, and a test can say
+    // that none should have appeared.
+    const dialogs: string[] = [];
+    dashboard.on('dialog', (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
     await dashboard.goto(DASHBOARD);
     await dashboard.evaluate(() => {
       const w = window as unknown as { __fromExtension: unknown[] };
@@ -176,15 +186,16 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
     await use({
       sent,
       opened,
-      async handOff(leads) {
+      dialogs,
+      async handOff(leads, options = {}) {
         await dashboard.evaluate(
-          ({ type, leads }) =>
+          ({ type, leads, mode }) =>
             window.postMessage(
               // Minutes. Small enough that a test does not wait out a human's pacing.
-              { type, payload: { leads, minDelay: 0.01, maxDelay: 0.02, dailyCap: 40 } },
+              { type, payload: { leads, minDelay: 0.01, maxDelay: 0.02, dailyCap: 40, ...(mode ? { mode } : {}) } },
               '*',
             ),
-          { type: PROTOCOL.APP_TO_EXT.CAMPAIGN, leads },
+          { type: PROTOCOL.APP_TO_EXT.CAMPAIGN, leads, mode: options.mode },
         );
       },
       received(type) {

@@ -646,6 +646,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       minDelay: delay.min,
       maxDelay: delay.max,
       dailyCap: sendCapOf({ dailySendCap: config.dailySendCap }),
+      // Joins the queue: follow-ups must never replace the approved DMs waiting in it.
+      mode: 'add',
     });
     // Stamping a step the extension never received would burn it: the Lead
     // reads as followed up, and the touch is never retried. Leave them due.

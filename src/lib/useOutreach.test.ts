@@ -597,6 +597,9 @@ describe('sendFollowUps', () => {
     expect(sendCampaign).toHaveBeenCalledWith(expect.objectContaining({
       leads: [{ handle: 'founder_one', message: 'still keen?' }],
       dailyCap: 40,
+      // Joins the extension's queue. Handed over as a replace, follow-ups threw
+      // away every approved DM still waiting in it.
+      mode: 'add',
     }));
     expect(saved[0][0].followedUp).toBe(true);
   });

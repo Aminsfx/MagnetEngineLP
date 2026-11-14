@@ -32,6 +32,31 @@ test('sends a DM and tells the dashboard it went', async ({ harness }) => {
   expect(state.lastFailure ?? null).toBeNull();
 });
 
+// Every handoff used to replace the queue. An Inbox reply sent while a
+// campaign was running threw away every approved DM still waiting, and an
+// alert() popped up over the dashboard for every reply.
+test('a reply handed over mid-campaign joins the queue, and every DM still goes out', async ({ harness }) => {
+  const reply = 'Tuesday at 3 works, talk then.';
+  await harness.handOff([
+    { handle: 'maya.builds', message: dm },
+    { handle: 'theo.makes', message: dm },
+  ]);
+  await expect.poll(() => harness.received(SENT), { timeout: 60_000 }).toHaveLength(1);
+
+  // The first DM has gone; the second is waiting out its pause. Handed over
+  // as a replace, the reply would leave theo.makes unsent for good.
+  await harness.handOff([{ handle: 'sam.replies', message: reply }], { mode: 'add' });
+
+  await expect.poll(() => harness.received(SENT), { timeout: 150_000 }).toHaveLength(3);
+  // The reply goes ahead of the campaign: a person is waiting on it.
+  expect(harness.sent.map((m) => [m.handle, m.text])).toEqual([
+    ['maya.builds', dm],
+    ['sam.replies', reply],
+    ['theo.makes', dm],
+  ]);
+  expect(harness.dialogs).toEqual([]);
+});
+
 test('sends on an Instagram that stays in French', async ({ harness }) => {
   // The button reads "Envoyer un message" and Send reads "Envoyer".
   await harness.handOff([{ handle: 'fr.studio.lyon', message: dm }]);

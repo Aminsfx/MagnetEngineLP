@@ -506,6 +506,8 @@ const DashboardShell: React.FC = () => {
       minDelay: delay.min,
       maxDelay: delay.max,
       dailyCap: sendCapOf(configRef.current),
+      // Joins the queue: a reply must never replace the approved DMs waiting in it.
+      mode: 'add',
     });
     if (!handoff.delivered) {
       toast.error(handoff.reason!);
