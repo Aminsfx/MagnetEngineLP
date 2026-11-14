@@ -75,13 +75,22 @@ describe('inbox upserts', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
-  it('does not retry on any other error', async () => {
+  it('does not retry on any other error, and says the write failed', async () => {
     upsert.mockResolvedValueOnce({ error: { code: '42501', message: 'row-level security' } });
 
-    await db.upsertMessages([message('m1', 't1')], 'user-a');
+    await expect(db.upsertMessages([message('m1', 't1')], 'user-a')).rejects.toThrow(/row-level security/);
 
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('still writes the other batches when one fails, then says so', async () => {
+    const rows = Array.from({ length: 450 }, (_, i) => conversation(`t${i}`));
+    upsert.mockResolvedValueOnce({ error: { code: '57014', message: 'statement timeout' } });
+
+    await expect(db.upsertConversations(rows, 'user-a')).rejects.toThrow(/statement timeout/);
+
+    expect(upsert.mock.calls.map(([batch]) => batch.length)).toEqual([200, 200, 50]);
   });
 
   it('writes in batches of 200', async () => {
@@ -216,5 +225,52 @@ describe('a read that fails', () => {
 
     await expect(db.getConversations('user-a')).rejects.toThrow(/Failed to fetch/);
     await expect(db.getMessages('user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+});
+
+// The regression: every write answered an error with a console line and
+// resolved as if it had saved. An approval, an edited DM, a setting or a
+// skip stayed on screen, so nothing told the Operator it was gone until they
+// reloaded and the queue was back the way it was.
+describe('a write that fails', () => {
+  const lead = (id: string) => ({ id, campaignId: 'c1', handle: id, name: id, isPrivate: false, status: 'cold', dmSent: false, replied: false }) as never;
+
+  beforeEach(() => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co');
+    upsert.mockReset().mockResolvedValue({ error: null });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    from.mockImplementation(() => ({ upsert }));
+  });
+
+  it('rejects a Lead save, after trying every batch', async () => {
+    upsert
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'Failed to fetch' } });
+
+    const leads = Array.from({ length: 450 }, (_, i) => lead(`l${i}`));
+    await expect(db.upsertLeads(leads, 'user-a')).rejects.toThrow(/upsertLeads: Failed to fetch/);
+    expect(upsert).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects a config save', async () => {
+    upsert.mockResolvedValueOnce({ error: { message: 'JWT expired' } });
+
+    await expect(db.setConfig({} as never, 'user-a')).rejects.toThrow(/setConfig: JWT expired/);
+  });
+
+  it('rejects a delete', async () => {
+    const chain = { delete: () => chain, in: () => Promise.resolve({ error: { message: 'Failed to fetch' } }) };
+    from.mockImplementation(() => chain as never);
+
+    await expect(db.deleteLeads(['l1'])).rejects.toThrow(/deleteLeads: Failed to fetch/);
+  });
+
+  it('resolves when everything saved', async () => {
+    await expect(db.upsertLeads([lead('l1')], 'user-a')).resolves.toBeUndefined();
+    await expect(db.setConfig({} as never, 'user-a')).resolves.toBeUndefined();
   });
 });

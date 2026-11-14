@@ -15,6 +15,7 @@ import { detectTransitions, fireWebhook, type WebhookEvent } from './webhooks';
 import { sendCampaign, type SendReceipt } from './extensionProtocol';
 import { storage } from './storage';
 import { posthogCapture, posthogLogs } from './posthog';
+import { saveFailedNotice } from './saveFailed';
 import { NO_FIT_REASON } from '../../supabase/functions/_shared/dm.ts';
 
 /**
@@ -202,6 +203,27 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
   const metered = store.kind === 'supabase';
 
   /**
+   * Run a write to the store, and say so when it fails. Never rejects: every
+   * caller is a click that has already changed the screen, and the Operator
+   * is told once per burst (a dropped connection fails every write after it)
+   * rather than once per click. Answers whether the write landed.
+   */
+  // Keyed on the `error` callback, which is stable, not on `toast`: the
+  // provider hands out a new object on every render, and a notice rebuilt
+  // after each toast would forget it had just said this.
+  const sayError = toast.error;
+  const saveFailed = useMemo(() => saveFailedNotice(sayError), [sayError]);
+  const persist = useCallback(async (write: () => Promise<void>): Promise<boolean> => {
+    try {
+      await write();
+      return true;
+    } catch (error: unknown) {
+      saveFailed('saving Leads', error);
+      return false;
+    }
+  }, [saveFailed]);
+
+  /**
    * Apply a change to one Lead and persist it.
    *
    * The change is computed from the current Leads BEFORE calling setLeads, not
@@ -221,8 +243,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     if (!current) return;
     const updated = change(current);
     setLeads((prev) => prev.map((l) => (l.id === id ? updated : l)));
-    await store.saveLeads([updated]);
-  }, [store]);
+    await persist(() => store.saveLeads([updated]));
+  }, [store, persist]);
 
   const hydrate = useCallback((saved: Lead[], used: number) => {
     setLeads(saved);
@@ -279,7 +301,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
 
     const added = toAdd;
     setLeads((prev) => [...prev, ...added]);
-    await store.saveLeads(added);
+    // Leads that were never saved are not this month's Leads either.
+    if (!(await persist(() => store.saveLeads(added)))) return;
     posthogLogs.info('campaign_leads_added', {
       event: 'campaign_leads_added',
       added_count: added.length,
@@ -302,7 +325,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       if (quotaCapped > 0) parts.push(`${quotaCapped} over your ${limits.maxLeadsPerMonth}/month limit`);
       toast.info(`${parts[0]} · skipped ${parts.slice(1).join(' + ')}.`);
     }
-  }, [metered, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store]);
+  }, [metered, limits.maxCampaignsPerMonth, limits.maxLeadsPerMonth, toast, store, persist]);
 
   const searchAllowance = useCallback(async (): Promise<SearchAllowance> => {
     const known = new Set(leadsRef.current.map((l) => l.handle));
@@ -342,8 +365,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     const updated = leadsRef.current.filter((l) => wanted.has(l.id)).map(change);
     const byId = new Map(updated.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-    if (updated.length > 0) await store.saveLeads(updated);
-  }, [store]);
+    if (updated.length > 0) await persist(() => store.saveLeads(updated));
+  }, [store, persist]);
 
   /**
    * Bulk approve. Silent: the caller confirms and offers the undo, because
@@ -398,21 +421,21 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
         fireWebhook(config, event, updated);
       }
     }
-    await store.saveLeads([updated]);
-  }, [config, store]);
+    await persist(() => store.saveLeads([updated]));
+  }, [config, store, persist]);
 
   const remove = useCallback(async (id: string) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
-    await store.removeLeads([id]);
-  }, [store]);
+    await persist(() => store.removeLeads([id]));
+  }, [store, persist]);
 
   const removeMany = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
     const wanted = new Set(ids);
     setLeads((prev) => prev.filter((l) => !wanted.has(l.id)));
-    await store.removeLeads(ids);
+    if (!(await persist(() => store.removeLeads(ids)))) return;
     toast.success(`${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted from the queue`);
-  }, [toast, store]);
+  }, [toast, store, persist]);
 
   const generateDMs = useCallback(async (target?: Lead[], options: { all?: boolean } = {}) => {
     const remaining = limits.maxDMGenerations - dmUsed;
@@ -451,9 +474,19 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
      * Results used to wait for a batch of ten, so a run cut off or a tab closed
      * mid-batch lost up to nine DMs that had already been paid for.
      */
-    const keep = async (next: Lead) => {
+    const keep = async (next: Lead): Promise<boolean> => {
       setLeads((prev) => prev.map((l) => (l.id === next.id ? next : l)));
-      await store.saveLeads([next]);
+      try {
+        await store.saveLeads([next]);
+        return true;
+      } catch (error: unknown) {
+        // Every DM is paid for when it is written. Writing on while none of
+        // them can be kept spends the allowance on DMs a reload throws away,
+        // so this stops the run like any failure that is not about one Lead.
+        console.error(`Saving the DM for ${next.handle} failed:`, error);
+        failure = "the last DM couldn't be saved, so it will be gone when you reload. Check your connection, then write DMs again";
+        return false;
+      }
     };
 
     for (const lead of run) {
@@ -513,15 +546,13 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
       const current = leadsRef.current.find((l) => l.id === lead.id);
       if (text) {
         if (current) {
-          await keep({ ...current, dmContent: text, dmDate });
-          landedCount += 1;
+          if (await keep({ ...current, dmContent: text, dmDate })) landedCount += 1;
         } else dropped += 1;
       } else if (passReason !== null) {
         // A Lead the Operator wrote to, approved or skipped by hand while the
         // call ran keeps what they did to it.
         if (current && !current.dmContent && !current.approved && !current.rejected) {
-          await keep({ ...current, rejected: true, skipReason: passReason });
-          passedOver += 1;
+          if (await keep({ ...current, rejected: true, skipReason: passReason })) passedOver += 1;
         }
       }
     }
@@ -627,7 +658,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     const stamped = due.map((d) => stampFollowUp(d.lead, d.stepIndex, sentAt, d.rescue));
     const byId = new Map(stamped.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-    await store.saveLeads(stamped);
+    await persist(() => store.saveLeads(stamped));
     posthogLogs.info('follow_up_handoff_completed', {
       event: 'follow_up_handoff_completed',
       follow_up_count: due.length,
@@ -641,7 +672,7 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
 
     toast.success(`${due.length} follow-up${due.length !== 1 ? 's' : ''} sent to extension.`);
     return due.length;
-  }, [config.dailySendCap, metered, toast, store]);
+  }, [config.dailySendCap, metered, toast, store, persist]);
 
   const markSent = useCallback((receipts: SendReceipt[]) => {
     // One handle can arrive in several receipts — today's log and the all-time
@@ -671,8 +702,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     });
     const byId = new Map(updated.map((l) => [l.id, l]));
     setLeads((prev) => prev.map((l) => byId.get(l.id) ?? l));
-    store.saveLeads(updated).catch(console.error);
-  }, [store]);
+    void persist(() => store.saveLeads(updated));
+  }, [store, persist]);
 
   const recordOutcomes = useCallback((outcomes: Outcome[]) => {
     if (outcomes.length === 0) return;
@@ -706,9 +737,9 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     if (changed.size === 0) return;
 
     setLeads((prev) => prev.map((l) => changed.get(l.id) ?? l));
-    store.saveLeads([...changed.values()]).catch(console.error);
+    void persist(() => store.saveLeads([...changed.values()]));
     for (const [event, lead] of events) fireWebhook(config, event, lead);
-  }, [config, store]);
+  }, [config, store, persist]);
 
   const recordDeal = useCallback(async (person: DealPerson, change: (lead: Lead) => Lead, outcome?: Outcome) => {
     const handle = canonicalHandle(person.handle);
@@ -740,8 +771,8 @@ export function useOutreach({ store, config, limits, toast, onTrialLimit }: Outr
     // before its Conversation was applied — so a carried-over booking fires
     // `booked` once, like any other.
     for (const event of detectTransitions(before, updated)) fireWebhook(config, event, updated);
-    await store.saveLeads([updated]);
-  }, [config, store]);
+    await persist(() => store.saveLeads([updated]));
+  }, [config, store, persist]);
 
   const recordMark = useCallback(
     (person: DealPerson, outcome: Outcome) =>

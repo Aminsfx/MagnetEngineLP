@@ -118,14 +118,31 @@ function isSupabaseReady(): boolean {
  * the write falls back to the old key rather than failing outright.
  */
 async function upsertInboxRows(table: 'conversations' | 'messages', rows: Record<string, unknown>[]): Promise<void> {
+  const failures: string[] = [];
   for (let i = 0; i < rows.length; i += 200) {
     const batch = rows.slice(i, i + 200);
     let { error } = await supabase.from(table).upsert(batch, { onConflict: 'user_id,id' });
     if (error?.code === '42P10') {
       ({ error } = await supabase.from(table).upsert(batch, { onConflict: 'id' }));
     }
-    if (error) console.error(`[db] upsert ${table} error:`, error.message);
+    if (error) failures.push(error.message);
   }
+  if (failures.length > 0) throw writeFailed(`upsert ${table}`, failures);
+}
+
+/**
+ * A write the API refused, or that never reached it.
+ *
+ * Writes used to log the error and resolve as if they had saved, so no caller
+ * could tell: an approval, an edited DM, a setting or a skip stayed on screen
+ * and was gone at the next reload, with nothing ever having said so. A batched
+ * write still tries every batch, so one refused batch costs only its own rows,
+ * then throws for all of them.
+ */
+function writeFailed(what: string, messages: string[]): Error {
+  const unique = [...new Set(messages)];
+  console.error(`[db] ${what} error:`, unique.join('; '));
+  return new Error(`[db] ${what}: ${unique.join('; ')}`);
 }
 
 /**
@@ -214,13 +231,15 @@ export const db = {
     const rows = leads.map((l) => ({ id: l.id, user_id: userId, data: l }));
 
     // Supabase upsert in batches of 200 to avoid request size limits
+    const failures: string[] = [];
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await supabase
         .from('leads')
         .upsert(batch, { onConflict: 'id' });
-      if (error) console.error('[db] upsertLeads batch error:', error.message);
+      if (error) failures.push(error.message);
     }
+    if (failures.length > 0) throw writeFailed('upsertLeads', failures);
   },
 
 
@@ -233,7 +252,7 @@ export const db = {
       .delete()
       .in('id', ids);
 
-    if (error) console.error('[db] deleteLeads error:', error.message);
+    if (error) throw writeFailed('deleteLeads', [error.message]);
   },
 
   // ─── Config ───────────────────────────────────────────────────────────────
@@ -260,7 +279,7 @@ export const db = {
       .from('configs')
       .upsert({ user_id: userId, data: config, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
-    if (error) console.error('[db] setConfig error:', error.message);
+    if (error) throw writeFailed('setConfig', [error.message]);
   },
 
   // ─── Follow-up Sequences ──────────────────────────────────────────────────

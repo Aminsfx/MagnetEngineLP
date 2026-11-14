@@ -21,6 +21,7 @@ import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { untilLoaded } from '../lib/retry';
+import { saveFailedNotice } from '../lib/saveFailed';
 import { readOutcome } from '../lib/outcome';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
@@ -117,6 +118,10 @@ const DashboardShell: React.FC = () => {
   // interface with two ports (the store, and the extension protocol). This used
   // to be seventeen callbacks and six mirror refs inlined here.
   const outreach = useOutreach({ store, config, limits, toast, onTrialLimit: toTrialUpgrade });
+  // The settings and the inbox are saved here rather than by the engine, and
+  // a failed save is said the same way, once per burst.
+  const sayError = toast.error;
+  const saveFailed = useMemo(() => saveFailedNotice(sayError), [sayError]);
   // What the Campaign Builder files a named search into.
   const campaigns = useMemo(() => campaignsOf(outreach.leads), [outreach.leads]);
 
@@ -172,8 +177,8 @@ const DashboardShell: React.FC = () => {
   const persistInbox = useCallback((rows: Conversation[], msgs: Message[]) => {
     store.saveConversations(rows)
       .then(() => store.saveMessages(msgs))
-      .catch(console.error);
-  }, [store]);
+      .catch((error: unknown) => saveFailed('saving the inbox', error));
+  }, [store, saveFailed]);
 
   // Load data from Supabase (or localStorage fallback) on mount.
   // Keyed on the user ID (not the user object) so token refreshes on tab
@@ -381,10 +386,16 @@ const DashboardShell: React.FC = () => {
   }, [dataLoading, sendCap, extStatus.state]);
 
   // ─── Lead mutation helpers ──────────────────────────────────────────────────
+  // Settings save as the Operator types, from callers that never await, so a
+  // failure is caught and said here rather than left to reject unheard.
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
     setConfig(newConfig);
-    await store.saveConfig(newConfig);
-  }, [store]);
+    try {
+      await store.saveConfig(newConfig);
+    } catch (error: unknown) {
+      saveFailed('saving settings', error);
+    }
+  }, [store, saveFailed]);
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
 
@@ -412,9 +423,9 @@ const DashboardShell: React.FC = () => {
   const handleUpdateConversation = useCallback((conv: Conversation) => {
     const next = inbox.recordConversation(conv);
     setConversations(next.conversations);
-    store.saveConversations([conv]).catch(console.error);
+    store.saveConversations([conv]).catch((error: unknown) => saveFailed('saving a conversation', error));
     outreach.recordOutcomes([readOutcome(conv, next.messages)]);
-  }, [outreach, store, inbox]);
+  }, [outreach, store, inbox, saveFailed]);
 
   /** The Operator's own mark on the person in a Conversation: Qualified, Booked.
    *  It reaches the dashboard even for someone no campaign found, who becomes
@@ -423,14 +434,14 @@ const DashboardShell: React.FC = () => {
   const handleMarkConversation = useCallback((conv: Conversation) => {
     const next = inbox.recordConversation(conv);
     setConversations(next.conversations);
-    store.saveConversations([conv]).catch(console.error);
+    store.saveConversations([conv]).catch((error: unknown) => saveFailed('saving a conversation', error));
     outreach
       .recordMark(
         { handle: conv.handle, name: conv.name, avatarUrl: conv.avatarUrl },
         readOutcome(conv, next.messages),
       )
       .catch(console.error);
-  }, [outreach, store, inbox]);
+  }, [outreach, store, inbox, saveFailed]);
 
   /** The deal with the person in a Conversation. Carries what the thread
    *  already shows, in case they become a Lead only now. */
