@@ -142,7 +142,7 @@ export function applyOutcome(lead: Lead, outcome: Outcome): Lead | null {
   if (outcome.qualified && !lead.positiveReply) {
     // Qualified is its own stage, before Booked: the Operator decided this
     // person is worth a call, and no call is booked yet. It is the same flag
-    // the Approval Queue's "Mark interested" sets, so the dashboard counts one
+    // the Approval Queue's "Mark qualified" sets, so the dashboard counts one
     // thing under one name.
     //
     // Like a booking, it implies the stages before it. positiveReplyRate is

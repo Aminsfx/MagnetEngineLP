@@ -139,7 +139,7 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   and qualified"). Mark qualified sets `Conversation.status = 'qualified'`,
   which is only ever the Operator's click; `applyOutcome` turns it into
   `positiveReply` + `qualifiedAt`, the dashboard's Qualified and the same flag
-  as the Approval Queue's "Mark interested". What the AI reads off a thread is
+  as the Approval Queue's "Mark qualified". What the AI reads off a thread is
   shown as **Interested** (`triage.ts`) and still moves nothing: the two shared
   the label "Qualified" until then, so a row could say Qualified for someone
   the dashboard had never counted. Both marks go through `outreach.recordMark`,

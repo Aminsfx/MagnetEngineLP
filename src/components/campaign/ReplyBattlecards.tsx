@@ -65,8 +65,11 @@ export const ReplyBattlecards: React.FC<ReplyBattlecardsProps> = ({ lead, ledger
         navigator.clipboard.writeText(card.text).catch(() => {});
         setCopiedId(card.id);
         setTimeout(() => setCopiedId(prev => (prev === card.id ? null : prev)), 2000);
+        // Qualified, with its date: the dashboard counts Qualified in a period
+        // by `qualifiedAt`, so without it this Lead counted under "All time"
+        // and in no week, month or quarter.
         if (card.marksPositive && !lead.positiveReply) {
-            onUpdateLead?.({ ...lead, positiveReply: true });
+            onUpdateLead?.({ ...lead, positiveReply: true, qualifiedAt: lead.qualifiedAt ?? new Date().toISOString() });
         }
     };
 

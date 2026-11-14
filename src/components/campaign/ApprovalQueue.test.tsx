@@ -387,7 +387,9 @@ describe('ApprovalQueue approval safety', () => {
         renderQueue(makeLeads(1, { approved: true, dmSent: true, replied: true }), { onUpdateLead });
 
         await user.click(tab(/^Sent/));
-        await user.click(screen.getByRole('button', { name: "Mark @founder_0's reply as interested" }));
+        // Qualified, the Inbox's word for the same flag. "Interested" is the AI's
+        // read of a thread, which counts nowhere (CONTEXT.md).
+        await user.click(screen.getByRole('button', { name: 'Mark @founder_0 as qualified' }));
         expect(onUpdateLead).toHaveBeenCalledWith(expect.objectContaining({ positiveReply: true }));
     });
 
