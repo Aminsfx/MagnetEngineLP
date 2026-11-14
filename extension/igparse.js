@@ -36,9 +36,23 @@
 
     const str = (v) => (v === undefined || v === null ? '' : String(v));
 
-    /** The text a person typed. Media, stickers and shares have none, and are skipped. */
+    /** How a message with no typed text reads: in the Inbox, and to the reply assistant. */
+    const ATTACHMENT_TEXT = '[Sent an attachment: open it on Instagram]';
+
+    /**
+     * The text of a message. A photo, a voice note, a sticker or a reply to a
+     * story has none, and is a message all the same: they used to be dropped
+     * here, so someone who answered a DM with a voice note had not replied as
+     * far as the dashboard knew, and the no-reply follow-ups kept writing to
+     * them. Only what carries nothing is left out: a message taken back
+     * (`is_unsent`), or one with no content at all.
+     */
     function messageText(m) {
-        return str(m.text_body || (m.content && m.content.text_body)).trim();
+        const text = str(m.text_body || (m.content && m.content.text_body)).trim();
+        if (text) return text;
+        if (m.is_unsent) return '';
+        const content = m.content;
+        return content && typeof content === 'object' && Object.keys(content).length > 0 ? ATTACHMENT_TEXT : '';
     }
 
     function toIso(ms) {

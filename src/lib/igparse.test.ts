@@ -24,6 +24,9 @@ function loadParser(): (data: unknown) => Parsed {
 
 const parse = loadParser();
 
+/** How a message with no typed text reads in the Inbox (and to the reply assistant). */
+const ATTACHMENT_TEXT = '[Sent an attachment: open it on Instagram]';
+
 const viewer = { pk: '111', id: '111', username: 'me.coaching', profile_pic_url: 'https://cdn/me.jpg', interop_messaging_user_fbid: '9001' };
 const maya = { pk: '222', id: '222', username: 'maya.builds', full_name: 'Maya R.', profile_pic_url: 'https://cdn/maya.jpg', interop_messaging_user_fbid: '9002' };
 
@@ -79,12 +82,49 @@ describe('parseSlideInbox', () => {
             name: 'Maya R.',
             avatarUrl: 'https://cdn/maya.jpg',
         });
-        // Oldest first; the photo with no text is left out.
+        // Oldest first. The photo has no text and is still a message.
         expect(threads[0].messages.map((m) => [m.id, m.direction, m.text])).toEqual([
             ['mid.$1', 'out', 'Hey Maya, loved the post.'],
             ['mid.$2', 'in', 'What do you actually do?'],
+            ['mid.$3', 'in', ATTACHMENT_TEXT],
         ]);
         expect(threads[0].messages[0].createdAt).toBe(new Date(1_760_000_000_000).toISOString());
+    });
+
+    // The regression: a message with no typed text was dropped. Someone who
+    // answered a DM with a voice note, a photo or a reply to a story had not
+    // replied as far as the dashboard knew: reply rate missed them, and the
+    // no-reply follow-up ladder kept writing to a person already talking.
+    it('keeps a reply that is only a voice note, a photo or a share', () => {
+        const thread = (edges: unknown[]) => ({
+            as_ig_direct_thread: { thread_id: 't-voice', is_group: false, viewer_id: '111', viewer, users: [maya], slide_messages: { edges } },
+        });
+        const { threads } = parse(thread([
+            msg('mid.$2', '9002', '', 1_760_000_060_000, { content: { audio: { duration_ms: 4200 } } }),
+            msg('mid.$1', '9001', 'Hey Maya, loved the post.', 1_760_000_000_000),
+        ]));
+
+        expect(threads[0].messages.map((m) => [m.direction, m.text])).toEqual([
+            ['out', 'Hey Maya, loved the post.'],
+            ['in', ATTACHMENT_TEXT],
+        ]);
+    });
+
+    it('still leaves out what carries nothing: an unsent message, or one with no content', () => {
+        const { threads } = parse({
+            as_ig_direct_thread: {
+                thread_id: 't-empty', is_group: false, viewer_id: '111', viewer, users: [maya],
+                slide_messages: {
+                    edges: [
+                        msg('mid.$3', '9002', '', 1_760_000_120_000, { is_unsent: true, content: { attachments: [{}] } }),
+                        msg('mid.$2', '9002', '', 1_760_000_060_000),
+                        msg('mid.$1', '9002', '', 1_760_000_000_000, { content: {} }),
+                    ],
+                },
+            },
+        });
+
+        expect(threads[0].messages).toEqual([]);
     });
 
     it('finds threads wherever a response nests them, and reads text from content', () => {
