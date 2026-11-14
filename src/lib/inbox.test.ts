@@ -69,6 +69,71 @@ describe('ingestThreads', () => {
   });
 });
 
+// The regression: `unread` was recomputed from the last message on every
+// poll. Opening a conversation marked it read, and the next poll, about 100 s
+// later, lit it up again, and saved that over the Operator's open.
+describe('unread', () => {
+  const opened = (c: Conversation): Conversation => ({ ...c, unread: false });
+
+  it('stays read once the Operator has opened it, poll after poll', () => {
+    const t = [thread('t1', [outbound('m1', 'hi', '2026-01-01T10:00:00Z'), inbound('m2', 'tell me more', '2026-01-01T12:00:00Z')])];
+    const first = ingestThreads(t, [], []);
+    expect(first.conversations[0].unread).toBe(true);
+
+    const second = ingestThreads(t, first.conversations.map(opened), first.messages);
+
+    expect(second.conversations[0]).toMatchObject({ unread: false, needsReply: true });
+    expect(second.changedConversations).toEqual([]);
+  });
+
+  it('is unread again when a new message comes in', () => {
+    const t1 = [thread('t1', [inbound('m1', 'hey', '2026-01-01T10:00:00Z')])];
+    const first = ingestThreads(t1, [], []);
+
+    const t2 = [thread('t1', [inbound('m1', 'hey', '2026-01-01T10:00:00Z'), inbound('m2', 'you there?', '2026-01-01T12:00:00Z')])];
+    const second = ingestThreads(t2, first.conversations.map(opened), first.messages);
+
+    expect(second.conversations[0].unread).toBe(true);
+  });
+
+  it('is read once the Operator has answered, from here or from their phone', () => {
+    const t1 = [thread('t1', [inbound('m1', 'hey', '2026-01-01T10:00:00Z')])];
+    const first = ingestThreads(t1, [], []);
+
+    const t2 = [thread('t1', [inbound('m1', 'hey', '2026-01-01T10:00:00Z'), outbound('m2', 'hey!', '2026-01-01T12:00:00Z')])];
+    const second = ingestThreads(t2, first.conversations, first.messages);
+
+    expect(second.conversations[0]).toMatchObject({ unread: false, needsReply: false });
+  });
+});
+
+// The regression: Instagram hands out a freshly signed photo URL on every
+// read, and `differs` compared the whole URL. About 25 Conversations a poll
+// counted as changed, were saved again, and had their Outcomes read again,
+// every ~100 s, for nothing.
+describe('a profile photo', () => {
+  const withPhoto = (url: string): RawThread => ({ ...thread('t1', [inbound('m1', 'hey')]), avatarUrl: url });
+  const signed = (host: string, path: string, sig: string) => `https://${host}.cdninstagram.com${path}?stp=dst-jpg&_nc_ht=${host}&oh=${sig}&oe=6745A1B2`;
+
+  it('signed again is not a change, though the fresh URL is the one kept', () => {
+    const first = ingestThreads([withPhoto(signed('scontent-lhr8-1', '/v/t51.2885-19/1234_n.jpg', 'aaa'))], [], []);
+    const fresh = signed('scontent-lhr6-2', '/v/t51.2885-19/1234_n.jpg', 'bbb');
+
+    const second = ingestThreads([withPhoto(fresh)], first.conversations, first.messages);
+
+    expect(second.changedConversations).toEqual([]);
+    expect(second.conversations[0].avatarUrl).toBe(fresh);
+  });
+
+  it('a new photo is a change', () => {
+    const first = ingestThreads([withPhoto(signed('scontent-lhr8-1', '/v/t51.2885-19/1234_n.jpg', 'aaa'))], [], []);
+
+    const second = ingestThreads([withPhoto(signed('scontent-lhr8-1', '/v/t51.2885-19/5678_n.jpg', 'aaa'))], first.conversations, first.messages);
+
+    expect(second.changedConversations).toHaveLength(1);
+  });
+});
+
 describe('the move to Instagram\'s GraphQL inbox', () => {
   it('does not add a message twice when its id changed format', () => {
     const before = ingestThreads([thread('t1', [inbound('1739', 'hey there', '2026-07-30T10:00:00Z')])], [], []);
