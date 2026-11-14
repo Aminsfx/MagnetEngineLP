@@ -177,6 +177,8 @@ describe('a read that fails', () => {
       order: () => chain,
       range: () => answer,
       maybeSingle: () => answer,
+      // A query that ends at `.order()` is awaited as it stands.
+      then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => answer.then(resolve, reject),
     };
     from.mockImplementation(() => chain as never);
   }
@@ -235,11 +237,60 @@ describe('a read that fails', () => {
     await expect(db.getSubscription('user-a')).rejects.toThrow(/Failed to fetch/);
   });
 
+  // Read as "no sequences", the page seeded fresh ladders, and saving one
+  // stored a second ladder beside the Operator's own.
+  it('is not read as an Operator with no follow-up sequences', async () => {
+    failingTable('Failed to fetch');
+
+    await expect(db.getSequences('user-a')).rejects.toThrow(/Failed to fetch/);
+  });
+
   it('still reads an account with no subscription row as pending', async () => {
     const chain = { select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: null, error: null }) };
     from.mockImplementation(() => chain as never);
 
     expect(await db.getSubscription('user-a')).toMatchObject({ status: 'pending' });
+  });
+});
+
+// The regression: the Follow-ups page seeds an Operator's first ladders as
+// `new-no_reply` and `new-rescue`, and upsertSequence only knew `new` as "not
+// stored yet". It sent `id: 'new-no_reply'` to a uuid column, Postgres refused
+// it, and the page said "Save failed": no edit, and no switching the rescue
+// ladder on, ever survived a reload.
+describe('saving a follow-up sequence', () => {
+  function sequenceTable() {
+    const sent: Array<Record<string, unknown>> = [];
+    const chain = {
+      upsert: (payload: Record<string, unknown>) => { sent.push(payload); return chain; },
+      select: () => chain,
+      single: () => Promise.resolve({ data: { id: '6f1c2a40-0000-4000-8000-000000000001', campaign_id: null, steps: [], active: true }, error: null }),
+    };
+    from.mockImplementation(() => chain as never);
+    return sent;
+  }
+
+  beforeEach(() => { vi.stubEnv('VITE_SUPABASE_URL', 'https://abc.supabase.co'); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    from.mockImplementation(() => ({ upsert }));
+  });
+
+  it('inserts a ladder the page seeded, and lets the database name it', async () => {
+    const sent = sequenceTable();
+
+    const saved = await db.upsertSequence({ id: 'new-no_reply', steps: [], active: true }, 'user-a');
+
+    expect(sent[0]).not.toHaveProperty('id');
+    expect(saved?.id).toBe('6f1c2a40-0000-4000-8000-000000000001');
+  });
+
+  it('updates a ladder already stored', async () => {
+    const sent = sequenceTable();
+
+    await db.upsertSequence({ id: '6f1c2a40-0000-4000-8000-000000000001', steps: [], active: false }, 'user-a');
+
+    expect(sent[0]).toMatchObject({ id: '6f1c2a40-0000-4000-8000-000000000001' });
   });
 });
 

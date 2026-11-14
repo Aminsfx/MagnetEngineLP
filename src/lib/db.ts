@@ -161,6 +161,17 @@ function readFailed(what: string, error: { message: string }): Error {
   return new Error(`[db] ${what}: ${error.message}`);
 }
 
+/**
+ * Whether a follow-up sequence has a row of its own yet. The Follow-ups page
+ * seeds an Operator's first ladders as `new-no_reply` and `new-rescue`, and
+ * this used to know only `new`: the made-up id went to a uuid column, Postgres
+ * refused it, and no Operator's first Save ever stored. A stored id is a uuid,
+ * whose hex never starts with `n`.
+ */
+function isStoredSequence(id: string | undefined): id is string {
+  return !!id && !id.startsWith('new');
+}
+
 /** Rows asked for per request. The API's own ceiling may be lower; `readAll` copes. */
 const PAGE = 1000;
 
@@ -293,10 +304,9 @@ export const db = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[db] getSequences error:', error.message);
-      return [];
-    }
+    // Read as "no sequences", the page would seed fresh ladders over the
+    // Operator's own, and a Save would store a second ladder beside it.
+    if (error) throw readFailed('getSequences', error);
 
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -314,7 +324,8 @@ export const db = {
       campaign_id: seq.campaignId ?? null,
       steps: seq.steps,
       active: seq.active,
-      ...(seq.id && seq.id !== 'new' ? { id: seq.id } : {}),
+      // A ladder the page made up has no row yet: the database names it.
+      ...(isStoredSequence(seq.id) ? { id: seq.id } : {}),
     };
 
     const { data, error } = await supabase
