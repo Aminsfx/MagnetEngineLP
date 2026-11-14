@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { InboxView } from './InboxView';
 import { ToastProvider } from '../common/Toast';
 import { demoInbox } from '../../lib/inboxDemo';
-import type { AppConfig, Conversation, Lead } from '../../lib/types';
+import type { AppConfig, Conversation, Lead, Message } from '../../lib/types';
+import type { Delivery } from '../../lib/delivery';
 
 const config: AppConfig = {
     systemPrompt: '',
@@ -29,8 +30,13 @@ function renderInbox({
     leads = [] as Lead[],
     onSendReply = vi.fn((): boolean => true),
     syncedAt = undefined as number | null | undefined,
+    extraMessages = (_c: Conversation[]): Message[] => [],
+    delivery = {} as Record<string, Delivery>,
+    onResendReply = vi.fn(),
 } = {}) {
-    const { conversations, messages } = demoInbox();
+    const demo = demoInbox();
+    const conversations = demo.conversations;
+    const messages = [...demo.messages, ...extraMessages(demo.conversations)];
     const onSaveDeal = vi.fn();
     const onUpdateConversation = vi.fn();
     const onMarkConversation = vi.fn();
@@ -46,6 +52,8 @@ function renderInbox({
                 syncedAt={syncedAt}
                 onGenerateReply={onGenerateReply}
                 onSendReply={onSendReply}
+                delivery={delivery}
+                onResendReply={onResendReply}
                 onUpdateConversation={onUpdateConversation}
                 onMarkConversation={onMarkConversation}
                 onUpdateConfig={vi.fn()}
@@ -55,7 +63,7 @@ function renderInbox({
     );
     const { rerender } = render(ui(conversations));
     return {
-        onGenerateReply, onSaveDeal, onSendReply, onUpdateConversation, onMarkConversation, conversations,
+        onGenerateReply, onSaveDeal, onSendReply, onResendReply, onUpdateConversation, onMarkConversation, conversations,
         rerender: (list: Conversation[]) => rerender(ui(list)),
     };
 }
@@ -302,5 +310,51 @@ describe('InboxView', () => {
             expect(stale()).toBeNull();
             expect(screen.queryByText(/Read from Instagram/)).toBeNull();
         });
+    });
+});
+
+// The regression: a reply was drawn like a message Instagram had from the
+// moment it was handed to the extension. One that waited behind a paused
+// campaign, or that the extension gave up on, read as sent in the Inbox and
+// never appeared on Instagram.
+describe('a reply the app handed to the extension', () => {
+    const replyTo = (handle: string, id: string, text: string) => (cs: Conversation[]): Message[] => [{
+        id, conversationId: cs.find((c) => c.handle === handle)!.id, direction: 'out', text,
+        createdAt: new Date().toISOString(),
+    }];
+
+    it('says why it was not sent, and sends it again', async () => {
+        const { onResendReply } = renderInbox({
+            extraMessages: replyTo('maya-builds.coaching', 'local_m_1', 'Happy to show you on a call.'),
+            delivery: { local_m_1: { state: 'failed', reason: 'the Instagram tab gave no answer for 3 minutes.' } },
+        });
+
+        await userEvent.click(row(/@maya-builds\.coaching/));
+        expect(await screen.findByText(/Not sent: the Instagram tab gave no answer for 3 minutes\./)).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: /send again/i }));
+
+        expect(onResendReply).toHaveBeenCalledWith(
+            expect.objectContaining({ handle: 'maya-builds.coaching' }),
+            expect.objectContaining({ id: 'local_m_1' }),
+        );
+    });
+
+    it('says it is sending while the extension has it', async () => {
+        renderInbox({
+            extraMessages: replyTo('maya-builds.coaching', 'local_m_1', 'Happy to show you on a call.'),
+            delivery: { local_m_1: { state: 'sending' } },
+        });
+
+        await userEvent.click(row(/@maya-builds\.coaching/));
+
+        expect(await screen.findByText('Sending…')).toBeInTheDocument();
+    });
+
+    it('says it is not on Instagram yet when nobody has said what happened to it', async () => {
+        renderInbox({ extraMessages: replyTo('maya-builds.coaching', 'local_m_1', 'Happy to show you on a call.') });
+
+        await userEvent.click(row(/@maya-builds\.coaching/));
+
+        expect(await screen.findByText('Not on Instagram yet')).toBeInTheDocument();
     });
 });

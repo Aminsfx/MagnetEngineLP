@@ -23,6 +23,7 @@ import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inb
 import { untilLoaded } from '../lib/retry';
 import { saveFailedNotice } from '../lib/saveFailed';
 import { readOutcome } from '../lib/outcome';
+import type { Delivery } from '../lib/delivery';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
 import { todayCounts, headline } from '../lib/today';
@@ -52,6 +53,14 @@ import { Loader2, Sparkles, Menu, Send } from 'lucide-react';
  * hand-picked hues; naming them says what they mean — `caution` is "you are
  * running out", `danger` is "you are out, the next one will be refused".
  */
+/** `record` without `keys`. */
+function without<T>(record: Record<string, T>, keys: string[]): Record<string, T> {
+  if (!keys.some((k) => k in record)) return record;
+  const next = { ...record };
+  for (const k of keys) delete next[k];
+  return next;
+}
+
 function usagePillTone(fraction: number): string {
   if (fraction >= 1) return 'text-danger-400 border-danger-500/30 bg-danger-500/8';
   if (fraction >= 0.8) return 'text-white border-white/30 bg-white/8';
@@ -141,6 +150,9 @@ const DashboardShell: React.FC = () => {
   // ─── Inbox (AI SDR) ─────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  // What the extension has said about each reply handed to it, by Message id.
+  // A reply used to look sent the moment it was handed over.
+  const [delivery, setDelivery] = useState<Record<string, Delivery>>({});
   // Whoever the extension last saw logged in to instagram.com in this browser.
   // Not necessarily this Operator — see `instagramAccount` on AppConfig.
   const [igViewer, setIgViewer] = useState<InstagramViewer | null>(null);
@@ -174,10 +186,14 @@ const DashboardShell: React.FC = () => {
   // Messages could reach Postgres before the thread did, be refused by the
   // foreign key, and never be retried: the inbox log already counts them as
   // known. On the next load they were simply gone.
-  const persistInbox = useCallback((rows: Conversation[], msgs: Message[]) => {
+  // `settled`: the app's copies of replies that Instagram's copy, in `msgs`,
+  // has replaced. Deleted only once that copy is saved.
+  const persistInbox = useCallback((rows: Conversation[], msgs: Message[], settled: string[] = []) => {
     store.saveConversations(rows)
       .then(() => store.saveMessages(msgs))
+      .then(() => store.removeMessages(settled))
       .catch((error: unknown) => saveFailed('saving the inbox', error));
+    if (settled.length) setDelivery((prev) => without(prev, settled));
   }, [store, saveFailed]);
 
   // Load data from Supabase (or localStorage fallback) on mount.
@@ -248,7 +264,7 @@ const DashboardShell: React.FC = () => {
         const replayed = inbox.hydrate(history);
         setConversations(replayed?.conversations ?? history.conversations);
         setMessages(replayed?.messages ?? history.messages);
-        if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages);
+        if (replayed) persistInbox(replayed.changedConversations, replayed.newMessages, replayed.settled);
       },
       (error) => {
         console.error('[inbox] loading saved conversations failed, trying again:', error);
@@ -271,7 +287,7 @@ const DashboardShell: React.FC = () => {
 
     setConversations(result.conversations);
     setMessages(result.messages);
-    persistInbox(result.changedConversations, result.newMessages);
+    persistInbox(result.changedConversations, result.newMessages, result.settled);
 
     // Carry what each Conversation revealed back to the Lead behind it, so a
     // reply in the Inbox shows up in reply rate, the conversion chart and the
@@ -288,6 +304,7 @@ const DashboardShell: React.FC = () => {
   // Ref so the bridge effect can call the latest autopilot handler without
   // re-subscribing (defined further down).
   const autopilotRef = useRef<(convos: Conversation[]) => void>(() => {});
+  const notSentRef = useRef<(ref: string, reason: string) => void>(() => {});
   const ingestRef = useRef(ingestInbox);
   useEffect(() => { ingestRef.current = ingestInbox; }, [ingestInbox]);
 
@@ -315,6 +332,11 @@ const DashboardShell: React.FC = () => {
         setExtStats({ count: d.dailySentCount ?? 0, cap: d.dailyCap ?? 0 });
         // Broadcast the moment the send finished, so now is when it was sent.
         if (d.handle) outreachRef.current.markSent([{ handle: d.handle, sentAt: new Date().toISOString() }]);
+        // A reply, by the id it was handed over with (protocol 5).
+        const ref = d.ref;
+        if (ref) setDelivery((prev) => (prev[ref] ? { ...prev, [ref]: { state: 'sent' } } : prev));
+      } else if (d.type === EXT_TO_APP.NOT_SENT) {
+        if (d.ref) notSentRef.current(d.ref, d.reason || 'no reason given.');
       } else if (d.type === EXT_TO_APP.INBOX) {
         const viewer = d.viewer?.id ? d.viewer : null;
         if (viewer) {
@@ -502,7 +524,10 @@ const DashboardShell: React.FC = () => {
     // needsReply cleared — is worse than no reply at all.
     const delay = storage.getDmDelay();
     const handoff = sendCampaign({
-      leads: [{ handle: conv.handle, message: body }],
+      // A reply: it goes before the campaign, and through a paused campaign or
+      // a used-up Send Cap (extension 1.11.0). `ref` comes back on SENT and
+      // NOT_SENT, so the Inbox says which reply went and which didn't.
+      leads: [{ handle: conv.handle, message: body, ref: msg.id, reply: true }],
       minDelay: delay.min,
       maxDelay: delay.max,
       dailyCap: sendCapOf(configRef.current),
@@ -520,11 +545,40 @@ const DashboardShell: React.FC = () => {
     // a genuinely repeated "ok" later still comes through.
     setMessages(inbox.recordOutbound(msg).messages);
     setConversations(inbox.recordConversation(updatedConv).conversations);
+    setDelivery((prev) => ({ ...prev, [msg.id]: { state: 'sending' } }));
     persistInbox([updatedConv], [msg]);
 
     toast.success(`Reply queued to @${conv.handle}`);
     return true;
   }, [toast, inbox, persistInbox]);
+
+  /**
+   * The extension gave up on a reply. It was shown as sent until now, and the
+   * conversation dropped out of "needs you". Say so where the reply is, put
+   * the conversation back in front of the Operator, and once here.
+   */
+  const handleNotSent = useCallback((ref: string, reason: string) => {
+    const state = inbox.snapshot();
+    const msg = state.messages.find((m) => m.id === ref);
+    if (!msg) return;
+    setDelivery((prev) => ({ ...prev, [ref]: { state: 'failed', reason } }));
+    const conv = state.conversations.find((c) => c.id === msg.conversationId);
+    if (!conv) return;
+    const reopened: Conversation = { ...conv, needsReply: true };
+    setConversations(inbox.recordConversation(reopened).conversations);
+    persistInbox([reopened], []);
+    toast.error(`Your reply to @${conv.handle} wasn't sent: ${reason}`);
+  }, [inbox, persistInbox, toast]);
+
+  useEffect(() => { notSentRef.current = handleNotSent; }, [handleNotSent]);
+
+  /** Send again a reply the extension gave up on; the copy that failed goes once the new one is with the extension. */
+  const handleResendReply = useCallback(async (conv: Conversation, failed: Message) => {
+    if (!(await handleSendReply(conv, failed.text))) return;
+    setMessages(inbox.forget([failed.id]).messages);
+    setDelivery((prev) => without(prev, [failed.id]));
+    store.removeMessages([failed.id]).catch((error: unknown) => saveFailed('saving the inbox', error));
+  }, [handleSendReply, inbox, store, saveFailed]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
@@ -538,10 +592,13 @@ const DashboardShell: React.FC = () => {
         if (result.intent === 'not_interested') continue; // don't chase
         await handleSendReply(latest, result.reply);
       } catch (e) {
+        // Said on screen, not only in the console: a reply autopilot couldn't
+        // write is a person left waiting, and nothing else would show it.
         console.error('[autopilot] failed for', conv.handle, e);
+        toast.error(`Autopilot couldn't reply to @${conv.handle}: ${e instanceof Error ? e.message : 'something went wrong.'}`);
       }
     }
-  }, [handleGenerateReply, handleSendReply, inbox]);
+  }, [handleGenerateReply, handleSendReply, inbox, toast]);
 
   useEffect(() => { autopilotRef.current = handleAutopilot; }, [handleAutopilot]);
 
@@ -679,6 +736,8 @@ const DashboardShell: React.FC = () => {
           onDisconnectInstagram={handleDisconnectInstagram}
           onGenerateReply={handleGenerateReply}
           onSendReply={handleSendReply}
+          delivery={delivery}
+          onResendReply={handleResendReply}
           onUpdateConversation={handleUpdateConversation}
           onMarkConversation={handleMarkConversation}
           onUpdateConfig={handleUpdateConfig}

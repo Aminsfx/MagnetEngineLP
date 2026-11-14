@@ -36,6 +36,8 @@ export interface WorkspaceStore {
   loadInbox(): Promise<{ conversations: Conversation[]; messages: Message[] }>;
   saveConversations(rows: Conversation[]): Promise<void>;
   saveMessages(rows: Message[]): Promise<void>;
+  /** Delete Messages by id: the app's copies of replies Instagram's copy replaced. */
+  removeMessages(ids: string[]): Promise<void>;
 
   /**
    * Follow-up sequences. These reached the database through a direct `db`
@@ -70,6 +72,7 @@ function supabaseStore(userId: string): WorkspaceStore {
     },
     saveConversations: (rows) => db.upsertConversations(rows, userId),
     saveMessages: (rows) => db.upsertMessages(rows, userId),
+    removeMessages: (ids) => db.deleteMessages(ids, userId),
 
     loadSequences: () => db.getSequences(userId),
     saveSequence: (sequence) => db.upsertSequence(sequence, userId),
@@ -147,6 +150,11 @@ function localStore(): WorkspaceStore {
     async saveMessages(rows) {
       if (rows.length === 0) return;
       writeRows(LS_MESSAGES, mergeById(readRows<Message>(LS_MESSAGES), rows));
+    },
+    async removeMessages(ids) {
+      if (ids.length === 0) return;
+      const gone = new Set(ids);
+      writeRows(LS_MESSAGES, readRows<Message>(LS_MESSAGES).filter((m) => !gone.has(m.id)));
     },
 
     async loadSequences() {

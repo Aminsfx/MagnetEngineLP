@@ -20,6 +20,12 @@ export interface IngestResult extends InboxState {
     newMessages: Message[];               // subset to persist
     /** Conversations that gained a NEW inbound message — what autopilot acts on. */
     newInbound: Conversation[];
+    /**
+     * Ids of the app's own copies of replies (LOCAL_MESSAGE_PREFIX) that
+     * Instagram now shows, and that Instagram's copy has replaced. Delete them
+     * from storage: Instagram's copy is in `newMessages`.
+     */
+    settled: string[];
 }
 
 /**
@@ -41,8 +47,50 @@ export const LOCAL_MESSAGE_PREFIX = 'local_';
 export const confirmedByInstagram = (message: Message): boolean =>
     !message.id.startsWith(LOCAL_MESSAGE_PREFIX);
 
-const echoSignature = (conversationId: string, text: string) =>
-    `${conversationId}|${text.trim()}`;
+const isLocal = (message: Message): boolean => !confirmedByInstagram(message);
+
+/**
+ * How much earlier than the app wrote a reply down Instagram may stamp its
+ * copy of it: the browser's clock and Instagram's are not quite the same.
+ */
+const ECHO_SKEW_MS = 2 * 60_000;
+
+/**
+ * Whether a message Instagram reports is the app's own reply come back: the
+ * same words, from the Operator, in the same conversation, no earlier than the
+ * reply was written down. An older message with the same words is a different
+ * message.
+ */
+function isEchoOf(real: Pick<Message, 'direction' | 'text' | 'createdAt'>, conversationId: string, local: Message): boolean {
+    return local.conversationId === conversationId
+        && local.direction === 'out'
+        && real.direction === 'out'
+        && local.text.trim() === real.text.trim()
+        && new Date(real.createdAt).getTime() >= new Date(local.createdAt).getTime() - ECHO_SKEW_MS;
+}
+
+const byTime = (a: Message, b: Message) => a.createdAt.localeCompare(b.createdAt);
+
+/**
+ * The app's own copies of replies that Instagram's copy, already stored, has
+ * come back for. Until 2026-11-14 an echo seen in the same session was thrown
+ * away and the local copy kept; the next session took the echo in as new, and
+ * both were stored. Each stored copy of Instagram's answers for one reply.
+ */
+function settleStoredCopies(messages: Message[]): { messages: Message[]; settled: string[] } {
+    const real = messages.filter((m) => !isLocal(m) && m.direction === 'out').sort(byTime);
+    const taken = new Set<string>();
+    const settled: string[] = [];
+    for (const local of messages.filter((m) => isLocal(m) && m.direction === 'out').sort(byTime)) {
+        const echo = real.find((r) => !taken.has(r.id) && isEchoOf(r, r.conversationId, local));
+        if (!echo) continue;
+        taken.add(echo.id);
+        settled.push(local.id);
+    }
+    if (settled.length === 0) return { messages, settled };
+    const gone = new Set(settled);
+    return { messages: messages.filter((m) => !gone.has(m.id)), settled };
+}
 
 /**
  * Which photo a profile-photo URL is. Instagram signs its CDN URLs afresh on
@@ -110,10 +158,12 @@ function unreadAfter(existing: Conversation | undefined, last: Message, newFromT
  * the stateful wrapper that owns hydration ordering.
  *
  * - Messages dedupe by IG `item_id`.
- * - `pendingEchoes` holds signatures of outbound Messages this app created
- *   optimistically and has not yet seen echoed back by Instagram. Each
- *   signature suppresses exactly ONE echo and is then consumed, so an Operator
- *   who genuinely sends "ok" twice keeps both.
+ * - A reply the app wrote down on the way out (LOCAL_MESSAGE_PREFIX) is
+ *   replaced by Instagram's copy when Instagram shows it (`settled`). Each copy
+ *   of Instagram's replaces one of the app's, so an Operator who genuinely
+ *   sends "ok" twice keeps both. It used to be the other way round: the app
+ *   kept its own copy and threw Instagram's away, so a reply only handed to
+ *   the extension looked exactly like one Instagram had.
  * - Conversations preserve AI-set `intent`/`status`/`labels` (the poller only
  *   knows raw thread facts) and recompute `needsReply` from the last Message.
  *   `unread` follows new Messages, not the last one (`unreadAfter`).
@@ -122,11 +172,12 @@ export function ingestThreads(
     threads: RawThread[],
     prevConversations: Conversation[],
     prevMessages: Message[],
-    pendingEchoes: Set<string> = new Set(),
-    suppressedIds: Set<string> = new Set(),
 ): IngestResult {
     const msgById = new Map(prevMessages.map((m) => [m.id, m]));
     const newMessages: Message[] = [];
+    const settled: string[] = [];
+    /** The app's own copies still waiting for Instagram's, oldest first. */
+    const waiting = prevMessages.filter((m) => isLocal(m) && m.direction === 'out').sort(byTime);
     const legacyByConv = new Map<string, Message[]>();
     for (const m of prevMessages) {
         if (!LEGACY_ID.test(m.id)) continue;
@@ -137,19 +188,16 @@ export function ingestThreads(
 
     for (const t of threads) {
         for (const m of t.messages) {
-            if (msgById.has(m.id) || suppressedIds.has(m.id)) continue;
+            if (msgById.has(m.id)) continue;
             if (isLegacyCopy(m, legacyByConv.get(t.threadId))) continue;
 
-            if (m.direction === 'out') {
-                const sig = echoSignature(t.threadId, m.text);
-                if (pendingEchoes.has(sig)) {
-                    // Our own send coming back under Instagram's id. Consume the
-                    // signature so only this one echo is suppressed, and remember
-                    // the id so later snapshots don't re-add it.
-                    pendingEchoes.delete(sig);
-                    suppressedIds.add(m.id);
-                    continue;
-                }
+            // A reply the app sent, now on Instagram: Instagram's copy takes
+            // the place of the app's.
+            const mine = waiting.findIndex((local) => isEchoOf(m, t.threadId, local));
+            if (mine !== -1) {
+                const [local] = waiting.splice(mine, 1);
+                msgById.delete(local.id);
+                settled.push(local.id);
             }
 
             const msg: Message = {
@@ -213,6 +261,7 @@ export function ingestThreads(
         newInbound: changedConversations.filter(
             (c) => c.needsReply && newInboundConvIds.has(c.id),
         ),
+        settled,
     };
 }
 
@@ -253,9 +302,8 @@ export function readerState(syncedAt: number | null | undefined, now: number): R
  * rules for merging Instagram's view into them.
  *
  * Exists because `ingestThreads` alone has a precondition its signature cannot
- * express — it must not run until the stored history is loaded, or the echo
- * suppression above compares against a half-empty set and duplicates every
- * optimistic send. The caller used to enforce that itself with three refs
+ * express — it must not run until the stored history is loaded, or a reply
+ * the app sent finds no copy of its own to replace and is stored twice. The caller used to enforce that itself with three refs
  * (`inboxReady`, `pendingThreads`, and mirrors of both state arrays), and it
  * silently dropped all but the newest snapshot while waiting.
  *
@@ -269,16 +317,19 @@ export interface InboxLog {
     snapshot(): InboxState;
     /**
      * Load stored history. Returns the result of replaying any snapshot that
-     * arrived while waiting, or null if none did.
+     * arrived while waiting, and of settling stored copies of replies that
+     * Instagram's copy has already come back for; null if neither happened.
      */
     hydrate(state: InboxState): IngestResult | null;
     /** Merge a snapshot. Returns null when it was parked, or when nothing changed. */
     sync(threads: RawThread[]): IngestResult | null;
     /**
-     * Record an outbound Message this app just sent, so Instagram echoing it
-     * back doesn't create a duplicate.
+     * Record a reply this app just handed to the extension, under a
+     * LOCAL_MESSAGE_PREFIX id, until Instagram's copy of it takes its place.
      */
     recordOutbound(message: Message): InboxState;
+    /** Drop Messages by id: a reply that wasn't sent, when it is sent again. */
+    forget(ids: string[]): InboxState;
     /** Record a locally-changed Conversation (AI intent, status, labels). */
     recordConversation(conversation: Conversation): InboxState;
     /** Forget everything — used when the signed-in Operator changes. */
@@ -291,16 +342,11 @@ export function createInboxLog(): InboxLog {
     let messages: Message[] = [];
     /** Newest parked snapshot; earlier ones are superseded, as before. */
     let parked: RawThread[] | null = null;
-    const pendingEchoes = new Set<string>();
-    /** Instagram ids of echoes already matched to a local send. */
-    const suppressedIds = new Set<string>();
 
     const snapshot = (): InboxState => ({ conversations, messages });
 
     const merge = (threads: RawThread[]): IngestResult | null => {
-        const result = ingestThreads(
-            threads, conversations, messages, pendingEchoes, suppressedIds,
-        );
+        const result = ingestThreads(threads, conversations, messages);
         if (result.changedConversations.length === 0 && result.newMessages.length === 0) {
             return null;
         }
@@ -317,13 +363,19 @@ export function createInboxLog(): InboxLog {
         snapshot,
 
         hydrate(state) {
+            const stored = settleStoredCopies(state.messages);
             conversations = state.conversations;
-            messages = state.messages;
+            messages = stored.messages;
             hydrated = true;
 
             const replay = parked;
             parked = null;
-            return replay ? merge(replay) : null;
+            const merged = replay ? merge(replay) : null;
+            if (stored.settled.length === 0) return merged;
+            return {
+                ...(merged ?? { ...snapshot(), changedConversations: [], newMessages: [], newInbound: [], settled: [] }),
+                settled: [...stored.settled, ...(merged?.settled ?? [])],
+            };
         },
 
         sync(threads) {
@@ -337,7 +389,12 @@ export function createInboxLog(): InboxLog {
 
         recordOutbound(message) {
             messages = [...messages, message];
-            pendingEchoes.add(echoSignature(message.conversationId, message.text));
+            return snapshot();
+        },
+
+        forget(ids) {
+            const gone = new Set(ids);
+            messages = messages.filter((m) => !gone.has(m.id));
             return snapshot();
         },
 
@@ -353,8 +410,6 @@ export function createInboxLog(): InboxLog {
             conversations = [];
             messages = [];
             parked = null;
-            pendingEchoes.clear();
-            suppressedIds.clear();
         },
     };
 }

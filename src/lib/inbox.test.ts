@@ -149,34 +149,35 @@ describe('the move to Instagram\'s GraphQL inbox', () => {
   });
 });
 
-describe('echo suppression', () => {
-  it('drops one echo per optimistic send', () => {
-    const log = createInboxLog();
-    log.hydrate({ conversations: [], messages: [] });
-
-    const mine: Message = {
-      id: 'local_1', conversationId: 't1', direction: 'out',
-      text: 'ok', createdAt: '2026-01-01T09:00:00Z',
-    };
-    log.recordOutbound(mine);
-
-    // Instagram echoes it back under its own id.
-    const r = log.sync([thread('t1', [outbound('ig_1', 'ok')])]);
-
-    expect(r?.messages.filter((m) => m.text === 'ok')).toHaveLength(1);
-    expect(r?.messages[0].id).toBe('local_1');
+// The regression: a reply the app handed to the extension was written down
+// under a local id, and when Instagram showed it, Instagram's copy was thrown
+// away and the local one kept. So nothing in the Inbox could tell a reply
+// Instagram has from one only handed over, and after a reload the echo came
+// in again as a second copy, stored next to the first.
+describe('a reply the app sent', () => {
+  const mine = (id = 'local_1', text = 'ok', at = '2026-01-01T09:00:00Z'): Message => ({
+    id, conversationId: 't1', direction: 'out', text, createdAt: at,
   });
 
-  it('keeps a genuinely repeated message once the echo is consumed', () => {
+  it("is replaced by Instagram's copy once Instagram shows it, and only once", () => {
+    const log = createInboxLog();
+    log.hydrate({ conversations: [], messages: [] });
+    log.recordOutbound(mine());
+
+    const r = log.sync([thread('t1', [outbound('ig_1', 'ok', '2026-01-01T09:01:00Z')])]);
+
+    expect(r?.messages.filter((m) => m.text === 'ok').map((m) => m.id)).toEqual(['ig_1']);
+    expect(r?.newMessages.map((m) => m.id)).toEqual(['ig_1']);
+    expect(r?.settled).toEqual(['local_1']);
+  });
+
+  it('keeps a genuinely repeated message once its copy has come back', () => {
     // The old code kept a signature set built from ALL previous outbound
     // messages, so sending "ok" and later saying "ok" again swallowed the
     // second one forever.
     const log = createInboxLog();
     log.hydrate({ conversations: [], messages: [] });
-    log.recordOutbound({
-      id: 'local_1', conversationId: 't1', direction: 'out',
-      text: 'ok', createdAt: '2026-01-01T09:00:00Z',
-    });
+    log.recordOutbound(mine());
 
     log.sync([thread('t1', [outbound('ig_1', 'ok', '2026-01-01T09:01:00Z')])]);
     const r = log.sync([thread('t1', [
@@ -185,6 +186,39 @@ describe('echo suppression', () => {
     ])]);
 
     expect(r?.newMessages.map((m) => m.id)).toEqual(['ig_2']);
+    expect(r?.settled).toEqual([]);
+  });
+
+  it("is replaced after a reload too, when Instagram's copy arrives later", () => {
+    const log = createInboxLog();
+    log.hydrate({ conversations: [], messages: [mine()] });
+
+    const r = log.sync([thread('t1', [outbound('ig_1', 'ok', '2026-01-01T09:30:00Z')])]);
+
+    expect(r?.messages.map((m) => m.id)).toEqual(['ig_1']);
+    expect(r?.settled).toEqual(['local_1']);
+  });
+
+  it('is not shown twice when both copies were already stored', () => {
+    const log = createInboxLog();
+    const stored: Message = { ...mine(), id: 'ig_1', createdAt: '2026-01-01T09:01:00Z' };
+
+    const r = log.hydrate({ conversations: [], messages: [mine(), stored] });
+
+    expect(log.snapshot().messages.map((m) => m.id)).toEqual(['ig_1']);
+    expect(r?.settled).toEqual(['local_1']);
+  });
+
+  it("stays the app's own copy while Instagram doesn't have it", () => {
+    const log = createInboxLog();
+    log.hydrate({ conversations: [], messages: [] });
+    log.recordOutbound(mine('local_1', 'see you Tuesday'));
+
+    // An older message with the same words is not this reply.
+    const r = log.sync([thread('t1', [outbound('ig_0', 'see you Tuesday', '2025-12-01T09:00:00Z')])]);
+
+    expect(r?.messages.map((m) => m.id).sort()).toEqual(['ig_0', 'local_1']);
+    expect(r?.settled).toEqual([]);
   });
 });
 
