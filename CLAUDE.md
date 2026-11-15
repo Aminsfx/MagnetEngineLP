@@ -119,12 +119,18 @@ Removed as dead code (git history has them): `src/components/crm/*`, `src/lib/cs
   handed over looked exactly like one Instagram had. Never draw a
   `LOCAL_MESSAGE_PREFIX` Message as sent without asking `replyStatus`.
 - **Reading Instagram's page to send** — only through `MagnetSend` (`extension/igsend.js`),
-  never an English string in content.js. On 2026-11-07 a campaign ran from an account shown in
-  French ("Envoyer un message"), and the English-only lookup reported all 85 profiles as having
-  no Message button. So every profile opens at `profileUrl` (`?hl=en`), labels are matched in
-  many languages, login and not-found are read from the page's links, and the "no Message
-  button" reason carries what the page showed (`describePage`). Three of those in a row
-  (`noButtonStreak`) pause the campaign and put those DMs back at the front of the queue.
+  never an English string in content.js. **A DM goes out through Messages' search**
+  (owner, 2026-11-15; extension 1.12.0): the Sender Tab opens `inboxUrl` (`/direct/inbox/?hl=en`),
+  types the handle into the inbox's search box (or New message's, where the inbox has none),
+  opens the chat from the result whose username is *exactly* the handle (`findSearchResult`;
+  search lists namesakes first), and sends there. Until then it opened each profile and pressed
+  its Message button, and every profile that hid that button was skipped, though Messages
+  reaches the same person; on 2026-11-07 a page in French also made all 85 of a campaign's
+  profiles read as having none. Only New message, Chat and Send are matched by label, in many
+  languages; logged out is read from the page's links. Three DMs in a row whose person search
+  cannot find (`missStreak`) pause the campaign and put those DMs back at the front of the
+  queue. The Sender Tab's card shows no failure (owner, 2026-11-15): why a DM was not sent is
+  in the popup, and in the Inbox for a reply.
 - **Who the extension works for** — `AuthProvider` calls `shareSession` (protocol 4,
   `MAGNET_ENGINE_SESSION`) once auth has resolved. Until the extension hears a
   session its popup shows only Sign in / Create account and the Instagram inbox

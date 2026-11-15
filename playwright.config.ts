@@ -17,7 +17,7 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   // A send is paced like a person (seconds of waiting between steps), and a
-  // profile with no Message button is waited on for 20 s before it is given up.
+  // handle that search cannot find is waited on for 15 s before it is given up.
   timeout: 240_000,
   expect: { timeout: 90_000 },
   reporter: [['list']],

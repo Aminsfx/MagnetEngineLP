@@ -341,7 +341,7 @@ if (window.location.hostname.includes("instagram.com") && !window.__magnetInboxP
 
 // ── Instagram: the Sender Tab ───────────────────────────────────
 // The background worker sends every DM of a campaign from ONE tab (the
-// Sender Tab), navigating it from profile to profile. On each page load this
+// Sender Tab), opening Messages afresh for each one. On each page load this
 // script asks whether it is that tab. If it is, it covers the page with an
 // overlay that blocks the Operator's clicks and keys, and runs the DM the
 // worker hands it. Every other instagram.com tab stays untouched.
@@ -423,8 +423,6 @@ if (window.location.hostname.includes("instagram.com")) {
             .now { font-size: 13.5px; font-weight: 600; color: #fff; }
             .num { font-family: 'ME Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
             .meta { margin-top: 4px; font-size: 12px; color: #a3a3a3; }
-            .why { margin-top: 12px; font-size: 12px; line-height: 1.45; color: #f87171; }
-            .why[hidden] { display: none; }
             .bar { margin-top: 12px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
             .fill { height: 100%; background: #fff; border-radius: 4px; transform-origin: left; transition: transform 0.6s ease; }
             .actions { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -479,11 +477,6 @@ if (window.location.hostname.includes("instagram.com")) {
                 `<span class="num">${sent}</span> of <span class="num">${total}</span> sent · <span class="num">${Math.max(0, total - sent)}</span> to go`;
             root.querySelector('.fill').style.transform = `scaleX(${total ? sent / total : 0})`;
             root.querySelector('button').disabled = isPaused;
-            const why = root.querySelector('.why');
-            why.textContent = state.lastFailure
-                ? `Last one not sent: @${state.lastFailure.handle} — ${state.lastFailure.reason}`
-                : '';
-            why.hidden = !state.lastFailure;
 
             if (!document.title.startsWith(TITLE_PREFIX)) document.title = TITLE_PREFIX + document.title;
         }
@@ -492,7 +485,10 @@ if (window.location.hostname.includes("instagram.com")) {
             return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        const KEYS = ['campaignQueue', 'originalTotal', 'isExecuting', 'currentTask', 'nextAlarmTime', 'isPaused', 'lastFailure'];
+        // No failure is shown here (owner, 2026-11-15): this card says what
+        // the tab is doing. Why a DM was not sent is in the popup, and in the
+        // Inbox for a reply.
+        const KEYS = ['campaignQueue', 'originalTotal', 'isExecuting', 'currentTask', 'nextAlarmTime', 'isPaused'];
 
         function onStorage(changes, area) {
             if (area !== 'local') return;
@@ -526,7 +522,6 @@ if (window.location.hostname.includes("instagram.com")) {
                             <div class="now"></div>
                             <div class="meta"></div>
                             <div class="bar"><div class="fill"></div></div>
-                            <div class="why" hidden></div>
                         </div>
                         <div class="actions">
                             <span class="hint">Pausing gives you this tab back.</span>
@@ -567,31 +562,9 @@ if (window.location.hostname.includes("instagram.com")) {
         return { mount };
     })();
 
-    // ── Utility: Wait for a DOM element via MutationObserver ────
-    function waitForElement(selector, timeout = 20000) {
-        return new Promise((resolve, reject) => {
-            const existing = document.querySelector(selector);
-            if (existing) return resolve(existing);
-
-            const observer = new MutationObserver(() => {
-                const el = document.querySelector(selector);
-                if (el) {
-                    observer.disconnect();
-                    resolve(el);
-                }
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-
-            setTimeout(() => {
-                observer.disconnect();
-                reject(new Error(`Timeout: ${selector}`));
-            }, timeout);
-        });
-    }
-
     // ── Reading Instagram's page ────────────────────────────────
-    // Message button, Send button, logged out, not found: all in igsend.js,
-    // loaded before this file, and none of them tied to one language.
+    // Search box, search result, Chat, Send, logged out: all in igsend.js,
+    // loaded before this file.
     // Only the control Instagram itself labels Send counts. There used to be
     // an "any small icon button near the textbox" fallback; on the profile
     // chat popup that is the floating Messages bubble, which it clicked and
@@ -608,9 +581,29 @@ if (window.location.hostname.includes("instagram.com")) {
     }
 
     const composerText = () => {
-        const box = document.querySelector('div[role="textbox"][contenteditable="true"]');
+        const box = Page.findComposer(document);
         return box ? (box.textContent || box.innerText || '').trim() : '';
     };
+
+    // Types into Messages' search box, and returns the box it typed into: a
+    // click can swap the box for a fresh one (a search that opens on focus),
+    // so it is looked for again after the click. Inserted the way a keyboard
+    // would, so Instagram's own page sees the change and searches; if that
+    // leaves the box unchanged, the value is set and announced instead.
+    async function typeIntoSearch(box, text) {
+        box.focus();
+        box.click();
+        await sleep(400);
+        const input = Page.findSearchBox(document) || box;
+        input.focus();
+        input.select();
+        document.execCommand('insertText', false, text);
+        if (input.value !== text) {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        return input;
+    }
 
     // Instagram empties the composer once it has taken the message. Until it
     // has, nothing was sent — whatever we clicked.
@@ -650,9 +643,10 @@ if (window.location.hostname.includes("instagram.com")) {
     // ── Signal task completion to background ─────────────────────
     // The worker clears the task and decides what the tab does next; the page
     // never closes itself any more — it is the next DM's tab too.
-    // `reason` is shown to the Operator (overlay + popup) when it wasn't sent.
-    // `code` names a failure the worker acts on rather than just shows
-    // ('no_message_button' counts toward pausing the campaign).
+    // `reason` is shown to the Operator (popup, and the Inbox for a reply)
+    // when it wasn't sent. `code` names a failure the worker acts on rather
+    // than just shows ('not_in_search' and 'no_search_box' count toward
+    // pausing the campaign).
     function reportComplete(result, handle, reason, code) {
         console.log(`[MagnetEngine] Reporting ${result} for @${handle}${reason ? ` — ${reason}` : ''}`);
         chrome.runtime.sendMessage({
@@ -669,17 +663,18 @@ if (window.location.hostname.includes("instagram.com")) {
         console.log("[MagnetEngine] ═══ EXECUTING TASK ═══");
         console.log("[MagnetEngine] Target: @" + task.handle);
 
+        // Searched and matched as Instagram writes usernames: lowercase, no @.
+        const handle = String(task.handle || '').trim().replace(/^@/, '').toLowerCase();
+
         try {
-            // ── STEP 1: Wait for the profile to render ──────────
+            // ── STEP 1: Wait for Messages to render ─────────────
             // The Sender Tab is usually in the background, where Chrome slows
-            // everything down, so the profile's buttons can arrive well after
+            // everything down, so the page's controls can arrive well after
             // the page itself. Wait for one of the things this step decides
-            // on rather than for a fixed time, then give the header a moment
-            // to finish so a Follow button that lands first can't end the wait
-            // before the Message button beside it.
+            // on rather than for a fixed time.
             await sleep(2500);
             const settled = await waitFor(
-                () => Page.findMessageButton(document) || Page.isUnavailable(document) || Page.isLoggedOut(document),
+                () => Page.isLoggedOut(document) || Page.findSearchBox(document) || Page.findNewMessageButton(document),
                 20000,
             );
             if (settled) await sleep(1000);
@@ -693,42 +688,54 @@ if (window.location.hostname.includes("instagram.com")) {
                 return;
             }
 
-            // ── STEP 2: Find and click "Message" button ─────────
-            // A deleted or renamed account (or one that blocked the Operator)
-            // serves Instagram's "page isn't available" page instead.
-            if (Page.isUnavailable(document)) {
-                console.error("[MagnetEngine] ABORT: profile doesn't exist.");
-                reportComplete('skipped', task.handle, "this profile doesn't exist any more (deleted, renamed, or it blocked you).");
-                return;
-            }
+            // A prompt over Messages ("Turn on notifications") is declined.
+            const notNow = Page.findNotNowButton(document);
+            if (notNow) { notNow.click(); await sleep(800); }
 
-            const messageBtn = Page.findMessageButton(document);
-            if (!messageBtn) {
-                const seen = Page.describePage(document);
-                console.error(`[MagnetEngine] ABORT: 'Message' button not found (${seen}).`);
-                reportComplete('skipped', task.handle,
-                    `no Message button on their profile (private, restricted, or messages turned off). Instagram showed: ${seen}.`,
-                    'no_message_button');
-                return;
-            }
-            messageBtn.click();
-
-            // ── STEP 3: Wait for textbox to appear ──────────────
-            let textbox;
-            try {
-                textbox = await waitForElement('div[role="textbox"][contenteditable="true"]', 15000);
-            } catch {
-                try {
-                    textbox = await waitForElement('textarea', 5000);
-                } catch {
-                    try {
-                        textbox = await waitForElement('div[contenteditable="true"]', 5000);
-                    } catch {
-                        console.error("[MagnetEngine] ABORT: Textbox never appeared.");
-                        reportComplete('failed', task.handle, 'the chat box never opened after clicking Message.');
-                        return;
-                    }
+            // ── STEP 2: Messages' search box ────────────────────
+            // The one at the top of the inbox, or, where Instagram shows none,
+            // the one New message opens.
+            let box = Page.findSearchBox(document);
+            if (!box) {
+                const compose = Page.findNewMessageButton(document);
+                if (compose) {
+                    compose.click();
+                    box = await waitFor(() => Page.findSearchBox(document), 10000);
                 }
+            }
+            if (!box) {
+                console.error(`[MagnetEngine] ABORT: no search box in Messages (${Page.describePage(document)}).`);
+                reportComplete('failed', task.handle, "Instagram's Messages page showed no search box.", 'no_search_box');
+                return;
+            }
+
+            // ── STEP 3: Search for them, and open the right one ─
+            // Only the result whose username is exactly this handle. Searching
+            // lists namesakes too (maya, maya.builds, maya.builds.co), and any
+            // of them would take the DM.
+            const typedInto = await typeIntoSearch(box, handle);
+            const result = await waitFor(() => Page.findSearchResult(document, handle, typedInto), 15000);
+            if (!result) {
+                console.error(`[MagnetEngine] ABORT: @${handle} not found in Messages search (${Page.describePage(document)}).`);
+                reportComplete('skipped', task.handle,
+                    "this account didn't come up in Instagram's search (deleted, renamed, or it blocked you).",
+                    'not_in_search');
+                return;
+            }
+            await sleep(800);
+            result.click();
+
+            // From the inbox's search a result opens the chat. From New message
+            // it is picked, and Chat opens it.
+            const next = await waitFor(() => Page.findComposer(document) || Page.findChatButton(document), 10000);
+            if (next && next !== Page.findComposer(document)) next.click();
+
+            // ── STEP 3.5: Wait for the chat box ─────────────────
+            const textbox = await waitFor(() => Page.findComposer(document), 15000);
+            if (!textbox) {
+                console.error(`[MagnetEngine] ABORT: the chat never opened (${Page.describePage(document)}).`);
+                reportComplete('failed', task.handle, "found them in Instagram's search, but their chat didn't open.");
+                return;
             }
             await sleep(2000);
 

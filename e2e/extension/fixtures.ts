@@ -1,7 +1,7 @@
 import { test as base, chromium, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { langFor, profilePage } from './fakeInstagram';
+import { messagesPage, type Lang, type Layout } from './fakeInstagram';
 
 /**
  * The real extension (the `extension/` folder, unpacked) in a real Chromium,
@@ -54,6 +54,7 @@ export const PROTOCOL = loadProtocol();
 
 /** One message the stand-in Instagram accepted. */
 export interface SentMessage {
+  /** Whose chat it was typed into. */
   handle: string;
   text: string;
   lang: string;
@@ -84,8 +85,14 @@ export interface Harness {
   received(type: string): Promise<Array<Record<string, unknown>>>;
   /** Every message Instagram accepted, in order. */
   sent: SentMessage[];
-  /** Every profile URL the Sender Tab was sent to, in order. */
+  /** Every Instagram page the Sender Tab was sent to, in order. */
   opened: string[];
+  /**
+   * How the stand-in Instagram serves Messages from the next page load on:
+   * its layout ('search' by default) and, to stand for an Instagram that
+   * ignores ?hl=en, a language it keeps whatever the URL asks.
+   */
+  instagram(options: { layout?: Layout; lang?: Lang }): void;
   /** The extension's own stored state. */
   storage(): Promise<Record<string, unknown>>;
   /** Change the extension's stored state, as the popup's Pause does. */
@@ -117,6 +124,7 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
   harness: async ({ context }, use) => {
     const sent: SentMessage[] = [];
     const opened: string[] = [];
+    const served: { layout: Layout; lang?: Lang } = { layout: 'search' };
 
     await context.route('https://www.instagram.com/**', async (route) => {
       const request = route.request();
@@ -131,16 +139,15 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
         await route.fulfill({ status: 204 });
         return;
       }
-      const handle = decodeURIComponent(url.pathname.split('/').filter(Boolean)[0] ?? '');
-      if (url.pathname === BLANK) {
+      if (!url.pathname.startsWith('/direct/')) {
+        // The Sender only ever opens Messages; anything else is a blank page.
+        if (url.pathname !== BLANK) opened.push(request.url());
         await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Instagram</title><main></main>' });
         return;
       }
       opened.push(request.url());
-      await route.fulfill({
-        contentType: 'text/html; charset=utf-8',
-        body: profilePage(handle, langFor(handle, url.searchParams.get('hl'))),
-      });
+      const lang = served.lang ?? (url.searchParams.get('hl') === 'en' ? 'en' : 'fr');
+      await route.fulfill({ contentType: 'text/html; charset=utf-8', body: messagesPage(lang, served.layout) });
     });
 
     await context.route(`${DASHBOARD}**`, (route) =>
@@ -195,6 +202,9 @@ export const test = base.extend<{ context: BrowserContext; harness: Harness }>({
       sent,
       opened,
       dialogs,
+      instagram(options) {
+        Object.assign(served, options);
+      },
       async handOff(leads, options = {}) {
         const pause = options.pauseMinutes ?? 0.01;
         await dashboard.evaluate(
