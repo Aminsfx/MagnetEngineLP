@@ -796,7 +796,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ config, onUpdateCo
                                         <h3 id="settings-autopilot-label" className="text-meta font-semibold text-neutral-200">Autopilot</h3>
                                         <p id="settings-autopilot-hint" className="mt-0.5 text-meta text-neutral-400">
                                             {config.autopilot
-                                                ? 'On. The AI answers new messages without waiting for you, while a dashboard tab is open, paced by your daily limit.'
+                                                ? 'On. The AI answers the people you switched Autopilot on for in the Inbox, without waiting for you, while a dashboard tab is open. Everyone else waits for you.'
                                                 : 'Off. Every reply waits for you to approve it in the Inbox.'}
                                         </p>
                                     </div>

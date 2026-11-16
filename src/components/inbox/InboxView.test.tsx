@@ -33,6 +33,8 @@ function renderInbox({
     extraMessages = (_c: Conversation[]): Message[] => [],
     delivery = {} as Record<string, Delivery>,
     onResendReply = vi.fn(),
+    cfg = config,
+    onUpdateConfig = vi.fn(),
 } = {}) {
     const demo = demoInbox();
     const conversations = demo.conversations;
@@ -47,7 +49,7 @@ function renderInbox({
                 messages={messages}
                 leads={leads}
                 onSaveDeal={onSaveDeal}
-                config={config}
+                config={cfg}
                 detected={null}
                 syncedAt={syncedAt}
                 onGenerateReply={onGenerateReply}
@@ -56,7 +58,7 @@ function renderInbox({
                 onResendReply={onResendReply}
                 onUpdateConversation={onUpdateConversation}
                 onMarkConversation={onMarkConversation}
-                onUpdateConfig={vi.fn()}
+                onUpdateConfig={onUpdateConfig}
                 onDisconnectInstagram={vi.fn()}
             />
         </ToastProvider>
@@ -356,5 +358,33 @@ describe('a reply the app handed to the extension', () => {
         await userEvent.click(row(/@maya-builds\.coaching/));
 
         expect(await screen.findByText('Not on Instagram yet')).toBeInTheDocument();
+    });
+});
+
+// Autopilot answers only the people the Operator switched it on for (owner,
+// 2026-11-16). It used to answer everyone who wrote in.
+describe('autopilot for one person', () => {
+    it('is off for everyone until the Operator switches it on, and the switch saves that person', async () => {
+        const onUpdateConfig = vi.fn();
+        renderInbox({ cfg: { ...config, autopilot: true }, onUpdateConfig });
+        expect(screen.getByText(/it answers nobody yet/)).toBeInTheDocument();
+        await userEvent.click(row(/@maya-builds\.coaching/));
+        const sw = screen.getByRole('switch', { name: 'Autopilot for @maya-builds.coaching' });
+        expect(sw).toHaveAttribute('aria-checked', 'false');
+        await userEvent.click(sw);
+        expect(onUpdateConfig).toHaveBeenCalledWith(expect.objectContaining({ autopilotHandles: ['maya-builds.coaching'] }));
+    });
+
+    it('marks the people it is on for, and says when autopilot itself is off', async () => {
+        renderInbox({ cfg: { ...config, autopilot: false, autopilotHandles: ['maya-builds.coaching'] } });
+        expect(within(row(/@maya-builds\.coaching/)).getByRole('img', { name: 'Autopilot on' })).toBeInTheDocument();
+        await userEvent.click(row(/@maya-builds\.coaching/));
+        expect(screen.getByRole('switch', { name: 'Autopilot for @maya-builds.coaching' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByText(/Autopilot is off for the Inbox/)).toBeInTheDocument();
+    });
+
+    it('counts who it answers', () => {
+        renderInbox({ cfg: { ...config, autopilot: true, autopilotHandles: ['maya-builds.coaching'] } });
+        expect(screen.getByText(/you switched it on for/)).toHaveTextContent('1 person you switched it on for');
     });
 });

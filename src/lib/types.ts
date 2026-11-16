@@ -152,6 +152,10 @@ export interface AppConfig {
     // Autopilot: auto-send AI replies to new inbound DMs while a dashboard tab
     // is open (paced by the DM delay + dailySendCap). Off = human approval.
     autopilot?: boolean;
+    // Who autopilot answers: the handles the Operator switched it on for in
+    // the Inbox (lowercase, no @). Nobody else gets an AI reply on its own.
+    // Read and changed only through src/lib/autopilot.ts.
+    autopilotHandles?: string[];
     // The Instagram account this Operator connected. The Inbox takes in a
     // snapshot from the extension only when it was read from this account, so
     // whoever else is logged in to instagram.com in the same browser never
