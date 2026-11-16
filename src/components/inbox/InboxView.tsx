@@ -11,6 +11,7 @@ import { triage, byPriority, PRIORITY_LABEL, type Priority, type Triage } from '
 import { canonicalHandle } from '../../lib/intake';
 import { CARD_BEZEL } from '../../lib/theme';
 import { readerState } from '../../lib/inbox';
+import { isAutopilotPicked, withAutopilotPick } from '../../lib/autopilot';
 import { ConversationRow, timeAgo } from './ConversationRow';
 import { OpenConversation } from './OpenConversation';
 
@@ -257,6 +258,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
     fold();
   };
 
+  // People in this Inbox autopilot answers.
+  const pickedCount = useMemo(
+    () => new Set(conversations.filter((c) => isAutopilotPicked(config, c.handle)).map((c) => c.handle.toLowerCase())).size,
+    [conversations, config],
+  );
+
   const toggleAutopilot = async () => {
     const enabled = !config.autopilot;
     await onUpdateConfig({ ...config, autopilot: enabled });
@@ -297,7 +304,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
           role="switch"
           aria-checked={!!config.autopilot}
           onClick={toggleAutopilot}
-          title="When on, the AI writes and sends replies to new inbound DMs without you reading them first, while this dashboard tab is open"
+          title="When on, the AI writes and sends replies to the people you switched Autopilot on for, without you reading them first, while this dashboard tab is open"
           className={`flex-none inline-flex items-center gap-2.5 pl-3.5 pr-2 py-1.5 rounded-full border text-meta font-medium transition-colors ${
             config.autopilot
               ? 'border-white/30 bg-white/[0.08] text-white'
@@ -355,7 +362,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neutral-200 opacity-75" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
           </span>
-          Autopilot is sending AI replies without your review while this dashboard tab is open. Turn it off, or close this tab, to stop it.
+          <span>
+            {pickedCount > 0
+              ? <>Autopilot is answering the <span className="font-mono tabular-nums">{pickedCount}</span> {pickedCount === 1 ? 'person' : 'people'} you switched it on for, without your review, while this dashboard tab is open. Everyone else waits for you.</>
+              : 'Autopilot is on, but it answers nobody yet. Open a conversation and switch Autopilot on for that person.'}
+          </span>
         </div>
       )}
 
@@ -431,7 +442,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 </h2>
                 <ul>
                   {items.map(({ c, t }) => (
-                    <ConversationRow key={c.id} conversation={c} triage={t} open={c.id === openId} onToggle={toggle}>
+                    <ConversationRow key={c.id} conversation={c} triage={t} open={c.id === openId} onToggle={toggle} autopilot={isAutopilotPicked(config, c.handle)}>
                       {c.id === openId && (
                         <OpenConversation
                           key={c.id}
@@ -454,6 +465,14 @@ export const InboxView: React.FC<InboxViewProps> = ({
                           onClose={fold}
                           delivery={delivery}
                           onResend={(m) => onResendReply?.(c, m)}
+                          autopilot={{
+                            on: !!config.autopilot,
+                            picked: isAutopilotPicked(config, c.handle),
+                            onChange: (picked) => {
+                              onUpdateConfig(withAutopilotPick(config, c.handle, picked));
+                              posthogCapture('autopilot_person_toggled', { enabled: picked });
+                            },
+                          }}
                         />
                       )}
                     </ConversationRow>

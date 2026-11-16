@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Tag, X, Calendar, Check, ArrowRight, ArrowUpRight, Plus, Star } from 'lucide-react';
+import { Send, Tag, X, Calendar, Check, ArrowRight, ArrowUpRight, Plus, Star, Bot } from 'lucide-react';
 import type { Conversation, Lead, Message } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
 import type { Suggestion } from '../../lib/copilot';
@@ -61,7 +61,12 @@ export const OpenConversation: React.FC<{
   delivery?: Record<string, Delivery>;
   /** Hand a reply that wasn't sent to the extension again. */
   onResend?: (message: Message) => void;
-}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onMark, onSaveDeal, next, onNext, onClose, delivery, onResend }) => {
+  /**
+   * Whether autopilot answers this person (`picked`), and whether autopilot
+   * is on for the Inbox at all (`on`). Absent: no switch is shown.
+   */
+  autopilot?: { on: boolean; picked: boolean; onChange: (picked: boolean) => void };
+}> = ({ conversation: c, triage: t, thread, lead, copilotCache, generate, onSend, onUpdate, onMark, onSaveDeal, next, onNext, onClose, delivery, onResend, autopilot }) => {
   const toast = useToast();
   const [draft, setDraft] = useState('');
   const [labelInput, setLabelInput] = useState('');
@@ -266,6 +271,35 @@ export const OpenConversation: React.FC<{
         )}
 
         <DealPanel conversation={c} lead={lead} onSave={onSaveDeal} />
+
+        {autopilot && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autopilot.picked}
+              aria-label={`Autopilot for @${c.handle}`}
+              onClick={() => autopilot.onChange(!autopilot.picked)}
+              title={autopilot.picked
+                ? `The AI writes and sends replies to @${c.handle} without you reading them first. Click to answer them yourself.`
+                : `Let the AI answer @${c.handle} for you, starting with any message they're waiting on.`}
+              className={autopilot.picked
+                ? 'inline-flex items-center gap-2 pl-2.5 pr-1.5 py-1.5 rounded-full border border-white/30 bg-white/[0.08] text-meta font-medium text-white transition-colors whitespace-nowrap'
+                : `${ROW_PILL} gap-2 pr-1.5`}
+            >
+              <Bot className="w-3.5 h-3.5" aria-hidden />
+              Autopilot
+              <span aria-hidden className={`relative w-6 h-3.5 rounded-full transition-colors ${autopilot.picked ? 'bg-white' : 'bg-white/15'}`}>
+                <span className={`absolute top-[2px] left-[2px] w-2.5 h-2.5 rounded-full transition-transform duration-200 ${
+                  autopilot.picked ? 'translate-x-[10px] bg-surface' : 'bg-white'
+                }`} />
+              </span>
+            </button>
+            {autopilot.picked && !autopilot.on && (
+              <span className="text-meta text-neutral-400">Autopilot is off for the Inbox. Switch it on at the top to start.</span>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <Tag className="w-3.5 h-3.5 text-neutral-400" aria-hidden />

@@ -24,6 +24,7 @@ import { untilLoaded } from '../lib/retry';
 import { saveFailedNotice } from '../lib/saveFailed';
 import { readOutcome } from '../lib/outcome';
 import type { Delivery } from '../lib/delivery';
+import { autopilotCall, isAutopilotPicked } from '../lib/autopilot';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
 import { DASHBOARD_ROUTES, INBOX_DEMO, INBOX_HIDDEN, INBOX_PAUSED, type DashboardPath } from '../lib/routes';
 import { todayCounts, headline } from '../lib/today';
@@ -152,7 +153,14 @@ const DashboardShell: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   // What the extension has said about each reply handed to it, by Message id.
   // A reply used to look sent the moment it was handed over.
-  const [delivery, setDelivery] = useState<Record<string, Delivery>>({});
+  const [delivery, setDeliveryState] = useState<Record<string, Delivery>>({});
+  // Autopilot reads it between renders (two inbox reads can land before the
+  // next one), so every change goes through here and the ref is never behind.
+  const deliveryRef = useRef<Record<string, Delivery>>({});
+  const setDelivery = useCallback((change: (prev: Record<string, Delivery>) => Record<string, Delivery>) => {
+    deliveryRef.current = change(deliveryRef.current);
+    setDeliveryState(deliveryRef.current);
+  }, []);
   // Whoever the extension last saw logged in to instagram.com in this browser.
   // Not necessarily this Operator — see `instagramAccount` on AppConfig.
   const [igViewer, setIgViewer] = useState<InstagramViewer | null>(null);
@@ -194,7 +202,7 @@ const DashboardShell: React.FC = () => {
       .then(() => store.removeMessages(settled))
       .catch((error: unknown) => saveFailed('saving the inbox', error));
     if (settled.length) setDelivery((prev) => without(prev, settled));
-  }, [store, saveFailed]);
+  }, [store, saveFailed, setDelivery]);
 
   // Load data from Supabase (or localStorage fallback) on mount.
   // Keyed on the user ID (not the user object) so token refreshes on tab
@@ -334,9 +342,15 @@ const DashboardShell: React.FC = () => {
         if (d.handle) outreachRef.current.markSent([{ handle: d.handle, sentAt: new Date().toISOString() }]);
         // A reply, by the id it was handed over with (protocol 5).
         const ref = d.ref;
-        if (ref) setDelivery((prev) => (prev[ref] ? { ...prev, [ref]: { state: 'sent' } } : prev));
+        if (ref) {
+          setDelivery((prev) => (prev[ref] ? { ...prev, [ref]: { state: 'sent' } } : prev));
+          autopilotRef.current([]);   // someone who wrote again while it waited
+        }
       } else if (d.type === EXT_TO_APP.NOT_SENT) {
-        if (d.ref) notSentRef.current(d.ref, d.reason || 'no reason given.');
+        if (d.ref) {
+          notSentRef.current(d.ref, d.reason || 'no reason given.');
+          autopilotRef.current([]);
+        }
       } else if (d.type === EXT_TO_APP.INBOX) {
         const viewer = d.viewer?.id ? d.viewer : null;
         if (viewer) {
@@ -351,7 +365,9 @@ const DashboardShell: React.FC = () => {
         if (d.syncedAt !== undefined) setIgRead({ igId: connected.id, at: d.syncedAt });
         const threads = ((d.threads ?? []) as RawThread[]).map((t) => ({ ...t, account: connected.id }));
         const newInbound = ingestRef.current(threads);
-        if (newInbound.length) autopilotRef.current(newInbound);
+        // Every read, not only one with new messages: Instagram's copy of a
+        // reply settling is also what an old extension's "sent" looks like.
+        autopilotRef.current(newInbound);
       }
     });
 
@@ -362,7 +378,7 @@ const DashboardShell: React.FC = () => {
       stopListening();
       window.removeEventListener('focus', requestExtensionSync);
     };
-  }, []);
+  }, [setDelivery]);
 
   // A snapshot that arrived before the saved config loaded — or before the
   // Operator connected their Instagram — was turned away above. Ask again.
@@ -411,13 +427,22 @@ const DashboardShell: React.FC = () => {
   // Settings save as the Operator types, from callers that never await, so a
   // failure is caught and said here rather than left to reject unheard.
   const handleUpdateConfig = useCallback(async (newConfig: AppConfig) => {
+    const before = configRef.current;
+    configRef.current = newConfig;
     setConfig(newConfig);
+    // Autopilot just switched on, or someone was just picked for it: answer
+    // what those people are already waiting on, not only their next message.
+    if (newConfig.autopilot) {
+      const nowPicked = inbox.snapshot().conversations.filter((c) =>
+        isAutopilotPicked(newConfig, c.handle) && (!before.autopilot || !isAutopilotPicked(before, c.handle)));
+      if (nowPicked.length) autopilotRef.current(nowPicked);
+    }
     try {
       await store.saveConfig(newConfig);
     } catch (error: unknown) {
       saveFailed('saving settings', error);
     }
-  }, [store, saveFailed]);
+  }, [store, saveFailed, inbox]);
 
   // ─── Inbox (AI SDR) handlers ────────────────────────────────────────────────
 
@@ -550,7 +575,7 @@ const DashboardShell: React.FC = () => {
 
     toast.success(`Reply queued to @${conv.handle}`);
     return true;
-  }, [toast, inbox, persistInbox]);
+  }, [toast, inbox, persistInbox, setDelivery]);
 
   /**
    * The extension gave up on a reply. It was shown as sent until now, and the
@@ -568,7 +593,7 @@ const DashboardShell: React.FC = () => {
     setConversations(inbox.recordConversation(reopened).conversations);
     persistInbox([reopened], []);
     toast.error(`Your reply to @${conv.handle} wasn't sent: ${reason}`);
-  }, [inbox, persistInbox, toast]);
+  }, [inbox, persistInbox, toast, setDelivery]);
 
   useEffect(() => { notSentRef.current = handleNotSent; }, [handleNotSent]);
 
@@ -578,24 +603,55 @@ const DashboardShell: React.FC = () => {
     setMessages(inbox.forget([failed.id]).messages);
     setDelivery((prev) => without(prev, [failed.id]));
     store.removeMessages([failed.id]).catch((error: unknown) => saveFailed('saving the inbox', error));
-  }, [handleSendReply, inbox, store, saveFailed]);
+  }, [handleSendReply, inbox, store, saveFailed, setDelivery]);
 
   /** Autopilot: when new inbound arrives and autopilot is on, draft + auto-send
    *  a reply (paced/capped by the extension). Skips clearly-uninterested leads.*/
+  //  Called on every inbox read and every reply the extension reports sent:
+  //  a conversation that had to wait for its last reply to go out is looked
+  //  at again then (see `autopilotCall`).
+  const autopilotWaiting = useRef(new Set<string>());   // a reply of ours still with the extension
+  const autopilotWriting = useRef(new Set<string>());   // a reply being written right now
   const handleAutopilot = useCallback(async (newInbound: Conversation[]) => {
-    if (INBOX_PAUSED || !configRef.current.autopilot) return;
-    for (const conv of newInbound) {
-      const latest = inbox.snapshot().conversations.find((c) => c.id === conv.id) ?? conv;
-      if (!latest.needsReply || latest.status === 'closed') continue;
+    const cfg = configRef.current;
+    if (INBOX_PAUSED || !cfg.autopilot) return;
+    const ids = [...new Set([...newInbound.map((c) => c.id), ...autopilotWaiting.current])];
+    for (const id of ids) {
+      if (autopilotWriting.current.has(id)) continue;
+      const state = inbox.snapshot();
+      const latest = state.conversations.find((c) => c.id === id) ?? newInbound.find((c) => c.id === id);
+      if (!latest) { autopilotWaiting.current.delete(id); continue; }
+      const call = autopilotCall(latest, state.messages, {
+        picked: isAutopilotPicked(cfg, latest.handle),
+        delivery: deliveryRef.current,
+      });
+      if (call === 'wait') { autopilotWaiting.current.add(id); continue; }
+      autopilotWaiting.current.delete(id);
+      if (call === 'skip') continue;
+
+      autopilotWriting.current.add(id);
+      const current = () => inbox.snapshot().conversations.find((c) => c.id === id) ?? latest;
+      const lastHeard = () => inbox.snapshot().messages
+        .filter((m) => m.conversationId === id && m.direction === 'in')
+        .reduce((at, m) => (m.createdAt > at ? m.createdAt : at), '');
       try {
-        const result = await handleGenerateReply(latest);
+        // A message that lands while the reply is being written isn't in the
+        // history it was written from: write it again, from the whole thread.
+        let heard = lastHeard();
+        let result = await handleGenerateReply(current());
+        for (let again = 0; again < 2 && lastHeard() !== heard; again++) {
+          heard = lastHeard();
+          result = await handleGenerateReply(current());
+        }
         if (result.intent === 'not_interested') continue; // don't chase
-        await handleSendReply(latest, result.reply);
+        await handleSendReply(current(), result.reply);
       } catch (e) {
         // Said on screen, not only in the console: a reply autopilot couldn't
         // write is a person left waiting, and nothing else would show it.
-        console.error('[autopilot] failed for', conv.handle, e);
-        toast.error(`Autopilot couldn't reply to @${conv.handle}: ${e instanceof Error ? e.message : 'something went wrong.'}`);
+        console.error('[autopilot] failed for', latest.handle, e);
+        toast.error(`Autopilot couldn't reply to @${latest.handle}: ${e instanceof Error ? e.message : 'something went wrong.'}`);
+      } finally {
+        autopilotWriting.current.delete(id);
       }
     }
   }, [handleGenerateReply, handleSendReply, inbox, toast]);

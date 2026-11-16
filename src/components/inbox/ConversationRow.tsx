@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Bot, ChevronDown } from 'lucide-react';
 import type { Conversation } from '../../lib/types';
 import { QUALIFICATION_LABEL, type Triage } from '../../lib/triage';
 
@@ -59,9 +59,11 @@ export const ConversationRow: React.FC<{
   triage: Triage;
   open: boolean;
   onToggle: (c: Conversation) => void;
+  /** Autopilot is on for this person: its replies go without the Operator reading them. */
+  autopilot?: boolean;
   /** The open conversation, rendered under the row while `open`. */
   children?: React.ReactNode;
-}> = ({ conversation: c, triage: t, open, onToggle, children }) => {
+}> = ({ conversation: c, triage: t, open, onToggle, autopilot, children }) => {
   const ref = useRef<HTMLLIElement>(null);
   const seen = useRef({ at: c.lastMessageAt, open });
 
@@ -100,8 +102,9 @@ export const ConversationRow: React.FC<{
         </span>
 
         <span className="col-start-2 row-start-1 min-w-0">
-          <span className={`block truncate text-body-sm leading-snug ${lit || open ? 'font-semibold text-white' : 'font-medium text-neutral-100'}`}>
-            {title}
+          <span className={`flex items-center gap-1.5 min-w-0 text-body-sm leading-snug ${lit || open ? 'font-semibold text-white' : 'font-medium text-neutral-100'}`}>
+            <span className="truncate">{title}</span>
+            {autopilot && <Bot className="flex-none w-3.5 h-3.5 text-neutral-300" role="img" aria-label="Autopilot on" />}
           </span>
           {c.name?.trim() && <span className="block truncate font-mono text-label text-neutral-400">@{c.handle}</span>}
         </span>
