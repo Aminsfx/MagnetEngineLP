@@ -1,67 +1,126 @@
 /**
- * A stand-in for the two Instagram screens the Sender touches: a profile, and
- * the chat that opens from its Message button.
+ * A stand-in for the Instagram screens the Sender touches: Messages, its
+ * search, and the chat a search result opens.
  *
  * It is not a copy of Instagram. It has the things the Sender relies on and
- * the ways they go wrong: the profile's buttons arrive late, the page may be
- * in French, the Send control only exists once something is typed, and a
- * message counts as sent when the composer empties. What the handle starts
- * with picks the page:
+ * the ways they go wrong: the page's controls arrive late, search answers
+ * after a pause and lists namesakes above the account asked for, the page may
+ * be in French, the Send control only exists once something is typed, and a
+ * message counts as sent when the composer empties.
  *
- *   fr.<name>     in French whatever ?hl= says (an Instagram that ignores it)
- *   nomsg.<name>  a profile that only offers Follow
- *   gone.<name>   "Sorry, this page isn't available."
- *   anything else English with ?hl=en, French without it
+ * Two layouts, as Instagram has served both:
+ *
+ *   'search'  a search box at the top of the inbox; a result opens the chat
+ *   'dialog'  no search box until New message is pressed; a result is picked,
+ *             then Chat opens it
+ *
+ * Who a search finds is picked by the handle searched for:
+ *
+ *   gone.<name>   nobody (deleted, renamed, or it blocked you)
+ *   anything else that account, listed below a namesake (<handle>.studio)
  */
 
 const WORDS = {
-  en: { follow: 'Follow', message: 'Message', send: 'Send', inbox: 'Messages', composer: 'Message...', gone: "Sorry, this page isn't available." },
-  fr: { follow: 'Suivre', message: 'Envoyer un message', send: 'Envoyer', inbox: 'Messages', composer: 'Votre message...', gone: "Désolé, cette page n'est pas disponible." },
+  en: {
+    search: 'Search', newMessage: 'New message', chat: 'Chat', send: 'Send', composer: 'Message...',
+    inbox: 'Messages', nobody: 'No account found.',
+  },
+  fr: {
+    search: 'Rechercher', newMessage: 'Nouveau message', chat: 'Discuter', send: 'Envoyer', composer: 'Votre message...',
+    inbox: 'Messages', nobody: 'Aucun compte trouvé.',
+  },
 } as const;
 
 export type Lang = keyof typeof WORDS;
+export type Layout = 'search' | 'dialog';
 
-export function langFor(handle: string, hl: string | null): Lang {
-  if (handle.startsWith('fr.')) return 'fr';
-  return hl === 'en' ? 'en' : 'fr';
-}
-
-/** How long the profile's buttons take to appear, as on a slow background tab. */
+/** How long Messages' controls take to appear, as on a slow background tab. */
 const RENDER_DELAY_MS = 900;
+/** How long a search takes to answer. */
+const SEARCH_DELAY_MS = 700;
 
-export function profilePage(handle: string, lang: Lang): string {
+export function messagesPage(lang: Lang, layout: Layout): string {
   const w = WORDS[lang];
-  const shell = (main: string, script = '') => `<!doctype html>
+  return `<!doctype html>
 <html lang="${lang}">
-<head><meta charset="utf-8"><title>@${handle}</title></head>
+<head><meta charset="utf-8"><title>Inbox • Direct</title></head>
 <body>
   <nav><a href="/"><span>Home</span></a><a href="/direct/inbox/"><span>${w.inbox}</span></a></nav>
-  <main>${main}</main>
-  <script>${script}</script>
-</body>
-</html>`;
+  <main>
+    <section id="inbox">
+      <header id="top"></header>
+      <div id="results"></div>
+      <div id="threads"><div role="button" tabindex="0"><span>Old Friend</span></div></div>
+    </section>
+    <section id="chat" hidden>
+      <div role="textbox" contenteditable="true" aria-label="${w.composer}" id="composer"
+           style="min-height:24px;border:1px solid #888"></div>
+      <div role="button" tabindex="0" id="send" hidden>${w.send}</div>
+    </section>
+  </main>
+  <script>
+    const w = ${JSON.stringify(w)};
+    const layout = ${JSON.stringify(layout)};
+    let chatWith = null;
+    let picked = null;
 
-  if (handle.startsWith('gone.')) return shell(`<h2>${w.gone}</h2>`);
+    // Who a search finds: nobody for gone.*, else a namesake and then them.
+    const found = (q) => q.startsWith('gone.') || !q ? [] : [q + '.studio', q];
 
-  const messageButton = handle.startsWith('nomsg.')
-    ? ''
-    : `<div role="button" tabindex="0" id="message"><div>${w.message}</div></div>`;
+    function searchBox(where, onRow) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = w.search;
+      const list = document.createElement('div');
+      let timer = null;
+      input.addEventListener('input', () => {
+        clearTimeout(timer);
+        list.innerHTML = '';
+        timer = setTimeout(() => {
+          const people = found(input.value.trim().toLowerCase());
+          list.innerHTML = people.length
+            ? people.map((u) => '<div role="button" tabindex="0" class="row" data-user="' + u + '">'
+                + '<div><span>' + u.split('.')[0] + '</span></div><div><span>' + u + '</span></div></div>').join('')
+            : '<span>' + w.nobody + '</span>';
+          for (const row of list.querySelectorAll('.row')) row.addEventListener('click', () => onRow(row.dataset.user, row));
+        }, ${SEARCH_DELAY_MS});
+      });
+      where.append(input, list);
+    }
 
-  return shell(
-    `<header><h2>${handle}</h2><span id="buttons"></span></header>
-     <section id="chat" hidden>
-       <div role="textbox" contenteditable="true" aria-label="${w.composer}" id="composer"
-            style="min-height:24px;border:1px solid #888"></div>
-       <div role="button" tabindex="0" id="send" hidden>${w.send}</div>
-     </section>`,
-    `
-    const handle = ${JSON.stringify(handle)};
+    function openChat(user) {
+      chatWith = user;
+      document.getElementById('inbox').hidden = true;
+      document.querySelector('[role="dialog"]')?.remove();
+      setTimeout(() => {
+        history.pushState({}, '', '/direct/t/' + user.length + '0001/');
+        document.getElementById('chat').hidden = false;
+      }, 300);
+    }
+
     setTimeout(() => {
-      document.getElementById('buttons').innerHTML =
-        ${JSON.stringify(`<div role="button" tabindex="0" id="follow">${w.follow}</div>${messageButton}`)};
-      const message = document.getElementById('message');
-      if (message) message.addEventListener('click', () => {
-        setTimeout(() => { document.getElementById('chat').hidden = false; }, 300);
+      const top = document.getElementById('top');
+      if (layout === 'search') {
+        searchBox(document.getElementById('results'), (user) => openChat(user));
+        return;
+      }
+      top.innerHTML = '<div role="button" tabindex="0" id="new"><svg aria-label="' + w.newMessage + '" width="24" height="24"></svg></div>';
+      document.getElementById('new').addEventListener('click', () => {
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', 'dialog');
+        dialog.innerHTML = '<h1>' + w.newMessage + '</h1>';
+        searchBox(dialog, (user, row) => {
+          picked = user;
+          row.setAttribute('aria-checked', 'true');
+          chat.removeAttribute('aria-disabled');
+        });
+        const chat = document.createElement('div');
+        chat.setAttribute('role', 'button');
+        chat.setAttribute('aria-disabled', 'true');
+        chat.textContent = w.chat;
+        chat.addEventListener('click', () => { if (picked) openChat(picked); });
+        dialog.append(chat);
+        document.body.append(dialog);
       });
     }, ${RENDER_DELAY_MS});
 
@@ -70,10 +129,11 @@ export function profilePage(handle: string, lang: Lang): string {
     composer.addEventListener('input', () => { send.hidden = composer.textContent.trim() === ''; });
     send.addEventListener('click', () => {
       const text = composer.textContent;
-      fetch('/__sent', { method: 'POST', body: JSON.stringify({ handle, text, lang: document.documentElement.lang }) });
+      fetch('/__sent', { method: 'POST', body: JSON.stringify({ handle: chatWith, text, lang: document.documentElement.lang }) });
       composer.textContent = '';
       send.hidden = true;
     });
-    `,
-  );
+  </script>
+</body>
+</html>`;
 }

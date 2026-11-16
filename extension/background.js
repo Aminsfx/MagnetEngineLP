@@ -2,8 +2,8 @@
 
 // The wire protocol is defined once, in protocol.js, and shared with the
 // content script (loaded first in content_scripts) and the app (which has a
-// typed adapter asserted to match). igsend.js knows Instagram's profile page:
-// the URL every profile opens at, and when a run of skips means stop.
+// typed adapter asserted to match). igsend.js knows Instagram's Messages
+// page: the URL every DM starts from, and when a run of misses means stop.
 importScripts('protocol.js', 'igsend.js');
 const { APP_TO_EXT, EXT_TO_APP, RUNTIME, APP_HOSTS } = MAGNET_PROTOCOL;
 
@@ -18,7 +18,7 @@ const SEND_TIMEOUT_MINUTES = 5;
 
 // ── The Sender Tab ────────────────────────────────────────────────
 // One Instagram tab per campaign, reused for every DM: opened for the first
-// send, navigated to each next profile, closed when the queue runs out. Its
+// send, sent back to Messages for each next one, closed when the queue runs out. Its
 // id lives in storage (`senderTabId`) because the service worker can be
 // stopped between sends. While a tab is the Sender Tab, the content script
 // covers it with an overlay that blocks the Operator's clicks and keys — so
@@ -253,7 +253,7 @@ function clearCampaign() {
         originalTotal: 0,
         failedCount:   0,
         lastFailure:   null,
-        noButtonHeld:  [],
+        missHeld:      [],
     }, closeSenderTab);
 }
 
@@ -289,7 +289,7 @@ function joinQueue(leads, queue, inFlight, originalTotal) {
         patch: {
             campaignQueue: inLine([...queue, ...fresh]),
             originalTotal: idle ? fresh.length : (Number(originalTotal) || queue.length + 1) + fresh.length,
-            ...(idle ? { failedCount: 0, lastFailure: null, noButtonHeld: [] } : {}),
+            ...(idle ? { failedCount: 0, lastFailure: null, missHeld: [] } : {}),
         },
     };
 }
@@ -309,7 +309,7 @@ function replaceQueue(leads, queue, inFlight) {
             isPaused:      false,
             failedCount:   0,
             lastFailure:   null,
-            noButtonHeld:  [],
+            missHeld:      [],
             ...(inFlight ? {} : { isExecuting: false, currentTask: null }),
         },
     };
@@ -344,10 +344,10 @@ function nextSendable(queue, held) {
 // Ignores a report for anything but the task in flight, so a late report
 // after the send timeout already settled it can't count a send twice.
 // `reason` (why it wasn't sent) is kept as `lastFailure` for the popup and overlay.
-// `code` is what the worker acts on: see the no-Message-button stop below.
+// `code` is what the worker acts on: see the not-found-in-search stop below.
 function completeTask(outcome, handle, reason, code) {
     chrome.storage.local.get(
-        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles', 'lastFailure', 'noButtonHeld'],
+        ['currentTask', 'isExecuting', 'campaignQueue', 'dailySentCount', 'dailyResetDate', 'failedCount', 'minDelay', 'maxDelay', 'dailyCap', 'isPaused', 'sentLog', 'sentHandles', 'lastFailure', 'missHeld'],
         (result) => {
             const task = result.currentTask;
             if (!result.isExecuting || !task || (handle && task.handle !== handle)) return;
@@ -370,13 +370,13 @@ function completeTask(outcome, handle, reason, code) {
                 return;
             }
 
-            // Profile after profile with no Message button is not that many
-            // people turning messages off: it is Instagram's page changing
-            // under the extension (on 2026-11-07, a page in French used up a
-            // whole queue overnight this way). After NO_BUTTON_LIMIT in a row,
-            // stop: those DMs go back to the front of the queue, unsent and
-            // unskipped, and the campaign pauses with what Instagram showed.
-            const streak = MagnetSend.noButtonStreak(result.noButtonHeld, stripDispatch(task), outcome, code);
+            // Account after account that Messages' search can't find is not
+            // that many people deleting their accounts: it is Instagram's page
+            // changing under the extension (on 2026-11-07, a page in French
+            // used up a whole queue overnight this way). After MISS_LIMIT in a
+            // row, stop: those DMs go back to the front of the queue, unsent
+            // and unskipped, and the campaign pauses.
+            const streak = MagnetSend.missStreak(result.missHeld, stripDispatch(task), outcome, code);
             if (streak.trip) {
                 chrome.alarms.clear('dripEngine');
                 chrome.storage.local.set({
@@ -385,10 +385,10 @@ function completeTask(outcome, handle, reason, code) {
                     isExecuting:   false,
                     isPaused:      true,
                     nextAlarmTime: null,
-                    noButtonHeld:  [],
+                    missHeld:      [],
                     lastFailure:   {
                         handle: task.handle,
-                        reason: `${streak.held.length} profiles in a row showed no Message button, so Instagram has probably changed its page. `
+                        reason: `${streak.held.length} DMs in a row couldn't find their person in Instagram's Messages, so Instagram has probably changed its page. `
                             + `Sending is paused and those ${streak.held.length} DMs are back in the queue, not skipped. `
                             + `Last one: ${reason || 'no reason given.'}`,
                         at: Date.now(),
@@ -432,7 +432,7 @@ function completeTask(outcome, handle, reason, code) {
                 lastFailure:    lastFailure,
                 sentLog:        sentLog,
                 sentHandles:    sentHandles,
-                noButtonHeld:   streak.held,
+                missHeld:       streak.held,
                 isExecuting:    false,
                 currentTask:    null,
             }, () => {
@@ -712,7 +712,7 @@ function processNextLead() {
                 isExecuting:   true,
             }, () => {
                 chrome.alarms.create('sendWatchdog', { delayInMinutes: SEND_TIMEOUT_MINUTES });
-                openInSenderTab(MagnetSend.profileUrl(nextLead.handle));
+                openInSenderTab(MagnetSend.inboxUrl());
             });
         }
     );

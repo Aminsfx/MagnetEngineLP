@@ -1,38 +1,43 @@
 // ═══════════════════════════════════════════════════════════════════
-// MagnetEngine — reading Instagram's profile page and chat, to send one DM
+// MagnetEngine — reading Instagram's Messages page, to send one DM
 // ═══════════════════════════════════════════════════════════════════
 //
 // Everything the Sender Tab needs to recognise on Instagram's page, in one
-// place, and none of it tied to one language.
+// place, and as little of it tied to one language as possible.
 //
-// The extension used to find the profile's Message button by its English
-// text alone. On 2026-11-07 a campaign ran from an Instagram account shown in
-// French, where the button reads "Envoyer un message": every one of its 85
-// profiles was reported as having no Message button, and the whole queue was
-// used up in a night without one DM sent. So:
+// How a DM goes out (owner, 2026-11-15): the Sender Tab opens Messages, types
+// the handle into its search, opens the chat from the result whose username
+// is exactly that handle, and sends there. Until 1.12.0 it opened each
+// profile and pressed its Message button. Many profiles show no such button
+// (a business profile that hides it, someone who limits who can message
+// them), and every one of those was skipped, while Messages' search reaches
+// the same person and sends. It also found the button by its label, so the
+// label had to be known in every language.
 //
-//   1. Every profile opens with ?hl=en (`profileUrl`), which makes Instagram
-//      render that one page in English, whatever the account's language. It
-//      does not change the account's setting: the next page without it is
-//      back in the account's own language.
-//   2. In case Instagram ever ignores that, the labels below are matched in
-//      the languages Operators are likely to use, and the login and
-//      not-found checks rely on the page's links rather than its words.
-//   3. `noButtonStreak` decides when "no Message button" stops meaning one
-//      person turned messages off and starts meaning Instagram changed its
-//      page: then the worker pauses and puts those DMs back.
+// What is still read by its words, and why it holds up:
+//
+//   1. Messages opens with ?hl=en (`inboxUrl`), which makes Instagram render
+//      that page in English whatever the account's language. It does not
+//      change the account's setting.
+//   2. The search box is an input, the result is the username itself, the
+//      chat box is a contenteditable textbox, and logged out is read from the
+//      page's links: none of those are words. Only New message, Chat and Send
+//      are labels, and they are matched in the languages Operators use too.
+//   3. `missStreak` decides when "not found in search" stops meaning one
+//      account was deleted and starts meaning Instagram changed its page:
+//      then the worker pauses and puts those DMs back.
 //
 // Pure: loaded as a classic script in the content scripts (before content.js)
 // and in the service worker (importScripts), and evaluated by
 // src/lib/igsend.test.ts against fixture pages.
 
 (function () {
-    /** The language every profile is opened in. */
+    /** The language Messages is opened in. */
     const PAGE_LANGUAGE = 'en';
 
-    function profileUrl(handle) {
-        const clean = String(handle || '').trim().replace(/^@/, '').replace(/\/+$/, '');
-        return `https://www.instagram.com/${encodeURIComponent(clean)}/?hl=${PAGE_LANGUAGE}`;
+    /** Where every DM starts: Messages, in English. */
+    function inboxUrl() {
+        return `https://www.instagram.com/direct/inbox/?hl=${PAGE_LANGUAGE}`;
     }
 
     /** Lowercased, single-spaced, straight apostrophes: how labels are compared. */
@@ -45,40 +50,51 @@
             .toLowerCase();
     }
 
-    // The profile's Message button, as Instagram labels it.
-    const MESSAGE_LABELS = new Set([
-        'Message', 'Send message', 'Send Message',
-        'Envoyer un message',                             // fr
-        'Enviar mensaje', 'Mensaje',                      // es
-        'Enviar mensagem', 'Mensagem',                    // pt
-        'Nachricht senden', 'Nachricht',                  // de
-        'Invia messaggio', 'Messaggio',                   // it
-        'Bericht sturen', 'Bericht',                      // nl
-        'Mesaj gönder', 'Mesaj Gönder', 'Mesaj',          // tr
-        'Wyślij wiadomość', 'Wiadomość',                  // pl
-        'Отправить сообщение', 'Сообщение',               // ru
-        'Kirim pesan', 'Kirim Pesan', 'Pesan',            // id
-        'Skicka meddelande', 'Meddelande',                // sv
-        'Send besked', 'Besked',                          // da
-        'Send melding', 'Melding',                        // nb
-        'Lähetä viesti', 'Viesti',                        // fi
-        'Nhắn tin',                                       // vi
-        'ส่งข้อความ',                                       // th
-        'Magpadala ng mensahe', 'Mensahe',                // tl
-        'Kirim mesej', 'Mesej',                           // ms
-        'Odeslat zprávu', 'Zpráva',                       // cs
-        'Üzenet küldése', 'Üzenet',                       // hu
-        'Trimite mesaj', 'Mesaj',                         // ro
-        'Αποστολή μηνύματος', 'Μήνυμα',                   // el
-        'Надіслати повідомлення', 'Повідомлення',         // uk
-        'مراسلة', 'إرسال رسالة', 'رسالة',                 // ar
-        'שליחת הודעה', 'הודעה',                           // he
-        'ارسال پیام', 'پیام',                             // fa
-        'संदेश भेजें', 'संदेश',                             // hi
-        'বার্তা পাঠান', 'মেসেজ',                            // bn
-        'メッセージを送信', 'メッセージ',                    // ja
-        '메시지 보내기', '메시지',                          // ko
-        '发消息', '发送消息', '傳送訊息', '發送訊息', '訊息',   // zh
+    /** A handle as it is searched for and matched: lowercase, no @. */
+    function cleanHandle(handle) {
+        return normalize(handle).replace(/^@/, '').replace(/\/+$/, '');
+    }
+
+    // Messages' New message control (a pencil icon), and the "Send message"
+    // button an empty inbox shows instead. Either opens the same search.
+    const NEW_MESSAGE_LABELS = new Set([
+        'New message', 'Send message', 'Compose',
+        'Nouveau message', 'Envoyer un message',          // fr
+        'Nuevo mensaje', 'Enviar mensaje',                // es
+        'Nova mensagem', 'Enviar mensagem',               // pt
+        'Neue Nachricht', 'Nachricht senden',             // de
+        'Nuovo messaggio', 'Invia messaggio',             // it
+        'Nieuw bericht', 'Bericht sturen',                // nl
+        'Yeni mesaj', 'Mesaj gönder',                     // tr
+        'Nowa wiadomość', 'Wyślij wiadomość',             // pl
+        'Новое сообщение', 'Отправить сообщение',         // ru
+        'Pesan baru', 'Kirim pesan',                      // id
+        'Nytt meddelande', 'Skicka meddelande',           // sv
+        'رسالة جديدة', 'إرسال رسالة',                       // ar
+        '新しいメッセージ', 'メッセージを送信',               // ja
+        '새 메시지', '메시지 보내기',                        // ko
+        '新消息', '发消息', '新訊息', '傳送訊息',             // zh
+    ].map(normalize));
+
+    // The button that opens the chat once someone is picked in New message.
+    // Instagram has called it Next, then Chat.
+    const CHAT_LABELS = new Set([
+        'Chat', 'Next',
+        'Discuter', 'Suivant',                            // fr
+        'Chatear', 'Siguiente',                           // es
+        'Conversar', 'Avançar', 'Seguinte',               // pt
+        'Weiter',                                         // de
+        'Avanti',                                         // it
+        'Volgende',                                       // nl
+        'Sohbet', 'İleri',                                // tr
+        'Czat', 'Dalej',                                  // pl
+        'Чат', 'Далее',                                   // ru
+        'Obrolan', 'Berikutnya', 'Selanjutnya',           // id
+        'Nästa',                                          // sv
+        'دردشة', 'التالي',                                 // ar
+        'チャット', '次へ',                                 // ja
+        '채팅', '다음',                                     // ko
+        '聊天', '下一步',                                   // zh
     ].map(normalize));
 
     // The chat's Send control.
@@ -89,46 +105,111 @@
         'भेजें', 'পাঠান', '送信', '보내기', '发送', '傳送',
     ].map(normalize));
 
-    // Instagram's page for a handle that no longer exists.
-    const UNAVAILABLE_TEXTS = [
-        "Sorry, this page isn't available.",
-        "Désolé, cette page n'est pas disponible.",
-        'Lo sentimos, esta página no está disponible.',
-        'Esta página não está disponível.',
-        'Diese Seite ist leider nicht verfügbar.',
-        'Spiacenti, questa pagina non è disponibile.',
-    ].map(normalize);
+    // A prompt Instagram puts over Messages ("Turn on notifications"), and
+    // the button that declines it.
+    const NOT_NOW_LABELS = new Set([
+        'Not Now', 'Not now', 'Plus tard', 'Ahora no', 'Agora não', 'Jetzt nicht', 'Non ora',
+        'Niet nu', 'Şimdi değil', 'Nie teraz', 'Не сейчас', 'Lain kali', 'Inte nu',
+    ].map(normalize));
 
     const visible = (el) => !!el && (el.offsetHeight > 0 || el.getClientRects().length > 0);
+    const inNav = (el) => !!el.closest('nav, [role="navigation"]');
+    const disabled = (el) => el.disabled === true || el.getAttribute('aria-disabled') === 'true';
 
-    /**
-     * Clickable things a person could press, outside the site's left nav and
-     * never a link to the inbox: in Japanese or Korean the nav's "Messages"
-     * reads exactly like the profile's Message button, and pressing it would
-     * open the inbox instead of this person's chat.
-     */
-    function pressables(doc) {
-        return [...doc.querySelectorAll('[role="button"], button, a[role="link"], a[href]')]
-            .filter((el) => visible(el)
-                && !el.closest('nav, [role="navigation"]')
-                && !(el.closest('a[href]') && /\/direct\/inbox/.test(el.closest('a[href]').getAttribute('href'))));
+    /** Clickable things a person could press, outside the site's left nav. */
+    function pressables(scope) {
+        return [...scope.querySelectorAll('[role="button"], button, a[role="link"], a[href]')]
+            .filter((el) => visible(el) && !inNav(el));
     }
 
-    const labelOf = (el) => normalize(el.getAttribute('aria-label') || el.innerText || el.textContent);
+    /**
+     * The first pressable whose label is in `labels`: its aria-label, its
+     * text, or the aria-label of the icon inside it (Instagram's icon buttons
+     * carry their name on the <svg>).
+     */
+    function pressableLabelled(scope, labels) {
+        for (const el of pressables(scope)) {
+            if (labels.has(normalize(el.getAttribute('aria-label') || el.innerText || el.textContent))) return el;
+            const icon = el.querySelector('svg[aria-label]');
+            if (icon && labels.has(normalize(icon.getAttribute('aria-label')))) return el;
+        }
+        return null;
+    }
+
+    const dialogs = (doc) => [...doc.querySelectorAll('[role="dialog"]')].filter(visible);
+
+    const TEXT_INPUTS = 'input:not([type]), input[type="text"], input[type="search"]';
+    const textInputs = (scope) => [...scope.querySelectorAll(TEXT_INPUTS)]
+        .filter((el) => visible(el) && !el.disabled && !inNav(el));
 
     /**
-     * The profile's Message button, or null. Looked for in the profile header
-     * first, then in the main column, so a suggested account's buttons further
-     * down can never be mistaken for it.
+     * The box to search Messages with: New message's, when it is open, or
+     * else the one at the top of the inbox. Never the site's own search
+     * (people's profiles, not chats), which lives in the left nav.
      */
-    function findMessageButton(doc) {
-        const main = doc.querySelector('main');
-        const scopes = main ? [main.querySelector('header'), main].filter(Boolean) : [doc.body].filter(Boolean);
-        for (const scope of scopes) {
-            const hit = pressables(scope).find((el) => MESSAGE_LABELS.has(labelOf(el)));
+    function findSearchBox(doc) {
+        for (const dialog of dialogs(doc)) {
+            const [box] = textInputs(dialog);
+            if (box) return box;
+        }
+        const main = doc.querySelector('main') || doc.body;
+        return (main && textInputs(main)[0]) || null;
+    }
+
+    function findNewMessageButton(doc) {
+        const main = doc.querySelector('main') || doc.body;
+        return main ? pressableLabelled(main, NEW_MESSAGE_LABELS) : null;
+    }
+
+    /** "Not Now" on a prompt over Messages that has no search in it, or null. */
+    function findNotNowButton(doc) {
+        for (const dialog of dialogs(doc)) {
+            if (textInputs(dialog).length) continue;
+            const hit = pressableLabelled(dialog, NOT_NOW_LABELS);
             if (hit) return hit;
         }
         return null;
+    }
+
+    /**
+     * The search result for exactly this handle, as the thing to click, or
+     * null. A result shows the username on a line of its own, so the match is
+     * on the whole text of an element, never on a part: searching "maya"
+     * lists maya.builds and maya, and only the one asked for may be opened.
+     * Looked for where the search box is (inside New message, when that is
+     * where the search was typed), and never in the left nav.
+     */
+    function findSearchResult(doc, handle, box) {
+        const want = cleanHandle(handle);
+        if (!want) return null;
+        const scope = (box && box.closest('[role="dialog"]')) || doc.body;
+        if (!scope) return null;
+        const hits = [...scope.querySelectorAll('span, div, a, p')]
+            .filter((el) => !inNav(el) && !el.closest('[role="textbox"]') && visible(el)
+                && cleanHandle(el.textContent) === want);
+        // The innermost: a row's wrapper reads the same as the username in it
+        // when the row shows nothing else.
+        const innermost = hits.filter((el) => !hits.some((other) => other !== el && el.contains(other)));
+        for (const el of innermost) {
+            const row = el.closest('[role="button"], [role="option"], [role="checkbox"], [role="radio"], [role="listitem"], label, a[href*="/direct/"]');
+            if (row && scope.contains(row)) return row;
+        }
+        return innermost[0] || null;
+    }
+
+    /** New message's Chat (or Next) button, once someone is picked; null before. */
+    function findChatButton(doc) {
+        for (const dialog of dialogs(doc)) {
+            const hit = pressables(dialog).find((el) =>
+                !disabled(el) && CHAT_LABELS.has(normalize(el.getAttribute('aria-label') || el.innerText || el.textContent)));
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    /** The chat's message box, once a chat is open. */
+    function findComposer(doc) {
+        return [...doc.querySelectorAll('div[role="textbox"][contenteditable="true"]')].find(visible) || null;
     }
 
     function findSendButton(doc) {
@@ -153,58 +234,65 @@
             .some(visible);
     }
 
-    function isUnavailable(doc) {
-        const text = normalize(doc.body ? doc.body.innerText || doc.body.textContent : '');
-        return UNAVAILABLE_TEXTS.some((t) => text.includes(t));
-    }
-
     /**
-     * What the page showed, for the reason the Operator reads when no Message
-     * button was found: the page's language and the profile's own buttons. It
-     * is what makes the next change on Instagram's side quick to fix rather
-     * than a night of DMs reported as private accounts.
+     * What the page showed, for the extension's log when the search could not
+     * be used: the page's language, whether a search box was there, and the
+     * buttons on screen. It is what makes the next change on Instagram's side
+     * quick to fix.
      */
     function describePage(doc) {
-        const scope = doc.querySelector('main header') || doc.querySelector('main') || doc.body;
+        const scope = dialogs(doc)[0] || doc.querySelector('main') || doc.body;
         const labels = pressables(scope)
             .filter((el) => el.matches('[role="button"], button'))
-            .map((el) => (el.getAttribute('aria-label') || el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim())
+            .map((el) => (el.getAttribute('aria-label') || el.innerText || el.textContent
+                || (el.querySelector('svg[aria-label]') || { getAttribute: () => '' }).getAttribute('aria-label') || '')
+                .replace(/\s+/g, ' ').trim())
             .filter((t) => t && t.length <= 40);
         const unique = [...new Set(labels)].slice(0, 6);
         const lang = (doc.documentElement.getAttribute('lang') || '?').slice(0, 8);
-        return `page in "${lang}", buttons seen: ${unique.length ? unique.map((t) => `"${t}"`).join(', ') : 'none'}`;
+        return `page in "${lang}", search box: ${findSearchBox(doc) ? 'yes' : 'no'}, `
+            + `buttons seen: ${unique.length ? unique.map((t) => `"${t}"`).join(', ') : 'none'}`;
     }
 
     /**
-     * How many profiles in a row may show no Message button before the worker
-     * stops. One or two is people who turned messages off; three in a row,
-     * from a list the Operator chose, is far more often Instagram's page.
+     * How many DMs in a row may fail to find their person in Messages before
+     * the worker stops. One or two is accounts deleted or renamed since they
+     * were found; three in a row, from a list the Operator chose, is far more
+     * often Instagram's page.
      */
-    const NO_BUTTON_LIMIT = 3;
+    const MISS_LIMIT = 3;
+
+    /** The failures that count toward it. */
+    const MISS_CODES = ['not_in_search', 'no_search_box'];
 
     /**
      * The worker's bookkeeping for that, kept pure so it can be tested.
-     * `held` is the tasks skipped for having no Message button since the last
-     * profile that did have one. Returns the new `held` and whether to stop:
-     * on a stop, every held task goes back to the front of the queue.
+     * `held` is the tasks that missed since the last one that didn't. Returns
+     * the new `held` and whether to stop: on a stop, every held task goes
+     * back to the front of the queue.
      */
-    function noButtonStreak(held, task, outcome, code, limit = NO_BUTTON_LIMIT) {
+    function missStreak(held, task, outcome, code, limit = MISS_LIMIT) {
         if (outcome === 'logged_out') return { held: held || [], trip: false };
-        if (outcome !== 'skipped' || code !== 'no_message_button') return { held: [], trip: false };
+        if (outcome === 'success' || !MISS_CODES.includes(code)) return { held: [], trip: false };
         const next = [...(held || []), task];
-        return next.length >= limit ? { held: next, trip: true } : { held: next, trip: false };
+        return { held: next, trip: next.length >= limit };
     }
 
     globalThis.MagnetSend = {
         PAGE_LANGUAGE,
-        NO_BUTTON_LIMIT,
-        profileUrl,
+        MISS_LIMIT,
+        MISS_CODES,
+        inboxUrl,
         normalize,
-        findMessageButton,
+        findSearchBox,
+        findNewMessageButton,
+        findNotNowButton,
+        findSearchResult,
+        findChatButton,
+        findComposer,
         findSendButton,
         isLoggedOut,
-        isUnavailable,
         describePage,
-        noButtonStreak,
+        missStreak,
     };
 })();

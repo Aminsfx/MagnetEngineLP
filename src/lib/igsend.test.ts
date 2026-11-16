@@ -3,25 +3,29 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * extension/igsend.js is how the Sender Tab reads Instagram's profile page
- * and chat. It has no build step, so it is evaluated here the way the browser
- * loads it: as a classic script defining a global.
+ * extension/igsend.js is how the Sender Tab reads Instagram's Messages page:
+ * its search box, the search result for one handle, New message's Chat
+ * button and the chat's Send. It has no build step, so it is evaluated here
+ * the way the browser loads it: as a classic script defining a global.
  *
- * The fixtures are cut-down profile headers in the shapes Instagram serves:
- * a div[role=button] whose text is the label. On 2026-11-07 a whole campaign
- * was reported as "no Message button" because the page was in French.
+ * The fixtures are cut-down pages in the shapes Instagram serves: a
+ * div[role=button] whose text (or whose icon's aria-label) is the label.
  */
 type Task = { handle: string };
 type MagnetSend = {
     PAGE_LANGUAGE: string;
-    NO_BUTTON_LIMIT: number;
-    profileUrl: (handle: string) => string;
-    findMessageButton: (doc: Document) => HTMLElement | null;
+    MISS_LIMIT: number;
+    inboxUrl: () => string;
+    findSearchBox: (doc: Document) => HTMLInputElement | null;
+    findNewMessageButton: (doc: Document) => HTMLElement | null;
+    findNotNowButton: (doc: Document) => HTMLElement | null;
+    findSearchResult: (doc: Document, handle: string, box?: Element | null) => HTMLElement | null;
+    findChatButton: (doc: Document) => HTMLElement | null;
+    findComposer: (doc: Document) => HTMLElement | null;
     findSendButton: (doc: Document) => HTMLElement | null;
     isLoggedOut: (doc: Document) => boolean;
-    isUnavailable: (doc: Document) => boolean;
     describePage: (doc: Document) => string;
-    noButtonStreak: (held: Task[] | undefined, task: Task, outcome: string, code?: string | null) => { held: Task[]; trip: boolean };
+    missStreak: (held: Task[] | undefined, task: Task, outcome: string, code?: string | null) => { held: Task[]; trip: boolean };
 };
 
 function load(): MagnetSend {
@@ -55,58 +59,139 @@ function page(html: string, lang = 'en') {
 const nav = (messages: string) =>
     `<nav><a href="/"><span>Home</span></a><a href="/direct/inbox/"><span>${messages}</span></a></nav>`;
 
-const profile = (buttons: string[], suggested = '') => `
+/** A search result as Instagram lists one: the name, then the username. */
+const result = (username: string, name = 'Briar') =>
+    `<div role="button" tabindex="0"><div><span>${name}</span></div><div><span>${username}</span></div></div>`;
+
+/** Messages with its own search box at the top, and what it lists. */
+const inbox = (results: string[] = [], threads = '<div role="button"><span>Old Friend</span></div>') => `
     ${nav('Messages')}
     <main>
-        <header>
-            <h2>briarcochran</h2>
-            ${buttons.map((b) => `<div role="button" tabindex="0"><div>${b}</div></div>`).join('')}
-        </header>
-        <div class="suggested">${suggested}</div>
+        <section>
+            <input type="text" placeholder="Search">
+            <div class="results">${results.join('')}</div>
+            <div class="threads">${threads}</div>
+        </section>
     </main>`;
+
+/** Messages with no search box, only the New message pencil. */
+const bareInbox = (label = 'New message') => `
+    ${nav('Messages')}
+    <main><header><div role="button" tabindex="0"><svg aria-label="${label}"></svg></div></header></main>`;
+
+/** New message, open over the inbox. */
+const newMessage = (results: string[] = [], chat = '<div role="button" aria-disabled="true">Chat</div>') => `
+    ${bareInbox()}
+    <div role="dialog">
+        <h1>New message</h1>
+        <input name="queryBox" placeholder="Search...">
+        <div>${results.join('')}</div>
+        ${chat}
+    </div>`;
 
 beforeEach(() => { document.body.innerHTML = ''; });
 
-describe('profileUrl', () => {
-    it('opens every profile in English, whatever the account is set to', () => {
-        expect(Page.profileUrl('@Briar.Cochran/')).toBe('https://www.instagram.com/Briar.Cochran/?hl=en');
+describe('inboxUrl', () => {
+    it('opens Messages in English, whatever the account is set to', () => {
+        expect(Page.inboxUrl()).toBe('https://www.instagram.com/direct/inbox/?hl=en');
         expect(Page.PAGE_LANGUAGE).toBe('en');
     });
 });
 
-describe('findMessageButton', () => {
-    it('finds the button in English', () => {
-        const doc = page(profile(['Following', 'Message']));
-        expect(Page.findMessageButton(doc)?.textContent).toBe('Message');
+describe('findSearchBox', () => {
+    it('finds the search box at the top of Messages', () => {
+        expect(Page.findSearchBox(page(inbox()))?.placeholder).toBe('Search');
     });
 
-    it('finds it in French, where it reads "Envoyer un message"', () => {
-        const doc = page(profile(['Suivi(e)', 'Envoyer un message']), 'fr');
-        expect(Page.findMessageButton(doc)?.textContent).toBe('Envoyer un message');
+    it("takes New message's box when that is open", () => {
+        expect(Page.findSearchBox(page(newMessage()))?.getAttribute('name')).toBe('queryBox');
     });
 
-    it('finds it in Korean, and by its aria-label', () => {
-        const korean = page(profile(['팔로잉', '메시지 보내기']), 'ko');
-        expect(Page.findMessageButton(korean)?.textContent).toBe('메시지 보내기');
-
-        const labelled = page(`<main><header><div role="button" aria-label="Message"><svg></svg></div></header></main>`);
-        expect(Page.findMessageButton(labelled)?.getAttribute('aria-label')).toBe('Message');
+    it("never takes the site's own search in the left nav, which finds profiles, not chats", () => {
+        const doc = page(`<nav><input type="text" placeholder="Search"></nav>${bareInbox()}`);
+        expect(Page.findSearchBox(doc)).toBeNull();
     });
 
-    it("is null on a profile that only offers Follow, even with a suggested account's buttons below", () => {
-        const doc = page(profile(['Follow'], '<div role="button">Follow</div><div role="button">Dismiss</div>'));
-        expect(Page.findMessageButton(doc)).toBeNull();
+    it('ignores a box that is not on screen', () => {
+        expect(Page.findSearchBox(page(`<main><input type="text" data-hidden></main>`))).toBeNull();
+    });
+});
+
+describe('findNewMessageButton', () => {
+    it('finds the pencil by the label on its icon, in English and in French', () => {
+        expect(Page.findNewMessageButton(page(bareInbox()))).not.toBeNull();
+        expect(Page.findNewMessageButton(page(bareInbox('Nouveau message'), 'fr'))).not.toBeNull();
     });
 
-    it("never takes the nav's Messages link, even where it reads exactly like the button", () => {
-        // Korean: the nav's "Messages" is 메시지, which is also a Message label.
-        const doc = page(`${nav('메시지')}<main><header><div role="button">팔로우</div></header></main>`, 'ko');
-        expect(Page.findMessageButton(doc)).toBeNull();
+    it('finds the Send message button an empty inbox shows', () => {
+        const doc = page(`<main><div role="button"><div>Send message</div></div></main>`);
+        expect(Page.findNewMessageButton(doc)?.textContent).toBe('Send message');
     });
 
-    it('ignores a button that is not on screen', () => {
-        const doc = page(`<main><header><div role="button" data-hidden>Message</div></header></main>`);
-        expect(Page.findMessageButton(doc)).toBeNull();
+    it('is null where there is neither', () => {
+        expect(Page.findNewMessageButton(page(`<main><div role="button">Requests</div></main>`))).toBeNull();
+    });
+});
+
+describe('findNotNowButton', () => {
+    it('declines a prompt over Messages, and never touches New message', () => {
+        const prompt = `<div role="dialog"><h2>Turn on Notifications</h2><button>Turn On</button><button>Not Now</button></div>`;
+        expect(Page.findNotNowButton(page(`${inbox()}${prompt}`))?.textContent).toBe('Not Now');
+        expect(Page.findNotNowButton(page(newMessage()))).toBeNull();
+    });
+});
+
+describe('findSearchResult', () => {
+    it('picks the result whose username is exactly the handle, not a namesake listed first', () => {
+        const doc = page(inbox([result('maya.builds.studio', 'Maya'), result('maya', 'Maya'), result('maya.builds', 'Maya R.')]));
+        const hit = Page.findSearchResult(doc, 'maya.builds', Page.findSearchBox(doc));
+        expect(hit?.getAttribute('role')).toBe('button');
+        expect(hit?.textContent).toContain('Maya R.');
+    });
+
+    it('matches whatever the case, and with a leading @', () => {
+        const doc = page(inbox([result('Maya.Builds')]));
+        expect(Page.findSearchResult(doc, '@maya.builds', Page.findSearchBox(doc))).not.toBeNull();
+    });
+
+    it('is null while the search lists only other people', () => {
+        const doc = page(inbox([result('maya.builds.studio'), result('maya.builder')]));
+        expect(Page.findSearchResult(doc, 'maya.builds', Page.findSearchBox(doc))).toBeNull();
+    });
+
+    it('looks only inside New message when that is where the search was typed', () => {
+        // maya.builds is a conversation behind the dialog, not one of its results.
+        const doc = page(`${newMessage([result('maya.builds.studio')])}<main>${result('maya.builds')}</main>`);
+        expect(Page.findSearchResult(doc, 'maya.builds', Page.findSearchBox(doc))).toBeNull();
+    });
+
+    it('never matches a username only mentioned inside a longer line', () => {
+        const doc = page(inbox([], '<div role="button"><span>You: thanks maya.builds!</span></div>'));
+        expect(Page.findSearchResult(doc, 'maya.builds', Page.findSearchBox(doc))).toBeNull();
+    });
+});
+
+describe('findChatButton', () => {
+    it('is null until someone is picked, then finds Chat', () => {
+        expect(Page.findChatButton(page(newMessage([result('maya.builds')])))).toBeNull();
+        const ready = page(newMessage([result('maya.builds')], '<div role="button">Chat</div>'));
+        expect(Page.findChatButton(ready)?.textContent).toBe('Chat');
+    });
+
+    it('finds the older Next, and the French Discuter', () => {
+        expect(Page.findChatButton(page(newMessage([], '<div role="button">Next</div>')))).not.toBeNull();
+        expect(Page.findChatButton(page(newMessage([], '<div role="button">Discuter</div>'), 'fr'))).not.toBeNull();
+    });
+
+    it('never takes a Chat button outside New message', () => {
+        expect(Page.findChatButton(page(`<main><div role="button">Chat</div></main>`))).toBeNull();
+    });
+});
+
+describe('findComposer', () => {
+    it('finds the chat box once a chat is open, and nothing before', () => {
+        expect(Page.findComposer(page(inbox()))).toBeNull();
+        expect(Page.findComposer(page(`<main><div role="textbox" contenteditable="true"></div></main>`))).not.toBeNull();
     });
 });
 
@@ -127,55 +212,51 @@ describe('findSendButton', () => {
     });
 });
 
-describe('isLoggedOut / isUnavailable', () => {
+describe('isLoggedOut', () => {
     it("reads logged out from Instagram's login links, in any language", () => {
-        expect(Page.isLoggedOut(page(`<main><a href="/accounts/login/?next=%2Fbriarcochran%2F">Se connecter</a></main>`, 'fr'))).toBe(true);
+        expect(Page.isLoggedOut(page(`<main><a href="/accounts/login/?next=%2Fdirect%2Finbox%2F">Se connecter</a></main>`, 'fr'))).toBe(true);
         expect(Page.isLoggedOut(page(`<form><input name="username"></form>`))).toBe(true);
     });
 
     it('is not fooled by a login link that is not on screen', () => {
-        expect(Page.isLoggedOut(page(`${profile(['Message'])}<a data-hidden href="/accounts/login/">Log in</a>`))).toBe(false);
-    });
-
-    it("recognises the page for a handle that doesn't exist, in French too", () => {
-        expect(Page.isUnavailable(page(`<main><h2>Sorry, this page isn’t available.</h2></main>`))).toBe(true);
-        expect(Page.isUnavailable(page(`<main><span>Désolé, cette page n’est pas disponible.</span></main>`, 'fr'))).toBe(true);
-        expect(Page.isUnavailable(page(profile(['Message'])))).toBe(false);
+        expect(Page.isLoggedOut(page(`${inbox()}<a data-hidden href="/accounts/login/">Log in</a>`))).toBe(false);
     });
 });
 
 describe('describePage', () => {
-    it("says what the page showed: its language and the profile's buttons", () => {
-        const doc = page(profile(['Suivre', 'Plus']), 'fr');
-        expect(Page.describePage(doc)).toBe('page in "fr", buttons seen: "Suivre", "Plus"');
-    });
-
-    it('says so when there were no buttons at all', () => {
-        expect(Page.describePage(page('<main><header></header></main>'))).toBe('page in "en", buttons seen: none');
+    it('says what the page showed: its language, whether there was a search box, and its buttons', () => {
+        expect(Page.describePage(page(bareInbox('Nouveau message'), 'fr')))
+            .toBe('page in "fr", search box: no, buttons seen: "Nouveau message"');
+        expect(Page.describePage(page(`<main><input type="text"></main>`)))
+            .toBe('page in "en", search box: yes, buttons seen: none');
     });
 });
 
-describe('noButtonStreak', () => {
+describe('missStreak', () => {
     const a = { handle: 'a' }, b = { handle: 'b' }, c = { handle: 'c' };
-    const skip = (held: Task[] | undefined, t: Task) => Page.noButtonStreak(held, t, 'skipped', 'no_message_button');
+    const miss = (held: Task[] | undefined, t: Task) => Page.missStreak(held, t, 'skipped', 'not_in_search');
 
-    it(`stops after ${Page.NO_BUTTON_LIMIT} profiles in a row with no Message button, holding all of them`, () => {
-        let s = skip(undefined, a);
+    it(`stops after ${Page.MISS_LIMIT} DMs in a row whose person search could not find, holding all of them`, () => {
+        let s = miss(undefined, a);
         expect(s).toEqual({ held: [a], trip: false });
-        s = skip(s.held, b);
+        s = miss(s.held, b);
         expect(s).toEqual({ held: [a, b], trip: false });
-        s = skip(s.held, c);
+        s = miss(s.held, c);
         expect(s).toEqual({ held: [a, b, c], trip: true });
     });
 
-    it('starts again from zero after a send, a failure, or a different skip', () => {
+    it('counts a Messages page with no search box toward it too', () => {
+        expect(Page.missStreak([a, b], c, 'failed', 'no_search_box')).toEqual({ held: [a, b, c], trip: true });
+    });
+
+    it('starts again from zero after a send, or a failure of another kind', () => {
         const held = [a, b];
-        expect(Page.noButtonStreak(held, c, 'success')).toEqual({ held: [], trip: false });
-        expect(Page.noButtonStreak(held, c, 'failed')).toEqual({ held: [], trip: false });
-        expect(Page.noButtonStreak(held, c, 'skipped', null)).toEqual({ held: [], trip: false });
+        expect(Page.missStreak(held, c, 'success')).toEqual({ held: [], trip: false });
+        expect(Page.missStreak(held, c, 'failed')).toEqual({ held: [], trip: false });
+        expect(Page.missStreak(held, c, 'skipped', null)).toEqual({ held: [], trip: false });
     });
 
     it('keeps the count through a log-out, which puts its own DM back', () => {
-        expect(Page.noButtonStreak([a, b], c, 'logged_out')).toEqual({ held: [a, b], trip: false });
+        expect(Page.missStreak([a, b], c, 'logged_out')).toEqual({ held: [a, b], trip: false });
     });
 });
