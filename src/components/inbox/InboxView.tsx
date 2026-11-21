@@ -5,7 +5,7 @@ import type { ReplyResult } from '../../lib/api';
 import { posthogCapture } from '../../lib/posthog';
 import type { InstagramViewer } from '../../lib/extensionProtocol';
 import { igName } from './ConnectInstagram';
-import type { Suggestion } from '../../lib/copilot';
+import type { ReplySteer, Suggestion } from '../../lib/copilot';
 import { triage, byPriority, PRIORITY_LABEL, type Priority, type Triage } from '../../lib/triage';
 import { canonicalHandle } from '../../lib/intake';
 import { CARD_BEZEL } from '../../lib/theme';
@@ -21,8 +21,8 @@ interface InboxViewProps {
   /** Change the deal with the person in `conv`, making them a Lead if they aren't one. */
   onSaveDeal: (conv: Conversation, change: (lead: Lead) => Lead) => void;
   config: AppConfig;
-  /** `instruction` steers one copilot suggestion; without it, the reply prompt as written. */
-  onGenerateReply: (conv: Conversation, instruction?: string) => Promise<ReplyResult>;
+  /** `steer` shapes one copilot suggestion; without it, the reply prompt as written. */
+  onGenerateReply: (conv: Conversation, steer?: ReplySteer) => Promise<ReplyResult>;
   /** Hands the reply to the extension: false when it was refused, so the draft stays. */
   onSendReply: (conv: Conversation, text: string) => Promise<boolean> | boolean;
   onUpdateConversation: (conv: Conversation) => void;
@@ -232,7 +232,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
   }, [openId]);
 
   const generateFor = useCallback(
-    (instruction?: string) => (open ? onGenerateReply(open, instruction) : Promise.reject(new Error('No conversation'))),
+    (steer?: ReplySteer) => (open ? onGenerateReply(open, steer) : Promise.reject(new Error('No conversation'))),
     [onGenerateReply, open],
   );
 

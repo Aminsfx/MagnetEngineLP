@@ -132,11 +132,23 @@ describe('buildReplySystemPrompt', () => {
     expect(prompt).toContain('full call → 10 minutes → answer it right here over DM → a date to follow up');
   });
 
-  it('diagnoses before it offers, and stops before it interrogates', () => {
-    const prompt = buildReplySystemPrompt(marcus);
-    expect(prompt).toContain('## DIAGNOSE BEFORE YOU OFFER');
-    expect(prompt).toMatch(/CURRENT[\s\S]*DESIRED[\s\S]*OBSTACLE/);
-    expect(prompt).toContain('Never diagnose for more than about three exchanges.');
+  it('walks one path to the call: pain, the call on two days, the link, the confirmation', () => {
+    // Owner, 2026-11-21: autopilot asked question after question that never
+    // reached a call, and put the link under a question.
+    const flat = buildReplySystemPrompt(marcus).replace(/\s+/g, ' ');
+    expect(flat).toMatch(/1\. FIND THE PAIN[\s\S]*2\. SHOW YOU GET IT, THEN OFFER TO SHOW THEM HOW[\s\S]*3\. SEND THE LINK ONCE THEY SAY YES[\s\S]*4\. CONFIRM/);
+    expect(flat).toContain('A couple of questions, never more.');
+    expect(flat).toContain('ask if they want you to show them how. Then stop and wait for their answer');
+    expect(flat).toContain('ask which of the two days the note gives you fits them best');
+    expect(flat).toContain('so i can confirm on my end');
+    expect(flat).toContain('Never put a question and the link in the same message.');
+  });
+
+  it('holds every example reply to the gate it will be checked against', () => {
+    // An example that asks two questions teaches the model to be refused.
+    const examples = buildReplySystemPrompt(marcus).match(/^ *(?:you: +)?"[^"\n]+"$/gm) ?? [];
+    expect(examples.length).toBeGreaterThan(3);
+    for (const line of examples) expect((line.match(/\?/g) ?? []).length).toBeLessThanOrEqual(1);
   });
 
   it('never lets the model quote a price or a result it was not given', () => {
@@ -151,7 +163,6 @@ describe('buildReplySystemPrompt', () => {
     // question rather than an appeal to the model's conscience.
     const stockedFlat = buildReplySystemPrompt(stocked).replace(/\s+/g, ' ');
     expect(stockedFlat).toContain('A fact that is not on this list does not exist');
-    expect(stockedFlat).toContain('$197/mo');
 
     // And the half that matters more, because it is the default state of every
     // new Operator: an empty Ledger must say the absence out loud. A prompt
@@ -161,11 +172,13 @@ describe('buildReplySystemPrompt', () => {
     expect(flat).not.toContain('A fact that is not on this list does not exist');
   });
 
-  it('anchors the whole price before naming ways to pay it', () => {
-    const flat = buildReplySystemPrompt(marcus).replace(/\s+/g, ' ');
-    expect(flat).toContain('Anchor before you name a number');
-    expect(flat).toContain('name the whole figure before you name the ways to pay it');
-    expect(flat).toContain('a cheap opener makes everything that follows read as an upsell');
+  it('never says the price in a DM, even when the Operator entered one', () => {
+    // Owner, 2026-11-21: the price is for the call.
+    const prompt = buildReplySystemPrompt(stocked);
+    expect(stocked.price).toBeTruthy();
+    expect(prompt).not.toContain(stocked.price!);
+    expect(prompt).not.toContain('- PRICE:');
+    expect(prompt.replace(/\s+/g, ' ')).toContain('The price is never said in a DM.');
   });
 
   it('states no output format, because its consumer wraps it in one', () => {
@@ -299,9 +312,9 @@ describe('withIdentity', () => {
   });
 
   it('follows each change, field by field, as the wizard is typed into', () => {
-    const typed = withIdentity(withIdentity(seeded, marcus), { ...marcus, price: '$197/mo' });
-    expect(typed.replySystemPrompt).toBe(buildReplySystemPrompt({ ...marcus, price: '$197/mo' }));
-    expect(typed.replySystemPrompt).toContain('- PRICE: $197/mo');
+    const typed = withIdentity(withIdentity(seeded, marcus), { ...marcus, guarantee: '7 days, money back' });
+    expect(typed.replySystemPrompt).toBe(buildReplySystemPrompt({ ...marcus, guarantee: '7 days, money back' }));
+    expect(typed.replySystemPrompt).toContain('- GUARANTEE: 7 days, money back');
   });
 
   it('keeps a reply script the Operator wrote, until they ask for it to be rebuilt', () => {

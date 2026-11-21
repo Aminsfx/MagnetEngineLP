@@ -19,6 +19,7 @@ import { useOutreach } from '../lib/useOutreach';
 import { TRIAL_UPGRADE_PATH } from '../lib/trial';
 import { createStore } from '../lib/store';
 import { aiAPI, withInstruction, type ReplyResult } from '../lib/api';
+import type { ReplySteer } from '../lib/copilot';
 import { createInboxLog, LOCAL_MESSAGE_PREFIX, type RawThread } from '../lib/inbox';
 import { readOutcome } from '../lib/outcome';
 import { campaignsOf, foldNamedCampaigns } from '../lib/queue';
@@ -418,7 +419,7 @@ const DashboardShell: React.FC = () => {
   }, [outreach, inbox]);
 
   /** Ask the backend for an AI reply draft + intent for a conversation. */
-  const handleGenerateReply = useCallback(async (conv: Conversation, instruction?: string): Promise<ReplyResult> => {
+  const handleGenerateReply = useCallback(async (conv: Conversation, steer?: ReplySteer): Promise<ReplyResult> => {
     const history = inbox.snapshot().messages
       .filter((m) => m.conversationId === conv.id)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -427,14 +428,15 @@ const DashboardShell: React.FC = () => {
     const result = await aiAPI.generateReply(cfg.selectedAIProvider, {
       messages: history,
       contact: { handle: conv.handle, name: conv.name },
-      systemPrompt: withInstruction(cfg.replySystemPrompt || buildReplySystemPrompt(identityOf(cfg)), instruction),
+      systemPrompt: withInstruction(cfg.replySystemPrompt || buildReplySystemPrompt(identityOf(cfg)), steer?.instruction),
       calendarLink: cfg.calendarLink,
+      steps: steer?.steps,
     });
-    posthogCapture('reply_generated', { classified_intent: result.intent, steered: !!instruction });
+    posthogCapture('reply_generated', { classified_intent: result.intent, step: result.step ?? 'unknown', steered: !!steer });
     // Reflect detected intent (drives filters + booking surfacing). Only the
     // unsteered draft reads the conversation as written; the copilot asks for
     // three at once, and one update is the honest number.
-    if (!instruction) {
+    if (!steer) {
       const nextStatus = result.intent === 'booked' ? 'booked' : conv.status;
       handleUpdateConversation({ ...conv, intent: result.intent, status: nextStatus });
     }

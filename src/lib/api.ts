@@ -1,4 +1,5 @@
 import { Lead, Message, ConversationIntent } from './types';
+import type { ReplyStep } from '../../supabase/functions/_shared/reply.ts';
 import { invokeFunction } from './functions';
 
 /**
@@ -26,6 +27,8 @@ export const isEmptyCompletion = (error: unknown): boolean =>
 export interface ReplyResult {
     reply: string;
     intent: ConversationIntent;
+    /** Where on the path to a call this reply is (`_shared/reply.ts`). Absent from older deployments. */
+    step?: ReplyStep;
     /** The provider that actually ran — not necessarily the one requested. */
     provider?: string;
 }
@@ -95,8 +98,12 @@ export const aiAPI = {
             contact: { handle: string; name?: string; bio?: string };
             systemPrompt: string;
             calendarLink?: string;
+            /** Narrows the moves for one copilot suggestion; otherwise the function reads them off the thread. */
+            steps?: ReplyStep[];
         },
     ): Promise<ReplyResult> {
-        return invokeFunction<ReplyResult>('generate-reply', { ...input, provider });
+        // The Operator's zone picks the two days a call is offered on.
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        return invokeFunction<ReplyResult>('generate-reply', { ...input, timeZone, provider });
     },
 };

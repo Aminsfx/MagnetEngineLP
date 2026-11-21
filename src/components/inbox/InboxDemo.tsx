@@ -6,6 +6,7 @@ import { buildReplySystemPrompt, identityOf } from '../../lib/prompt';
 import { useToast } from '../common/Toast';
 import { intake } from '../../lib/intake';
 import type { AppConfig, Conversation, Lead, Message } from '../../lib/types';
+import type { ReplySteer } from '../../lib/copilot';
 
 /**
  * The Inbox over sample conversations, for `npm run demo` only. The copilot
@@ -30,7 +31,7 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
         setConversations(prev => prev.map(x => (x.id === c.id ? c : x)));
     }, []);
 
-    const generate = useCallback(async (c: Conversation, instruction?: string): Promise<ReplyResult> => {
+    const generate = useCallback(async (c: Conversation, steer?: ReplySteer): Promise<ReplyResult> => {
         const history = messages
             .filter(m => m.conversationId === c.id)
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -38,10 +39,11 @@ export const InboxDemo: React.FC<{ config: AppConfig }> = ({ config }) => {
         const result = await aiAPI.generateReply(config.selectedAIProvider, {
             messages: history,
             contact: { handle: c.handle, name: c.name },
-            systemPrompt: withInstruction(config.replySystemPrompt || buildReplySystemPrompt(identityOf(config)), instruction),
+            systemPrompt: withInstruction(config.replySystemPrompt || buildReplySystemPrompt(identityOf(config)), steer?.instruction),
             calendarLink: config.calendarLink,
+            steps: steer?.steps,
         });
-        if (!instruction) update({ ...c, intent: result.intent, status: result.intent === 'booked' ? 'booked' : c.status });
+        if (!steer) update({ ...c, intent: result.intent, status: result.intent === 'booked' ? 'booked' : c.status });
         return result;
     }, [config, messages, update]);
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Send, Tag, X, Calendar, Check, ArrowRight, ArrowUpRight, Plus, Star } from 'lucide-react';
 import type { Conversation, Lead, Message } from '../../lib/types';
 import type { ReplyResult } from '../../lib/api';
-import type { Suggestion } from '../../lib/copilot';
+import type { ReplySteer, Suggestion } from '../../lib/copilot';
 import type { Triage } from '../../lib/triage';
 import { useToast } from '../common/Toast';
 import { posthogCapture } from '../../lib/posthog';
@@ -45,7 +45,7 @@ export const OpenConversation: React.FC<{
   thread: Message[];
   lead: Lead | undefined;
   copilotCache: Map<string, Suggestion[]>;
-  generate: (instruction?: string) => Promise<ReplyResult>;
+  generate: (steer?: ReplySteer) => Promise<ReplyResult>;
   /** Hands the reply to the extension; false when it was refused (the reason is already on screen). */
   onSend: (text: string) => Promise<boolean>;
   onUpdate: (c: Conversation) => void;

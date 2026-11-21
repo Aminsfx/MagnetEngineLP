@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles, RefreshCw, Loader2, CornerDownLeft, Check } from 'lucide-react';
 import type { ReplyResult } from '../../lib/api';
-import { COPILOT_ANGLES, type Suggestion } from '../../lib/copilot';
+import { COPILOT_ANGLES, type ReplySteer, type Suggestion } from '../../lib/copilot';
 
 /** The ghost pill used inside an open conversation (DESIGN.md: Row Action Pill). */
 export const ROW_PILL = 'inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full border border-white/12 text-meta font-medium text-neutral-200 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap';
@@ -23,7 +23,7 @@ export const Copilot: React.FC<{
     cache: Map<string, Suggestion[]>;
     /** Draft without being asked — for conversations waiting on a reply. */
     auto: boolean;
-    generate: (instruction?: string) => Promise<ReplyResult>;
+    generate: (steer?: ReplySteer) => Promise<ReplyResult>;
     onPick: (text: string) => void;
     /** Whether replies (or their drafting placeholders) are on screen, for the composer's hint. */
     onShown?: (shown: boolean) => void;
@@ -39,7 +39,7 @@ export const Copilot: React.FC<{
     const [used, setUsed] = useState<string | null>(null);
 
     const draftAll = useCallback(async (): Promise<Suggestion[]> => {
-        const settled = await Promise.allSettled(COPILOT_ANGLES.map(a => generate(a.instruction)));
+        const settled = await Promise.allSettled(COPILOT_ANGLES.map(a => generate(a.instruction || a.steps ? a : undefined)));
         const next: Suggestion[] = settled.map((r, i) => ({
             angle: COPILOT_ANGLES[i],
             ...(r.status === 'fulfilled' && r.value.reply.trim() ? { text: r.value.reply.trim() } : { failed: true }),

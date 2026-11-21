@@ -5,6 +5,7 @@ import { InboxView } from './InboxView';
 import { ToastProvider } from '../common/Toast';
 import { demoInbox } from '../../lib/inboxDemo';
 import type { AppConfig, Conversation, Lead } from '../../lib/types';
+import type { ReplySteer } from '../../lib/copilot';
 
 const config: AppConfig = {
     systemPrompt: '',
@@ -19,8 +20,8 @@ const config: AppConfig = {
     instagramAccount: { id: 'me', username: 'me', connectedAt: new Date().toISOString() },
 };
 
-const plainReplies = () => vi.fn(async (_c: Conversation, instruction?: string) => ({
-    reply: instruction ? `steered: ${instruction.slice(0, 12)}` : 'plain reply',
+const plainReplies = () => vi.fn(async (_c: Conversation, steer?: ReplySteer) => ({
+    reply: steer?.instruction ? `steered: ${steer.instruction.slice(0, 12)}` : 'plain reply',
     intent: 'interested' as const,
 }));
 
